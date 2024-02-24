@@ -23,7 +23,7 @@
 
           export DEVSHELL_NAME='${devShellName}'
           if [ -x ./devshells.current.add-gc-root ]; then
-            ./devshells.current.add-gc-root
+            ./devshells.current.add-gc-root > /dev/null
           fi
 
           # Fix glitchy blank VSCodium screen after updates.
@@ -36,18 +36,12 @@
             ${prelude "default"}
           '';
           buildInputs = with pkgs; [
-            elan
+            (haskellPackages.ghcWithPackages (pkgs: with pkgs; [ stack ]))
             jq
             (vscode-with-extensions.override {
               vscode = vscodium;
               vscodeExtensions = with vscode-extensions;
-                vscode-utils.extensionsFromVscodeMarketplace [{
-                  name = "lean4";
-                  publisher = "leanprover";
-                  version = "0.0.128";
-                  sha256 =
-                    "sha256-odRDOrlDFahweLzoQtpufY8UUwAutPFunqg7atTxnPo=";
-                }];
+                [haskell.haskell];
             })
           ];
         };
