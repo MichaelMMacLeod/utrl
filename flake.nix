@@ -35,14 +35,25 @@
           shellHook = ''
             ${prelude "default"}
           '';
-          buildInputs = with pkgs; [
-            (haskellPackages.ghcWithPackages (pkgs: with pkgs; [ stack ]))
+          nativeBuildInputs = with pkgs; [
+            (haskellPackages.ghcWithPackages (pkgs:
+              with pkgs; [
+                stack
+                (haskell-language-server.override {
+                  supportedGhcVersions = [ "96" ];
+                })
+                cabal-install
+              ]))
             jq
             (vscode-with-extensions.override {
               vscode = vscodium;
-              vscodeExtensions = with vscode-extensions;
-                [haskell.haskell];
+              vscodeExtensions = with vscode-extensions; [
+                haskell.haskell
+                justusadam.language-haskell
+              ];
             })
+          ];
+          buildInputs = with pkgs; [
           ];
         };
       });
