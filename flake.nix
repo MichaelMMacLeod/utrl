@@ -30,21 +30,24 @@
           # See https://github.com/NixOS/nixpkgs/issues/259929.
           rm -rf "$HOME/.config/VSCodium/GPUCache"
         '';
+        drv = pkgs.haskellPackages.callCabal2nix "rw" ./. {};
+        # extendedHaskellPackages = with pkgs; haskellPackages.extend (haskell.lib.compose.packageSourceOverrides {
+        #   rw = ./.;
+        # });
       in {
-        devShells.default = pkgs.mkShell {
-          shellHook = ''
-            ${prelude "default"}
-          '';
-          nativeBuildInputs = with pkgs; [
-            (haskellPackages.ghcWithPackages (pkgs:
-              with pkgs; [
-                stack
-                (haskell-language-server.override {
-                  supportedGhcVersions = [ "96" ];
-                })
-                cabal-install
-              ]))
-            jq
+        devShells.default = with pkgs; haskellPackages.shellFor {
+          withHoogle = true;
+          
+          packages = p: [
+            drv
+          ];
+
+          nativeBuildInputs = with haskellPackages; [
+            cabal-install
+            ghcid
+            haskell-language-server
+            hlint
+            ormolu
             (vscode-with-extensions.override {
               vscode = vscodium;
               vscodeExtensions = with vscode-extensions; [
@@ -53,8 +56,24 @@
               ];
             })
           ];
-          buildInputs = with pkgs; [
-          ];
         };
+        # devShells.default = pkgs.mkShell {
+        #   shellHook = ''
+        #     ${prelude "default"}
+        #   '';
+        #   nativeBuildInputs = with pkgs; [
+        #     (haskellPackages.ghcWithPackages (pkgs:
+        #       with pkgs; [
+        #         stack
+        #         (haskell-language-server.override {
+        #           supportedGhcVersions = [ "96" ];
+        #         })
+        #         cabal-install
+        #       ]))
+        #     jq
+        #   ];
+        #   buildInputs = with pkgs; [
+        #   ];
+        # };
       });
 }
