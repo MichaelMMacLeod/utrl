@@ -36,6 +36,10 @@
         # });
       in {
         devShells.default = with pkgs; haskellPackages.shellFor {
+          shellHook = ''
+            ${prelude "default"}
+          '';
+
           withHoogle = true;
           
           packages = p: [
@@ -43,6 +47,7 @@
           ];
 
           nativeBuildInputs = with haskellPackages; [
+            jq
             cabal-install
             ghcid
             haskell-language-server
@@ -57,23 +62,5 @@
             })
           ];
         };
-        # devShells.default = pkgs.mkShell {
-        #   shellHook = ''
-        #     ${prelude "default"}
-        #   '';
-        #   nativeBuildInputs = with pkgs; [
-        #     (haskellPackages.ghcWithPackages (pkgs:
-        #       with pkgs; [
-        #         stack
-        #         (haskell-language-server.override {
-        #           supportedGhcVersions = [ "96" ];
-        #         })
-        #         cabal-install
-        #       ]))
-        #     jq
-        #   ];
-        #   buildInputs = with pkgs; [
-        #   ];
-        # };
       });
 }
