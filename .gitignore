@@ -1,3 +1,7 @@
 .devshells
 .stack-work/
 *~
+dist-newstyle/
+*.hi
+*.o
+app/Main
