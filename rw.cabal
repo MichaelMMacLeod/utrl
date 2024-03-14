@@ -61,7 +61,7 @@ executable rw
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
-    -- other-modules:
+    other-modules: Ast0, Ast1, AstC0, AstC1, Lex, Read
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

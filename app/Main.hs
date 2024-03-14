@@ -74,33 +74,57 @@ display0 = cata $ \case
   Ast0.CompoundF xs -> "(" ++ unwords xs ++ ")"
 
 display1 :: Ast1.Ast -> String
-display1 = cata $ \case
-  Ast1.SymbolF s -> s
-  Ast1.CompoundF xs -> "(" ++ unwords xs ++ ")"
-  Ast1.EllipsesF x -> x ++ " .."
+display1 =
+  display0
+    . cata
+      ( \case
+          Ast1.SymbolF s -> Ast0.Symbol s
+          Ast1.CompoundF xs -> Ast0.Compound xs
+          Ast1.EllipsesF x -> Ast0.Compound [Ast0.Symbol "Ast1.Ellipses", x]
+      )
 
 displayC0 :: AstC0.Ast -> String
-displayC0 = cata $ \case
-  AstC0.SymbolF s -> s
-  AstC0.VariableF i -> displayIndexC0 i
-  AstC0.CompoundF xs -> "(" ++ unwords xs ++ ")"
-  AstC0.EllipsesF x -> x ++ " .."
+displayC0 =
+  display1
+    . cata
+      ( \case
+          AstC0.SymbolF s -> Ast1.Symbol s
+          AstC0.VariableF i ->
+            Ast1.Compound
+              [ Ast1.Symbol "AstC0.Variable",
+                Ast1.Symbol $ displayIndexC0 i
+              ]
+          AstC0.CompoundF xs -> Ast1.Compound xs
+          AstC0.EllipsesF x -> Ast1.Ellipses x
+      )
 
 displayC1 :: AstC1.AstC1 -> String
-displayC1 = cata $ \case
-  AstC1.SymbolC1F s -> s
-  AstC1.CompoundC1F xs -> "(" ++ unwords xs ++ ")"
-  AstC1.CopyC1F i -> "{copy " ++ displayIndexC1 i ++ "}"
-  AstC1.LoopC1F index start end body ->
-    "{loop "
-      ++ show start
-      ++ ".."
-      ++ show end
-      ++ " @ "
-      ++ displayIndexC1 index
-      ++ " body = "
-      ++ body
-      ++ "}"
+displayC1 =
+  display0
+    . cata
+      ( \case
+          AstC1.SymbolC1F s -> Ast0.Symbol s
+          AstC1.CompoundC1F xs -> Ast0.Compound xs
+          AstC1.CopyC1F i ->
+            Ast0.Compound
+              [Ast0.Symbol "AstC1.Copy", Ast0.Symbol $ displayIndexC1 i]
+          AstC1.LoopC1F index start end body ->
+            Ast0.Compound
+              [ Ast0.Symbol "AstC1.Loop",
+                Ast0.Compound
+                  [ Ast0.Symbol ".static_indices=",
+                    Ast0.Symbol $ displayIndexC1 index
+                  ],
+                Ast0.Compound
+                  [ Ast0.Symbol ".range=",
+                    Ast0.Symbol (show start ++ "..(length-" ++ show end ++ ")")
+                  ],
+                Ast0.Compound
+                  [ Ast0.Symbol ".body=",
+                    body
+                  ]
+              ]
+      )
 
 compile0to1 :: Ast0.Ast0 -> Ast1.Ast
 compile0to1 = cata $ \case
