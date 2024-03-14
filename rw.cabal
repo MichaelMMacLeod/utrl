@@ -67,7 +67,7 @@ executable rw
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.17.2.1, recursion-schemes
+    build-depends:    base ^>=4.17.2.1, recursion-schemes, unordered-containers
 
     -- Directories containing source files.
     hs-source-dirs:   app

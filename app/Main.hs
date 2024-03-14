@@ -1,91 +1,73 @@
--- {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DeriveFunctor #-}
--- {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
--- {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Main (main) where
 
-import Data.List qualified
+import Ast0
+import Control.Applicative (liftA, liftA2)
+import Data.Char (isSpace)
+import Data.Functor.Foldable (Base, Corecursive, ListF (Cons, Nil), Recursive, ana, cata, embed, project)
+import Data.HashMap.Strict qualified as H
+import Data.Kind (Type)
+import Data.List (intercalate, partition)
 
--- import Control.Arrow ((>>>))
-
+-- (fn xs (flatten (list (list xs ..) ..)) -> (list xs .. ..))
 main :: IO ()
-main = print . display1 $ compile0to1 (Compound0 [Symbol0 "a", Symbol0 "x", Symbol0 "..", Symbol0 "..", Symbol0 "q"])
+main =
+  print
+    . displayC1
+    . compileC0toC1
+    . compile1toC0 (H.fromList [("xs", [ZeroPlusC0 1, BetweenC0 1 0, BetweenC0 1 0])])
+    . compile0to1
+    $ read0 "(list xs .. ..)"
 
-type family Base t :: * -> *
+-- -- (fn xs (flatten ((xs ..) ..)) -> (xs .. ..))
+-- main :: IO ()
+-- main =
+--   print
+--     . displayC1
+--     . compileC0toC1
+--     . compile1toC0 (H.fromList [("xs", [BetweenC0 0 0, BetweenC0 0 0])])
+--     . compile0to1
+--     $ read0 "(xs .. ..)"
 
-class (Functor (Base t)) => Recursive t where
-  project :: t -> Base t t
+-- main = print . display1 $ compile0to1 (Compound0 [Symbol0 "a", Symbol0 "x", Symbol0 "..", Symbol0 "..", Symbol0 "q"])
 
-class (Functor (Base t)) => Corecursive t where
-  embed :: Base t t -> t
+-- type family Base t :: Type -> Type
 
-data ListF a r = Nil | Cons a r
+-- class (Functor (Base t)) => Recursive t where
+--   project :: t -> Base t t
 
-instance Functor (ListF a) where
-  fmap _ Nil = Nil
-  fmap f (Cons a r) = Cons a (f r)
+-- class (Functor (Base t)) => Corecursive t where
+--   embed :: Base t t -> t
 
-type instance Base [a] = ListF a
+-- data ListF a r = Nil | Cons a r
 
-instance Recursive [a] where
-  project [] = Nil
-  project (x : xs) = Cons x xs
+-- instance Functor (ListF a) where
+--   fmap _ Nil = Nil
+--   fmap f (Cons a r) = Cons a (f r)
 
-instance Corecursive [a] where
-  embed Nil = []
-  embed (Cons x xs) = x : xs
+-- type instance Base [a] = ListF a
 
-cata :: (Recursive t) => (Base t a -> a) -> t -> a
-cata f = f . fmap (cata f) . project
+-- instance Recursive [a] where
+--   project [] = Nil
+--   project (x : xs) = Cons x xs
 
-ana :: (Corecursive t) => (a -> Base t a) -> a -> t
-ana f = embed . fmap (ana f) . f
+-- instance Corecursive [a] where
+--   embed Nil = []
+--   embed (Cons x xs) = x : xs
 
-hylo :: (Functor f) => (f b -> b) -> (a -> f a) -> a -> b
-hylo f g = h where h = f . fmap h . g
+-- cata :: (Recursive t) => (Base t a -> a) -> t -> a
+-- cata f = f . fmap (cata f) . project
 
-length :: [a] -> Integer
-length = cata $ \case
-  Nil -> 0
-  Cons _ acc -> 1 + acc
+-- ana :: (Corecursive t) => (a -> Base t a) -> a -> t
+-- ana f = embed . fmap (ana f) . f
 
-filter :: (a -> Bool) -> [a] -> [a]
-filter p = cata $ \case
-  Nil -> []
-  Cons x acc -> if p x then x : acc else acc
-
-zip :: ([a], [b]) -> [(a, b)]
-zip = ana $ \case
-  (a : as, b : bs) -> Cons (a, b) (as, bs)
-  _ -> Nil
-
-zip' :: ([a], [b]) -> [(a, b)]
-zip' (a : as, b : bs) = (a, b) : zip' (as, bs)
-zip' _ = []
-
-data Ast0
-  = Symbol0 String
-  | Compound0 [Ast0]
-  deriving (Show)
-
-data Ast0F r
-  = Symbol0F String
-  | Compound0F [r]
-  deriving (Show, Functor)
-
-type instance Base Ast0 = Ast0F
-
-instance Recursive Ast0 where
-  project (Symbol0 s) = Symbol0F s
-  project (Compound0 xs) = Compound0F xs
-
-instance Corecursive Ast0 where
-  embed (Symbol0F s) = Symbol0 s
-  embed (Compound0F xs) = Compound0 xs
+-- hylo :: (Functor f) => (f b -> b) -> (a -> f a) -> a -> b
+-- hylo f g = h where h = f . fmap h . g
 
 data Ast1
   = Symbol1 String
@@ -111,35 +93,149 @@ instance Corecursive Ast1 where
   embed (Compound1F xs) = Compound1 xs
   embed (Ellipses1F x) = Ellipses1 x
 
-data Tree a = Leaf a | Branch [Tree a] deriving (Show, Functor)
+data IndexElementC0
+  = ZeroPlusC0 Integer
+  | LenMinusC0 Integer
+  | BetweenC0 {zeroPlusC0 :: Integer, lenMinusC0 :: Integer}
+  deriving (Eq)
 
-data TreeF a r = LeafF a | BranchF [r] deriving (Show, Functor)
+type IndexC0 = [IndexElementC0]
 
-type instance Base (Tree a) = (TreeF a)
+c1Tail :: IndexC0 -> IndexC1
+c1Tail = reverse . go . reverse
+  where
+    go :: IndexC0 -> IndexC1
+    go ((ZeroPlusC0 i) : xs) = ZeroPlusC1 i : go xs
+    go ((LenMinusC0 i) : xs) = LenMinusC1 i : go xs
+    go _ = []
 
-instance Recursive (Tree a) where
-  project (Leaf x) = LeafF x
-  project (Branch xs) = BranchF xs
+c0Head :: IndexC0 -> IndexC0
+c0Head = reverse . go . reverse
+  where
+    go :: IndexC0 -> IndexC0
+    go all@(BetweenC0 zeroPlusC0 lenMinusC0 : xs) = all
+    go (x : xs) = go xs
+    go [] = []
 
-instance Corecursive (Tree a) where
-  embed (LeafF a) = Leaf a
-  embed (BranchF xs) = Branch xs
- 
-countNodes :: Tree a -> Integer
-countNodes = cata $ \case
-  LeafF _ -> 1
-  BranchF xs -> 1 + sum xs
+cutC0 :: IndexC0 -> (IndexC0, IndexC1)
+cutC0 c0 = (c0Head c0, c1Tail c0)
 
+cutC0Between :: IndexC0 -> (IndexC0, Maybe (Integer, Integer))
+cutC0Between = go . reverse
+  where
+    go (BetweenC0 zp lm : others) = (reverse others, Just (zp, lm))
+    go others = (others, Nothing)
 
+displayIndexElementC0 :: IndexElementC0 -> String
+displayIndexElementC0 (ZeroPlusC0 i) = show i
+displayIndexElementC0 (LenMinusC0 i) = "(len-" ++ show i ++ ")"
+displayIndexElementC0 (BetweenC0 zeroPlusC0 lenMinusC0) = show zeroPlusC0 ++ ".." ++ show lenMinusC0
 
--- read0 :: String -> Ast0
--- read0 = hylo f g
---   where
---     g :: String -> Tree String
---     g = ana $ \case
---       ['(', xs] -> undefined
---     f :: Tree Ast0 -> Ast0
---     f = undefined
+displayIndexC0 :: IndexC0 -> String
+displayIndexC0 index = "[" ++ intercalate "," (map displayIndexElementC0 index) ++ "]"
+
+displayIndexElementC1 :: IndexElementC1 -> String
+displayIndexElementC1 (ZeroPlusC1 i) = show i
+displayIndexElementC1 (LenMinusC1 i) = "(len-" ++ show i ++ ")"
+
+displayIndexC1 :: IndexC1 -> String
+displayIndexC1 index = "[" ++ intercalate "," (map displayIndexElementC1 index) ++ "]"
+
+data AstC0
+  = SymbolC0 String
+  | CompoundC0 [AstC0]
+  | VariableC0 IndexC0
+  | EllipsesC0 AstC0
+
+data AstC0F r
+  = SymbolC0F String
+  | CompoundC0F [r]
+  | VariableC0F IndexC0
+  | EllipsesC0F r
+  deriving (Functor)
+
+type instance Base AstC0 = AstC0F
+
+instance Recursive AstC0 where
+  project (SymbolC0 s) = SymbolC0F s
+  project (CompoundC0 xs) = CompoundC0F xs
+  project (VariableC0 i) = VariableC0F i
+  project (EllipsesC0 x) = EllipsesC0F x
+
+instance Corecursive AstC0 where
+  embed (SymbolC0F s) = SymbolC0 s
+  embed (CompoundC0F xs) = CompoundC0 xs
+  embed (VariableC0F i) = VariableC0 i
+  embed (EllipsesC0F x) = EllipsesC0 x
+
+data IndexElementC1
+  = ZeroPlusC1 Integer
+  | LenMinusC1 Integer
+
+type IndexC1 = [IndexElementC1]
+
+data AstC1
+  = SymbolC1 String
+  | CompoundC1 [AstC1]
+  | CopyC1 IndexC1
+  | LoopC1 {indexC1 :: IndexC1, startC1 :: Integer, endC1 :: Integer, bodyC1 :: AstC1}
+
+data AstC1F r
+  = SymbolC1F String
+  | CompoundC1F [r]
+  | CopyC1F IndexC1
+  | LoopC1F {indexC1F :: IndexC1, startC1F :: Integer, endC1F :: Integer, bodyC1F :: r}
+  deriving (Functor)
+
+type instance Base AstC1 = AstC1F
+
+instance Recursive AstC1 where
+  project (SymbolC1 s) = SymbolC1F s
+  project (CompoundC1 xs) = CompoundC1F xs
+  project (CopyC1 i) = CopyC1F i
+  project (LoopC1 i s e b) = LoopC1F i s e b
+
+instance Corecursive AstC1 where
+  embed (SymbolC1F s) = SymbolC1 s
+  embed (CompoundC1F xs) = CompoundC1 xs
+  embed (CopyC1F i) = CopyC1 i
+  embed (LoopC1F i s e b) = LoopC1 i s e b
+
+data Token = TLeft | TRight | TSymbol String deriving (Show)
+
+lex0 :: String -> [Token]
+lex0 = ana $ \case
+  [] -> Nil
+  xs -> let (token, rest) = parseToken xs in Cons token rest
+    where
+      parseToken :: String -> (Token, String)
+      parseToken (' ' : xs) = parseToken xs
+      parseToken ('(' : xs) = (TLeft, xs)
+      parseToken (')' : xs) = (TRight, xs)
+      parseToken xs = (TSymbol $ takeWhile isSymbolChar xs, dropWhile isSymbolChar xs)
+
+      isSymbolChar :: Char -> Bool
+      isSymbolChar =
+        notF isSpace
+          <&&> notF (== '(')
+          <&&> notF (== ')')
+        where
+          notF = fmap not
+          (<&&>) = liftA2 (&&)
+
+parse0 :: [Token] -> Ast0
+parse0 xs = go xs []
+  where
+    go :: [Token] -> [[Ast0]] -> Ast0
+    go (TLeft : xs) acc = go xs ([] : acc)
+    go (TRight : xs) (a1 : a2 : acc) = let c = Compound0 (reverse a1) in go xs ((c : a2) : acc)
+    go (TRight : xs) [a1] = Compound0 (reverse a1)
+    go (TRight : xs) [] = error "Expected '('"
+    go (TSymbol s : xs) (a : acc) = go xs ((Symbol0 s : a) : acc)
+    go (TSymbol s : xs) [] = Symbol0 s
+
+read0 :: String -> Ast0
+read0 = parse0 . lex0
 
 display0 :: Ast0 -> String
 display0 = cata $ \case
@@ -152,6 +248,29 @@ display1 = cata $ \case
   Compound1F xs -> "(" ++ unwords xs ++ ")"
   Ellipses1F x -> x ++ " .."
 
+displayC0 :: AstC0 -> String
+displayC0 = cata $ \case
+  SymbolC0F s -> s
+  VariableC0F i -> displayIndexC0 i
+  CompoundC0F xs -> "(" ++ unwords xs ++ ")"
+  EllipsesC0F x -> x ++ " .."
+
+displayC1 :: AstC1 -> String
+displayC1 = cata $ \case
+  SymbolC1F s -> s
+  CompoundC1F xs -> "(" ++ unwords xs ++ ")"
+  CopyC1F i -> "{copy " ++ displayIndexC1 i ++ "}"
+  LoopC1F index start end body ->
+    "{loop "
+      ++ show start
+      ++ ".."
+      ++ show end
+      ++ " @ "
+      ++ displayIndexC1 index
+      ++ " body = "
+      ++ body
+      ++ "}"
+
 compile0to1 :: Ast0 -> Ast1
 compile0to1 = cata $ \case
   Symbol0F s -> Symbol1 s
@@ -161,6 +280,120 @@ compile0to1 = cata $ \case
       go (x : Symbol1 ".." : xs) = go $ Ellipses1 x : xs
       go (x : xs) = x : go xs
       go [] = []
+
+type Variables = H.HashMap String IndexC0
+
+compile1toC0 :: Variables -> Ast1 -> AstC0
+compile1toC0 vars = cata $ \case
+  Symbol1F s -> case H.lookup s vars of
+    Nothing -> SymbolC0 s
+    Just index -> VariableC0 index
+  Compound1F xs -> CompoundC0 xs
+  Ellipses1F x -> EllipsesC0 x
+
+compileC0toC1 :: AstC0 -> AstC1
+compileC0toC1 = verify . cata go
+  where
+    verify :: (AstC1, IndexC0) -> AstC1
+    verify (ast, []) = ast
+    verify _ = error "Needs more '..'"
+
+    go :: Base AstC0 (AstC1, IndexC0) -> (AstC1, IndexC0)
+    go (SymbolC0F s) = (SymbolC1 s, [])
+    go (CompoundC0F xs) =
+      let indexesAllEqual = allEqual $ map snd xs
+          allEqual :: [IndexC0] -> Bool
+          allEqual [] = True
+          allEqual (x : xs) = all (== x) xs
+          sharedIndex :: [(AstC1, IndexC0)] -> IndexC0
+          sharedIndex ((_, i) : _) = i
+          sharedIndex _ = []
+       in if indexesAllEqual
+            then (CompoundC1 $ map fst xs, sharedIndex xs)
+            else error "Variables not matched under same '..' used under same '..'"
+    go (VariableC0F i) =
+      let (fst, snd) = cutC0 i
+       in (CopyC1 snd, fst)
+    go (EllipsesC0F (astC1, indexC0)) = case cutC0Between indexC0 of
+      (indexC0', Just (zeroPlus, lenMinus)) ->
+        let (fstC0, sndC1) = cutC0 indexC0'
+            loopC1 = LoopC1 {indexC1 = sndC1, startC1 = zeroPlus, endC1 = lenMinus, bodyC1 = astC1}
+         in (loopC1, fstC0)
+      (_, Nothing) -> error "Too many '..'"
+
+data ConstantExpr
+  = VarCE Integer
+  | ConstantCE Integer
+
+data BinOp = AddOp | SubOp
+
+data Expr
+  = ConstantExprE ConstantExpr
+  | -- Computes lhs_varE <opE> rhsE, storing the result in lhs_varE.
+    BinOpExpr {opE :: BinOp, lhs_varE :: Integer, rhsE :: ConstantExpr}
+  | -- Computes the length of the compound term in the input pointed at
+    -- by the index stack, storing the result in 'length_varE'.
+    LengthOp {length_varE :: Integer}
+
+data Stmt
+  = -- Evaluates rhsS and assigns it to lhs_varS
+    AssignS {lhs_varS :: Integer, rhsS :: Expr}
+  | -- Pushes a string to the top of the data stack
+    PushSymbolS String
+  | -- Pushes a constant to the top of the index stack
+    PushIndexS ConstantExpr
+  | -- Removes the first 'count' indices off the index stack.
+    PopIndexS {count :: Integer}
+  | -- Coppies the portion of the input pointed to by the index stack,
+    -- pusing the copied value onto the top of the data stack.
+    Copy
+  | -- Pops 'length' number of elements off the top of the data stack,
+    -- builds a compound term containing them, and pushes the new compound
+    -- term back on top of the data stack.
+    Build {lengthS :: Expr}
+  | -- Jumps to instruction #labelS when 'when_var' is less than 'le_var',
+    -- otherwise control continues to the next statement.
+    ConditionalJump {labelS :: Integer, when_var :: Integer, le_var :: Integer}
+  | -- Jumps always to a specific instruction.
+    UnconditionalJump Integer
+
+-- length :: [a] -> Integer
+-- length = cata $ \case
+--   Nil -> 0
+--   Cons _ acc -> 1 + acc
+
+-- filter :: (a -> Bool) -> [a] -> [a]
+-- filter p = cata $ \case
+--   Nil -> []
+--   Cons x acc -> if p x then x : acc else acc
+
+-- zip :: ([a], [b]) -> [(a, b)]
+-- zip = ana $ \case
+--   (a : as, b : bs) -> Cons (a, b) (as, bs)
+--   _ -> Nil
+
+-- zip' :: ([a], [b]) -> [(a, b)]
+-- zip' (a : as, b : bs) = (a, b) : zip' (as, bs)
+-- zip' _ = []
+
+-- data Tree a = Leaf a | Branch [Tree a] deriving (Show, Functor)
+
+-- data TreeF a r = LeafF a | BranchF [r] deriving (Show, Functor)
+
+-- type instance Base (Tree a) = (TreeF a)
+
+-- instance Recursive (Tree a) where
+--   project (Leaf x) = LeafF x
+--   project (Branch xs) = BranchF xs
+
+-- instance Corecursive (Tree a) where
+--   embed (LeafF a) = Leaf a
+--   embed (BranchF xs) = Branch xs
+
+-- countNodes :: Tree a -> Integer
+-- countNodes = cata $ \case
+--   LeafF _ -> 1
+--   BranchF xs -> 1 + sum xs
 
 -- go = ana $ \case
 --   [] -> Nil
@@ -543,3 +776,62 @@ compile0to1 = cata $ \case
 
 -- -- ast1 :: Ast0F (Ast0F Int)
 -- -- ast1 = fmap (*2) <$> CompoundF [SymbolF "Hello, world!", CompoundF [1, 2, 3], CompoundF [4, 5, 6]]
+
+-- print $ factorial 500
+-- main = print $ quicksort [5, 4, 3, 2, 1]
+-- factorial :: Integer -> Integer
+-- factorial = hylo merge split
+--   where
+--     split :: Integer -> ListF Integer Integer
+--     split 0 = Nil
+--     split n = Cons n (n - 1)
+
+--     merge :: ListF Integer Integer -> Integer
+--     merge Nil = 1
+--     merge (Cons n acc) = n * acc
+
+-- data BinTreeF a b = BTip | BBranch b a b deriving (Functor)
+
+-- quicksort :: (Ord a) => [a] -> [a]
+-- quicksort = hylo merge split
+--   where
+--     split :: (Ord a) => [a] -> BinTreeF a [a]
+--     split [] = BTip
+--     split (x : xs) = let (l, r) = partition (< x) xs in BBranch l x r
+
+--     merge :: BinTreeF a [a] -> [a]
+--     merge BTip = []
+--     merge (BBranch l x r) = l ++ [x] ++ r
+
+-- factorial :: Integer -> Integer
+-- factorial = cata merge . ana split
+--   where
+--     -- merge :: ListF Integer Integer -> Integer
+--     merge Nil = 0
+--     merge (Cons x acc) = x * acc
+--     -- split :: Integer -> ListF Integer Integer
+--     split 0 = Nil
+--     split n = Cons n (n - 1)
+-- factorial = hylo merge split
+--   where
+--     merge [] = 1
+--     merge (x : xs) = x * merge xs
+
+--     split 0 = []
+--     split n = n : split (n - 1)
+
+-- merge :: Maybe (Integer, Integer) -> Integer
+-- merge (Just (a, b)) = a * b
+-- merge Nothing = 1
+
+-- split :: Integer -> Maybe (Integer, Integer)
+-- split 0 = Nothing
+-- split n = Just (n, n-1)
+
+-- merge :: [Integer] -> Integer
+-- merge = cata $ \case
+--   Nil -> undefined
+--   Cons x acc -> x * acc
+
+-- split :: Integer -> [Integer]
+-- split = ana $ \x -> if x == 0 then undefined else Cons x (x - 1)
