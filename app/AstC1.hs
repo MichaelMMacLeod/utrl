@@ -1,36 +1,36 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module AstC1 (AstC1 (..), AstC1F (..), IndexC1, IndexElementC1 (..)) where
+module AstC1 (Ast (..), AstF (..), IndexC1, IndexElementC1 (..)) where
 
 import Data.Functor.Foldable (Base, Corecursive, Recursive, embed, project)
 
-data AstC1
-  = SymbolC1 String
-  | CompoundC1 [AstC1]
-  | CopyC1 IndexC1
-  | LoopC1 {indexC1 :: IndexC1, startC1 :: Integer, endC1 :: Integer, bodyC1 :: AstC1}
+data Ast
+  = Symbol String
+  | Compound [Ast]
+  | Copy IndexC1
+  | Loop {index :: IndexC1, start :: Integer, end :: Integer, body :: Ast}
 
-data AstC1F r
-  = SymbolC1F String
-  | CompoundC1F [r]
-  | CopyC1F IndexC1
-  | LoopC1F {indexC1F :: IndexC1, startC1F :: Integer, endC1F :: Integer, bodyC1F :: r}
+data AstF r
+  = SymbolF String
+  | CompoundF [r]
+  | CopyF IndexC1
+  | LoopF {indexF :: IndexC1, startF :: Integer, endF :: Integer, bodyF :: r}
   deriving (Functor)
 
-type instance Base AstC1 = AstC1F
+type instance Base Ast = AstF
 
-instance Recursive AstC1 where
-  project (SymbolC1 s) = SymbolC1F s
-  project (CompoundC1 xs) = CompoundC1F xs
-  project (CopyC1 i) = CopyC1F i
-  project (LoopC1 i s e b) = LoopC1F i s e b
+instance Recursive Ast where
+  project (Symbol s) = SymbolF s
+  project (Compound xs) = CompoundF xs
+  project (Copy i) = CopyF i
+  project (Loop i s e b) = LoopF i s e b
 
-instance Corecursive AstC1 where
-  embed (SymbolC1F s) = SymbolC1 s
-  embed (CompoundC1F xs) = CompoundC1 xs
-  embed (CopyC1F i) = CopyC1 i
-  embed (LoopC1F i s e b) = LoopC1 i s e b
+instance Corecursive Ast where
+  embed (SymbolF s) = Symbol s
+  embed (CompoundF xs) = Compound xs
+  embed (CopyF i) = Copy i
+  embed (LoopF i s e b) = Loop i s e b
 
 data IndexElementC1
   = ZeroPlusC1 Integer

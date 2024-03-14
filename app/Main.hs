@@ -98,17 +98,17 @@ displayC0 =
           AstC0.EllipsesF x -> Ast1.Ellipses x
       )
 
-displayC1 :: AstC1.AstC1 -> String
+displayC1 :: AstC1.Ast -> String
 displayC1 =
   display0
     . cata
       ( \case
-          AstC1.SymbolC1F s -> Ast0.Symbol s
-          AstC1.CompoundC1F xs -> Ast0.Compound xs
-          AstC1.CopyC1F i ->
+          AstC1.SymbolF s -> Ast0.Symbol s
+          AstC1.CompoundF xs -> Ast0.Compound xs
+          AstC1.CopyF i ->
             Ast0.Compound
               [Ast0.Symbol "AstC1.Copy", Ast0.Symbol $ displayIndexC1 i]
-          AstC1.LoopC1F index start end body ->
+          AstC1.LoopF index start end body ->
             Ast0.Compound
               [ Ast0.Symbol "AstC1.Loop",
                 Ast0.Compound
@@ -146,33 +146,33 @@ compile1toC0 vars = cata $ \case
   Ast1.CompoundF xs -> AstC0.Compound xs
   Ast1.EllipsesF x -> AstC0.Ellipses x
 
-compileC0toC1 :: AstC0.Ast -> AstC1.AstC1
+compileC0toC1 :: AstC0.Ast -> AstC1.Ast
 compileC0toC1 = verify . cata go
   where
-    verify :: (AstC1.AstC1, AstC0.IndexC0) -> AstC1.AstC1
+    verify :: (AstC1.Ast, AstC0.IndexC0) -> AstC1.Ast
     verify (ast, []) = ast
     verify _ = error "Needs more '..'"
 
-    go :: Base AstC0.Ast (AstC1.AstC1, AstC0.IndexC0) -> (AstC1.AstC1, AstC0.IndexC0)
-    go (AstC0.SymbolF s) = (AstC1.SymbolC1 s, [])
+    go :: Base AstC0.Ast (AstC1.Ast, AstC0.IndexC0) -> (AstC1.Ast, AstC0.IndexC0)
+    go (AstC0.SymbolF s) = (AstC1.Symbol s, [])
     go (AstC0.CompoundF xs) =
       let indexesAllEqual = allEqual $ map snd xs
           allEqual :: [AstC0.IndexC0] -> Bool
           allEqual [] = True
           allEqual (x : xs) = all (== x) xs
-          sharedIndex :: [(AstC1.AstC1, AstC0.IndexC0)] -> AstC0.IndexC0
+          sharedIndex :: [(AstC1.Ast, AstC0.IndexC0)] -> AstC0.IndexC0
           sharedIndex ((_, i) : _) = i
           sharedIndex _ = []
        in if indexesAllEqual
-            then (AstC1.CompoundC1 $ map fst xs, sharedIndex xs)
+            then (AstC1.Compound $ map fst xs, sharedIndex xs)
             else error "Variables not matched under same '..' used under same '..'"
     go (AstC0.VariableF i) =
       let (fst, snd) = cutC0 i
-       in (AstC1.CopyC1 snd, fst)
+       in (AstC1.Copy snd, fst)
     go (AstC0.EllipsesF (astC1, indexC0)) = case cutC0Between indexC0 of
       (indexC0', Just (zeroPlus, lenMinus)) ->
         let (fstC0, sndC1) = cutC0 indexC0'
-            loopC1 = AstC1.LoopC1 {AstC1.indexC1 = sndC1, AstC1.startC1 = zeroPlus, AstC1.endC1 = lenMinus, AstC1.bodyC1 = astC1}
+            loopC1 = AstC1.Loop {AstC1.index = sndC1, AstC1.start = zeroPlus, AstC1.end = lenMinus, AstC1.body = astC1}
          in (loopC1, fstC0)
       (_, Nothing) -> error "Too many '..'"
 
