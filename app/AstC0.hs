@@ -1,15 +1,74 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module AstC0 (Ast (..), AstF (..), IndexC0, IndexElement (..)) where
+module AstC0
+  ( Ast (..),
+    AstF (..),
+    IndexC0,
+    IndexElement (..),
+    c1Tail,
+    c0Head,
+    cutC0,
+    cutC0Between,
+  )
+where
 
-import Data.Functor.Foldable (Base, Corecursive, Recursive, embed, project)
+import Ast1 qualified
+import AstC1 qualified
+import Data.Functor.Foldable
+  ( Base,
+    Corecursive,
+    Recursive,
+    cata,
+    embed,
+    project,
+  )
+import Data.HashMap.Strict qualified as H
+import Data.List (intercalate)
 
 data Ast
   = Symbol String
   | Compound [Ast]
   | Ellipses Ast
   | Variable IndexC0
+
+data IndexElement
+  = ZeroPlus Integer
+  | LenMinus Integer
+  | Between
+      { zeroPlus :: Integer,
+        lenMinus :: Integer
+      }
+  deriving (Eq)
+
+type IndexC0 = [IndexElement]
+
+c1Tail :: AstC0.IndexC0 -> AstC1.IndexC1
+c1Tail = reverse . go . reverse
+  where
+    go :: AstC0.IndexC0 -> AstC1.IndexC1
+    go ((AstC0.ZeroPlus i) : xs) = AstC1.ZeroPlus i : go xs
+    go ((AstC0.LenMinus i) : xs) = AstC1.LenMinus i : go xs
+    go _ = []
+
+c0Head :: AstC0.IndexC0 -> AstC0.IndexC0
+c0Head = reverse . go . reverse
+  where
+    go :: AstC0.IndexC0 -> AstC0.IndexC0
+    go all@(AstC0.Between zeroPlusC0 lenMinusC0 : xs) = all
+    go (x : xs) = go xs
+    go [] = []
+
+cutC0 :: AstC0.IndexC0 -> (AstC0.IndexC0, AstC1.IndexC1)
+cutC0 c0 = (c0Head c0, c1Tail c0)
+
+cutC0Between :: AstC0.IndexC0 -> (AstC0.IndexC0, Maybe (Integer, Integer))
+cutC0Between = go . reverse
+  where
+    go (AstC0.Between zp lm : others) = (reverse others, Just (zp, lm))
+    go others = (others, Nothing)
 
 data AstF r
   = SymbolF String
@@ -31,11 +90,3 @@ instance Corecursive Ast where
   embed (CompoundF xs) = Compound xs
   embed (VariableF i) = Variable i
   embed (EllipsesF x) = Ellipses x
-
-data IndexElement
-  = ZeroPlusC0 Integer
-  | LenMinusC0 Integer
-  | BetweenC0 {zeroPlusC0 :: Integer, lenMinusC0 :: Integer}
-  deriving (Eq)
-
-type IndexC0 = [IndexElement]

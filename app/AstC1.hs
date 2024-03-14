@@ -1,21 +1,54 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module AstC1 (Ast (..), AstF (..), IndexC1, IndexElementC1 (..)) where
+module AstC1
+  ( Ast (..),
+    AstF (..),
+    IndexC1,
+    IndexElement (..),
+  )
+where
 
-import Data.Functor.Foldable (Base, Corecursive, Recursive, embed, project)
+import Ast0 qualified
+import Data.Functor.Foldable
+  ( Base,
+    Corecursive,
+    Recursive,
+    cata,
+    embed,
+    project,
+  )
+import Data.List (intercalate)
 
 data Ast
   = Symbol String
   | Compound [Ast]
   | Copy IndexC1
-  | Loop {index :: IndexC1, start :: Integer, end :: Integer, body :: Ast}
+  | Loop
+      { index :: IndexC1,
+        start :: Integer,
+        end :: Integer,
+        body :: Ast
+      }
+
+data IndexElement
+  = ZeroPlus Integer
+  | LenMinus Integer
+
+type IndexC1 = [IndexElement]
 
 data AstF r
   = SymbolF String
   | CompoundF [r]
   | CopyF IndexC1
-  | LoopF {indexF :: IndexC1, startF :: Integer, endF :: Integer, bodyF :: r}
+  | LoopF
+      { indexF :: IndexC1,
+        startF :: Integer,
+        endF :: Integer,
+        bodyF :: r
+      }
   deriving (Functor)
 
 type instance Base Ast = AstF
@@ -31,9 +64,3 @@ instance Corecursive Ast where
   embed (CompoundF xs) = Compound xs
   embed (CopyF i) = Copy i
   embed (LoopF i s e b) = Loop i s e b
-
-data IndexElementC1
-  = ZeroPlusC1 Integer
-  | LenMinusC1 Integer
-
-type IndexC1 = [IndexElementC1]

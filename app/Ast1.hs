@@ -1,9 +1,19 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Ast1 (Ast (..), AstF (..)) where
 
-import Data.Functor.Foldable (Base, Corecursive, Recursive, embed, project)
+import Ast0 qualified
+import Data.Functor.Foldable
+  ( Base,
+    Corecursive,
+    Recursive,
+    cata,
+    embed,
+    project,
+  )
 
 data Ast
   = Symbol String

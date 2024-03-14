@@ -7,13 +7,13 @@ import Ast0 qualified
 import Data.Functor.Foldable (ListF (..), ana)
 import Lex (Token (..), lex)
 
-read :: String -> Ast0.Ast0
+read :: String -> Ast0.Ast
 read = parse . Lex.lex
 
-parse :: [Token] -> Ast0.Ast0
+parse :: [Token] -> Ast0.Ast
 parse xs = go xs []
   where
-    go :: [Token] -> [[Ast0.Ast0]] -> Ast0.Ast0
+    go :: [Token] -> [[Ast0.Ast]] -> Ast0.Ast
     go (TLeft : xs) acc = go xs ([] : acc)
     go (TRight : xs) (a1 : a2 : acc) = let c = Ast0.Compound (reverse a1) in go xs ((c : a2) : acc)
     go (TRight : xs) [a1] = Ast0.Compound (reverse a1)
