@@ -23,8 +23,8 @@ compile0to1 = cata $ \case
   Ast0.CompoundF xs -> Ast1.Compound $ go xs
     where
       go :: [Ast1.Ast] -> [Ast1.Ast]
-      go (x : Ast1.Symbol ".." : xs) = go $ Ast1.Ellipses x : xs
-      go (x : xs) = x : go xs
+      go (y : Ast1.Symbol ".." : ys) = go $ Ast1.Ellipses y : ys
+      go (y : ys) = y : go ys
       go [] = []
 
 compile1toC0 :: Variables -> Ast1.Ast -> AstC0.Ast
@@ -48,7 +48,7 @@ compileC0toC1 = verify . cata go
       let indexesAllEqual = allEqual $ map snd xs
           allEqual :: [AstC0.IndexC0] -> Bool
           allEqual [] = True
-          allEqual (x : xs) = all (== x) xs
+          allEqual (y : ys) = all (== y) ys
           sharedIndex :: [(AstC1.Ast, AstC0.IndexC0)] -> AstC0.IndexC0
           sharedIndex ((_, i) : _) = i
           sharedIndex _ = []

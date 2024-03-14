@@ -8,7 +8,6 @@ import Data.Functor.Foldable
   ( Base,
     Corecursive,
     Recursive,
-    cata,
     embed,
     project,
   )

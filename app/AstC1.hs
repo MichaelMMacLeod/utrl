@@ -11,16 +11,13 @@ module AstC1
   )
 where
 
-import Ast0 qualified
 import Data.Functor.Foldable
   ( Base,
     Corecursive,
     Recursive,
-    cata,
     embed,
     project,
   )
-import Data.List (intercalate)
 
 data Ast
   = Symbol String

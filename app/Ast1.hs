@@ -5,12 +5,10 @@
 
 module Ast1 (Ast (..), AstF (..)) where
 
-import Ast0 qualified
 import Data.Functor.Foldable
   ( Base,
     Corecursive,
     Recursive,
-    cata,
     embed,
     project,
   )

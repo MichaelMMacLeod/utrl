@@ -15,10 +15,10 @@ lex = ana $ \case
   xs -> let (token, rest) = parseToken xs in Cons token rest
     where
       parseToken :: String -> (Token, String)
-      parseToken (' ' : xs) = parseToken xs
-      parseToken ('(' : xs) = (TLeft, xs)
-      parseToken (')' : xs) = (TRight, xs)
-      parseToken xs = (TSymbol $ takeWhile isSymbolChar xs, dropWhile isSymbolChar xs)
+      parseToken (' ' : ts) = parseToken ts
+      parseToken ('(' : ts) = (TLeft, ts)
+      parseToken (')' : ts) = (TRight, ts)
+      parseToken ts = (TSymbol $ takeWhile isSymbolChar ts, dropWhile isSymbolChar ts)
 
       isSymbolChar :: Char -> Bool
       isSymbolChar =

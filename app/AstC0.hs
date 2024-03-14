@@ -15,18 +15,14 @@ module AstC0
   )
 where
 
-import Ast1 qualified
 import AstC1 qualified
 import Data.Functor.Foldable
   ( Base,
     Corecursive,
     Recursive,
-    cata,
     embed,
     project,
   )
-import Data.HashMap.Strict qualified as H
-import Data.List (intercalate)
 
 data Ast
   = Symbol String
@@ -57,8 +53,8 @@ c0Head :: AstC0.IndexC0 -> AstC0.IndexC0
 c0Head = reverse . go . reverse
   where
     go :: AstC0.IndexC0 -> AstC0.IndexC0
-    go all@(AstC0.Between zeroPlusC0 lenMinusC0 : xs) = all
-    go (x : xs) = go xs
+    go xs@(AstC0.Between {} : _) = xs
+    go (_ : xs) = go xs
     go [] = []
 
 cutC0 :: AstC0.IndexC0 -> (AstC0.IndexC0, AstC1.IndexC1)
