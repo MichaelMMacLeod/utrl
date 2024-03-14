@@ -12,7 +12,7 @@ import AstC1 qualified
 import Data.Functor.Foldable (Base, cata)
 import Data.HashMap.Strict qualified as H
 
-type Variables = H.HashMap String AstC0.IndexC0
+type Variables = H.HashMap String AstC0.Index
 
 compile :: Variables -> Ast0.Ast -> AstC1.Ast
 compile vars = compileC0toC1 . compile1toC0 vars . compile0to1
@@ -38,18 +38,18 @@ compile1toC0 vars = cata $ \case
 compileC0toC1 :: AstC0.Ast -> AstC1.Ast
 compileC0toC1 = verify . cata go
   where
-    verify :: (AstC1.Ast, AstC0.IndexC0) -> AstC1.Ast
+    verify :: (AstC1.Ast, AstC0.Index) -> AstC1.Ast
     verify (ast, []) = ast
     verify _ = error "Needs more '..'"
 
-    go :: Base AstC0.Ast (AstC1.Ast, AstC0.IndexC0) -> (AstC1.Ast, AstC0.IndexC0)
+    go :: Base AstC0.Ast (AstC1.Ast, AstC0.Index) -> (AstC1.Ast, AstC0.Index)
     go (AstC0.SymbolF s) = (AstC1.Symbol s, [])
     go (AstC0.CompoundF xs) =
       let indexesAllEqual = allEqual $ map snd xs
-          allEqual :: [AstC0.IndexC0] -> Bool
+          allEqual :: [AstC0.Index] -> Bool
           allEqual [] = True
           allEqual (y : ys) = all (== y) ys
-          sharedIndex :: [(AstC1.Ast, AstC0.IndexC0)] -> AstC0.IndexC0
+          sharedIndex :: [(AstC1.Ast, AstC0.Index)] -> AstC0.Index
           sharedIndex ((_, i) : _) = i
           sharedIndex _ = []
        in if indexesAllEqual

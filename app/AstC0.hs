@@ -6,7 +6,7 @@
 module AstC0
   ( Ast (..),
     AstF (..),
-    IndexC0,
+    Index,
     IndexElement (..),
     c1Tail,
     c0Head,
@@ -28,7 +28,7 @@ data Ast
   = Symbol String
   | Compound [Ast]
   | Ellipses Ast
-  | Variable IndexC0
+  | Variable Index
 
 data IndexElement
   = ZeroPlus Integer
@@ -39,28 +39,28 @@ data IndexElement
       }
   deriving (Eq)
 
-type IndexC0 = [IndexElement]
+type Index = [IndexElement]
 
-c1Tail :: AstC0.IndexC0 -> AstC1.IndexC1
+c1Tail :: Index -> AstC1.Index
 c1Tail = reverse . go . reverse
   where
-    go :: AstC0.IndexC0 -> AstC1.IndexC1
+    go :: Index -> AstC1.Index
     go ((AstC0.ZeroPlus i) : xs) = AstC1.ZeroPlus i : go xs
     go ((AstC0.LenMinus i) : xs) = AstC1.LenMinus i : go xs
     go _ = []
 
-c0Head :: AstC0.IndexC0 -> AstC0.IndexC0
+c0Head :: Index -> Index
 c0Head = reverse . go . reverse
   where
-    go :: AstC0.IndexC0 -> AstC0.IndexC0
+    go :: Index -> Index
     go xs@(AstC0.Between {} : _) = xs
     go (_ : xs) = go xs
     go [] = []
 
-cutC0 :: AstC0.IndexC0 -> (AstC0.IndexC0, AstC1.IndexC1)
+cutC0 :: Index -> (Index, AstC1.Index)
 cutC0 c0 = (c0Head c0, c1Tail c0)
 
-cutC0Between :: AstC0.IndexC0 -> (AstC0.IndexC0, Maybe (Integer, Integer))
+cutC0Between :: Index -> (Index, Maybe (Integer, Integer))
 cutC0Between = go . reverse
   where
     go (AstC0.Between zp lm : others) = (reverse others, Just (zp, lm))
@@ -69,7 +69,7 @@ cutC0Between = go . reverse
 data AstF r
   = SymbolF String
   | CompoundF [r]
-  | VariableF IndexC0
+  | VariableF Index
   | EllipsesF r
   deriving (Functor)
 

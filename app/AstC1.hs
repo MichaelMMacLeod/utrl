@@ -6,7 +6,7 @@
 module AstC1
   ( Ast (..),
     AstF (..),
-    IndexC1,
+    Index,
     IndexElement (..),
   )
 where
@@ -22,9 +22,9 @@ import Data.Functor.Foldable
 data Ast
   = Symbol String
   | Compound [Ast]
-  | Copy IndexC1
+  | Copy Index
   | Loop
-      { index :: IndexC1,
+      { index :: Index,
         start :: Integer,
         end :: Integer,
         body :: Ast
@@ -34,14 +34,14 @@ data IndexElement
   = ZeroPlus Integer
   | LenMinus Integer
 
-type IndexC1 = [IndexElement]
+type Index = [IndexElement]
 
 data AstF r
   = SymbolF String
   | CompoundF [r]
-  | CopyF IndexC1
+  | CopyF Index
   | LoopF
-      { indexF :: IndexC1,
+      { indexF :: Index,
         startF :: Integer,
         endF :: Integer,
         bodyF :: r

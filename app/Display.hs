@@ -76,7 +76,7 @@ displayC1 =
               ]
       )
 
-displayIndexC0 :: AstC0.IndexC0 -> String
+displayIndexC0 :: AstC0.Index -> String
 displayIndexC0 index = "[" ++ intercalate "," (map displayIndexElementC0 index) ++ "]"
 
 displayIndexElementC0 :: AstC0.IndexElement -> String
@@ -84,7 +84,7 @@ displayIndexElementC0 (AstC0.ZeroPlus i) = show i
 displayIndexElementC0 (AstC0.LenMinus i) = "(len-" ++ show i ++ ")"
 displayIndexElementC0 (AstC0.Between zeroPlusC0 lenMinusC0) = show zeroPlusC0 ++ ".." ++ show lenMinusC0
 
-displayIndexC1 :: AstC1.IndexC1 -> String
+displayIndexC1 :: AstC1.Index -> String
 displayIndexC1 index = "[" ++ intercalate "," (map displayIndexElementC1 index) ++ "]"
 
 displayIndexElementC1 :: AstC1.IndexElement -> String
