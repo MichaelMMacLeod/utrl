@@ -6,13 +6,17 @@
 
 module Main (main) where
 
-import Ast0
+import Ast0 qualified
+import Ast1 qualified
+import AstC0 qualified
+import AstC1 qualified
 import Control.Applicative (liftA, liftA2)
 import Data.Char (isSpace)
 import Data.Functor.Foldable (Base, Corecursive, ListF (Cons, Nil), Recursive, ana, cata, embed, project)
 import Data.HashMap.Strict qualified as H
 import Data.Kind (Type)
 import Data.List (intercalate, partition)
+import Read qualified
 
 -- (fn xs (flatten (list (list xs ..) ..)) -> (list xs .. ..))
 main :: IO ()
@@ -20,247 +24,74 @@ main =
   print
     . displayC1
     . compileC0toC1
-    . compile1toC0 (H.fromList [("xs", [ZeroPlusC0 1, BetweenC0 1 0, BetweenC0 1 0])])
+    . compile1toC0 (H.fromList [("xs", [AstC0.ZeroPlusC0 1, AstC0.BetweenC0 1 0, AstC0.BetweenC0 1 0])])
     . compile0to1
-    $ read0 "(list xs .. ..)"
+    $ Read.read "(list xs .. ..)"
 
--- -- (fn xs (flatten ((xs ..) ..)) -> (xs .. ..))
--- main :: IO ()
--- main =
---   print
---     . displayC1
---     . compileC0toC1
---     . compile1toC0 (H.fromList [("xs", [BetweenC0 0 0, BetweenC0 0 0])])
---     . compile0to1
---     $ read0 "(xs .. ..)"
-
--- main = print . display1 $ compile0to1 (Compound0 [Symbol0 "a", Symbol0 "x", Symbol0 "..", Symbol0 "..", Symbol0 "q"])
-
--- type family Base t :: Type -> Type
-
--- class (Functor (Base t)) => Recursive t where
---   project :: t -> Base t t
-
--- class (Functor (Base t)) => Corecursive t where
---   embed :: Base t t -> t
-
--- data ListF a r = Nil | Cons a r
-
--- instance Functor (ListF a) where
---   fmap _ Nil = Nil
---   fmap f (Cons a r) = Cons a (f r)
-
--- type instance Base [a] = ListF a
-
--- instance Recursive [a] where
---   project [] = Nil
---   project (x : xs) = Cons x xs
-
--- instance Corecursive [a] where
---   embed Nil = []
---   embed (Cons x xs) = x : xs
-
--- cata :: (Recursive t) => (Base t a -> a) -> t -> a
--- cata f = f . fmap (cata f) . project
-
--- ana :: (Corecursive t) => (a -> Base t a) -> a -> t
--- ana f = embed . fmap (ana f) . f
-
--- hylo :: (Functor f) => (f b -> b) -> (a -> f a) -> a -> b
--- hylo f g = h where h = f . fmap h . g
-
-data Ast1
-  = Symbol1 String
-  | Compound1 [Ast1]
-  | Ellipses1 Ast1
-  deriving (Show)
-
-data Ast1F r
-  = Symbol1F String
-  | Compound1F [r]
-  | Ellipses1F r
-  deriving (Show, Functor)
-
-type instance Base Ast1 = Ast1F
-
-instance Recursive Ast1 where
-  project (Symbol1 s) = Symbol1F s
-  project (Compound1 xs) = Compound1F xs
-  project (Ellipses1 x) = Ellipses1F x
-
-instance Corecursive Ast1 where
-  embed (Symbol1F s) = Symbol1 s
-  embed (Compound1F xs) = Compound1 xs
-  embed (Ellipses1F x) = Ellipses1 x
-
-data IndexElementC0
-  = ZeroPlusC0 Integer
-  | LenMinusC0 Integer
-  | BetweenC0 {zeroPlusC0 :: Integer, lenMinusC0 :: Integer}
-  deriving (Eq)
-
-type IndexC0 = [IndexElementC0]
-
-c1Tail :: IndexC0 -> IndexC1
+c1Tail :: AstC0.IndexC0 -> AstC1.IndexC1
 c1Tail = reverse . go . reverse
   where
-    go :: IndexC0 -> IndexC1
-    go ((ZeroPlusC0 i) : xs) = ZeroPlusC1 i : go xs
-    go ((LenMinusC0 i) : xs) = LenMinusC1 i : go xs
+    go :: AstC0.IndexC0 -> AstC1.IndexC1
+    go ((AstC0.ZeroPlusC0 i) : xs) = AstC1.ZeroPlusC1 i : go xs
+    go ((AstC0.LenMinusC0 i) : xs) = AstC1.LenMinusC1 i : go xs
     go _ = []
 
-c0Head :: IndexC0 -> IndexC0
+c0Head :: AstC0.IndexC0 -> AstC0.IndexC0
 c0Head = reverse . go . reverse
   where
-    go :: IndexC0 -> IndexC0
-    go all@(BetweenC0 zeroPlusC0 lenMinusC0 : xs) = all
+    go :: AstC0.IndexC0 -> AstC0.IndexC0
+    go all@(AstC0.BetweenC0 zeroPlusC0 lenMinusC0 : xs) = all
     go (x : xs) = go xs
     go [] = []
 
-cutC0 :: IndexC0 -> (IndexC0, IndexC1)
+cutC0 :: AstC0.IndexC0 -> (AstC0.IndexC0, AstC1.IndexC1)
 cutC0 c0 = (c0Head c0, c1Tail c0)
 
-cutC0Between :: IndexC0 -> (IndexC0, Maybe (Integer, Integer))
+cutC0Between :: AstC0.IndexC0 -> (AstC0.IndexC0, Maybe (Integer, Integer))
 cutC0Between = go . reverse
   where
-    go (BetweenC0 zp lm : others) = (reverse others, Just (zp, lm))
+    go (AstC0.BetweenC0 zp lm : others) = (reverse others, Just (zp, lm))
     go others = (others, Nothing)
 
-displayIndexElementC0 :: IndexElementC0 -> String
-displayIndexElementC0 (ZeroPlusC0 i) = show i
-displayIndexElementC0 (LenMinusC0 i) = "(len-" ++ show i ++ ")"
-displayIndexElementC0 (BetweenC0 zeroPlusC0 lenMinusC0) = show zeroPlusC0 ++ ".." ++ show lenMinusC0
+displayIndexElementC0 :: AstC0.IndexElement -> String
+displayIndexElementC0 (AstC0.ZeroPlusC0 i) = show i
+displayIndexElementC0 (AstC0.LenMinusC0 i) = "(len-" ++ show i ++ ")"
+displayIndexElementC0 (AstC0.BetweenC0 zeroPlusC0 lenMinusC0) = show zeroPlusC0 ++ ".." ++ show lenMinusC0
 
-displayIndexC0 :: IndexC0 -> String
+displayIndexC0 :: AstC0.IndexC0 -> String
 displayIndexC0 index = "[" ++ intercalate "," (map displayIndexElementC0 index) ++ "]"
 
-displayIndexElementC1 :: IndexElementC1 -> String
-displayIndexElementC1 (ZeroPlusC1 i) = show i
-displayIndexElementC1 (LenMinusC1 i) = "(len-" ++ show i ++ ")"
+displayIndexElementC1 :: AstC1.IndexElementC1 -> String
+displayIndexElementC1 (AstC1.ZeroPlusC1 i) = show i
+displayIndexElementC1 (AstC1.LenMinusC1 i) = "(len-" ++ show i ++ ")"
 
-displayIndexC1 :: IndexC1 -> String
+displayIndexC1 :: AstC1.IndexC1 -> String
 displayIndexC1 index = "[" ++ intercalate "," (map displayIndexElementC1 index) ++ "]"
 
-data AstC0
-  = SymbolC0 String
-  | CompoundC0 [AstC0]
-  | VariableC0 IndexC0
-  | EllipsesC0 AstC0
-
-data AstC0F r
-  = SymbolC0F String
-  | CompoundC0F [r]
-  | VariableC0F IndexC0
-  | EllipsesC0F r
-  deriving (Functor)
-
-type instance Base AstC0 = AstC0F
-
-instance Recursive AstC0 where
-  project (SymbolC0 s) = SymbolC0F s
-  project (CompoundC0 xs) = CompoundC0F xs
-  project (VariableC0 i) = VariableC0F i
-  project (EllipsesC0 x) = EllipsesC0F x
-
-instance Corecursive AstC0 where
-  embed (SymbolC0F s) = SymbolC0 s
-  embed (CompoundC0F xs) = CompoundC0 xs
-  embed (VariableC0F i) = VariableC0 i
-  embed (EllipsesC0F x) = EllipsesC0 x
-
-data IndexElementC1
-  = ZeroPlusC1 Integer
-  | LenMinusC1 Integer
-
-type IndexC1 = [IndexElementC1]
-
-data AstC1
-  = SymbolC1 String
-  | CompoundC1 [AstC1]
-  | CopyC1 IndexC1
-  | LoopC1 {indexC1 :: IndexC1, startC1 :: Integer, endC1 :: Integer, bodyC1 :: AstC1}
-
-data AstC1F r
-  = SymbolC1F String
-  | CompoundC1F [r]
-  | CopyC1F IndexC1
-  | LoopC1F {indexC1F :: IndexC1, startC1F :: Integer, endC1F :: Integer, bodyC1F :: r}
-  deriving (Functor)
-
-type instance Base AstC1 = AstC1F
-
-instance Recursive AstC1 where
-  project (SymbolC1 s) = SymbolC1F s
-  project (CompoundC1 xs) = CompoundC1F xs
-  project (CopyC1 i) = CopyC1F i
-  project (LoopC1 i s e b) = LoopC1F i s e b
-
-instance Corecursive AstC1 where
-  embed (SymbolC1F s) = SymbolC1 s
-  embed (CompoundC1F xs) = CompoundC1 xs
-  embed (CopyC1F i) = CopyC1 i
-  embed (LoopC1F i s e b) = LoopC1 i s e b
-
-data Token = TLeft | TRight | TSymbol String deriving (Show)
-
-lex0 :: String -> [Token]
-lex0 = ana $ \case
-  [] -> Nil
-  xs -> let (token, rest) = parseToken xs in Cons token rest
-    where
-      parseToken :: String -> (Token, String)
-      parseToken (' ' : xs) = parseToken xs
-      parseToken ('(' : xs) = (TLeft, xs)
-      parseToken (')' : xs) = (TRight, xs)
-      parseToken xs = (TSymbol $ takeWhile isSymbolChar xs, dropWhile isSymbolChar xs)
-
-      isSymbolChar :: Char -> Bool
-      isSymbolChar =
-        notF isSpace
-          <&&> notF (== '(')
-          <&&> notF (== ')')
-        where
-          notF = fmap not
-          (<&&>) = liftA2 (&&)
-
-parse0 :: [Token] -> Ast0
-parse0 xs = go xs []
-  where
-    go :: [Token] -> [[Ast0]] -> Ast0
-    go (TLeft : xs) acc = go xs ([] : acc)
-    go (TRight : xs) (a1 : a2 : acc) = let c = Compound0 (reverse a1) in go xs ((c : a2) : acc)
-    go (TRight : xs) [a1] = Compound0 (reverse a1)
-    go (TRight : xs) [] = error "Expected '('"
-    go (TSymbol s : xs) (a : acc) = go xs ((Symbol0 s : a) : acc)
-    go (TSymbol s : xs) [] = Symbol0 s
-
-read0 :: String -> Ast0
-read0 = parse0 . lex0
-
-display0 :: Ast0 -> String
+display0 :: Ast0.Ast0 -> String
 display0 = cata $ \case
-  Symbol0F s -> s
-  Compound0F xs -> "(" ++ unwords xs ++ ")"
+  Ast0.SymbolF s -> s
+  Ast0.CompoundF xs -> "(" ++ unwords xs ++ ")"
 
-display1 :: Ast1 -> String
+display1 :: Ast1.Ast -> String
 display1 = cata $ \case
-  Symbol1F s -> s
-  Compound1F xs -> "(" ++ unwords xs ++ ")"
-  Ellipses1F x -> x ++ " .."
+  Ast1.SymbolF s -> s
+  Ast1.CompoundF xs -> "(" ++ unwords xs ++ ")"
+  Ast1.EllipsesF x -> x ++ " .."
 
-displayC0 :: AstC0 -> String
+displayC0 :: AstC0.Ast -> String
 displayC0 = cata $ \case
-  SymbolC0F s -> s
-  VariableC0F i -> displayIndexC0 i
-  CompoundC0F xs -> "(" ++ unwords xs ++ ")"
-  EllipsesC0F x -> x ++ " .."
+  AstC0.SymbolF s -> s
+  AstC0.VariableF i -> displayIndexC0 i
+  AstC0.CompoundF xs -> "(" ++ unwords xs ++ ")"
+  AstC0.EllipsesF x -> x ++ " .."
 
-displayC1 :: AstC1 -> String
+displayC1 :: AstC1.AstC1 -> String
 displayC1 = cata $ \case
-  SymbolC1F s -> s
-  CompoundC1F xs -> "(" ++ unwords xs ++ ")"
-  CopyC1F i -> "{copy " ++ displayIndexC1 i ++ "}"
-  LoopC1F index start end body ->
+  AstC1.SymbolC1F s -> s
+  AstC1.CompoundC1F xs -> "(" ++ unwords xs ++ ")"
+  AstC1.CopyC1F i -> "{copy " ++ displayIndexC1 i ++ "}"
+  AstC1.LoopC1F index start end body ->
     "{loop "
       ++ show start
       ++ ".."
@@ -271,53 +102,53 @@ displayC1 = cata $ \case
       ++ body
       ++ "}"
 
-compile0to1 :: Ast0 -> Ast1
+compile0to1 :: Ast0.Ast0 -> Ast1.Ast
 compile0to1 = cata $ \case
-  Symbol0F s -> Symbol1 s
-  Compound0F xs -> Compound1 $ go xs
+  Ast0.SymbolF s -> Ast1.Symbol s
+  Ast0.CompoundF xs -> Ast1.Compound $ go xs
     where
-      go :: [Ast1] -> [Ast1]
-      go (x : Symbol1 ".." : xs) = go $ Ellipses1 x : xs
+      go :: [Ast1.Ast] -> [Ast1.Ast]
+      go (x : Ast1.Symbol ".." : xs) = go $ Ast1.Ellipses x : xs
       go (x : xs) = x : go xs
       go [] = []
 
-type Variables = H.HashMap String IndexC0
+type Variables = H.HashMap String AstC0.IndexC0
 
-compile1toC0 :: Variables -> Ast1 -> AstC0
+compile1toC0 :: Variables -> Ast1.Ast -> AstC0.Ast
 compile1toC0 vars = cata $ \case
-  Symbol1F s -> case H.lookup s vars of
-    Nothing -> SymbolC0 s
-    Just index -> VariableC0 index
-  Compound1F xs -> CompoundC0 xs
-  Ellipses1F x -> EllipsesC0 x
+  Ast1.SymbolF s -> case H.lookup s vars of
+    Nothing -> AstC0.Symbol s
+    Just index -> AstC0.Variable index
+  Ast1.CompoundF xs -> AstC0.Compound xs
+  Ast1.EllipsesF x -> AstC0.Ellipses x
 
-compileC0toC1 :: AstC0 -> AstC1
+compileC0toC1 :: AstC0.Ast -> AstC1.AstC1
 compileC0toC1 = verify . cata go
   where
-    verify :: (AstC1, IndexC0) -> AstC1
+    verify :: (AstC1.AstC1, AstC0.IndexC0) -> AstC1.AstC1
     verify (ast, []) = ast
     verify _ = error "Needs more '..'"
 
-    go :: Base AstC0 (AstC1, IndexC0) -> (AstC1, IndexC0)
-    go (SymbolC0F s) = (SymbolC1 s, [])
-    go (CompoundC0F xs) =
+    go :: Base AstC0.Ast (AstC1.AstC1, AstC0.IndexC0) -> (AstC1.AstC1, AstC0.IndexC0)
+    go (AstC0.SymbolF s) = (AstC1.SymbolC1 s, [])
+    go (AstC0.CompoundF xs) =
       let indexesAllEqual = allEqual $ map snd xs
-          allEqual :: [IndexC0] -> Bool
+          allEqual :: [AstC0.IndexC0] -> Bool
           allEqual [] = True
           allEqual (x : xs) = all (== x) xs
-          sharedIndex :: [(AstC1, IndexC0)] -> IndexC0
+          sharedIndex :: [(AstC1.AstC1, AstC0.IndexC0)] -> AstC0.IndexC0
           sharedIndex ((_, i) : _) = i
           sharedIndex _ = []
        in if indexesAllEqual
-            then (CompoundC1 $ map fst xs, sharedIndex xs)
+            then (AstC1.CompoundC1 $ map fst xs, sharedIndex xs)
             else error "Variables not matched under same '..' used under same '..'"
-    go (VariableC0F i) =
+    go (AstC0.VariableF i) =
       let (fst, snd) = cutC0 i
-       in (CopyC1 snd, fst)
-    go (EllipsesC0F (astC1, indexC0)) = case cutC0Between indexC0 of
+       in (AstC1.CopyC1 snd, fst)
+    go (AstC0.EllipsesF (astC1, indexC0)) = case cutC0Between indexC0 of
       (indexC0', Just (zeroPlus, lenMinus)) ->
         let (fstC0, sndC1) = cutC0 indexC0'
-            loopC1 = LoopC1 {indexC1 = sndC1, startC1 = zeroPlus, endC1 = lenMinus, bodyC1 = astC1}
+            loopC1 = AstC1.LoopC1 {AstC1.indexC1 = sndC1, AstC1.startC1 = zeroPlus, AstC1.endC1 = lenMinus, AstC1.bodyC1 = astC1}
          in (loopC1, fstC0)
       (_, Nothing) -> error "Too many '..'"
 
