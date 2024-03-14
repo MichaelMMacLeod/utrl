@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Ast0 (Ast (..), Ast0F (..)) where
+module Ast0 (Ast (..), AstF (..)) where
 
 import Data.Functor.Foldable
   ( Base,
@@ -17,12 +17,12 @@ data Ast
   | Compound [Ast]
   deriving (Show)
 
-data Ast0F r
+data AstF r
   = SymbolF String
   | CompoundF [r]
   deriving (Show, Functor)
 
-type instance Base Ast = Ast0F
+type instance Base Ast = AstF
 
 instance Recursive Ast where
   project (Symbol s) = SymbolF s

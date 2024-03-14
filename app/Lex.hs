@@ -26,5 +26,5 @@ lex = ana $ \case
           <&&> notF (== '(')
           <&&> notF (== ')')
         where
-          notF = fmap not
+          notF = (not .)
           (<&&>) = liftA2 (&&)
