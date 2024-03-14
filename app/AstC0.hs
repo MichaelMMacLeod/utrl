@@ -31,11 +31,11 @@ data Ast
   | Variable Index
 
 data IndexElement
-  = ZeroPlus Integer
-  | LenMinus Integer
+  = ZeroPlus Int
+  | LenMinus Int
   | Between
-      { zeroPlus :: Integer,
-        lenMinus :: Integer
+      { zeroPlus :: Int,
+        lenMinus :: Int
       }
   deriving (Eq)
 
@@ -60,7 +60,7 @@ c0Head = reverse . go . reverse
 cutC0 :: Index -> (Index, AstC1.Index)
 cutC0 c0 = (c0Head c0, c1Tail c0)
 
-cutC0Between :: Index -> (Index, Maybe (Integer, Integer))
+cutC0Between :: Index -> (Index, Maybe (Int, Int))
 cutC0Between = go . reverse
   where
     go (AstC0.Between zp lm : others) = (reverse others, Just (zp, lm))

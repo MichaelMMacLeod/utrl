@@ -6,10 +6,10 @@ import Var (Var)
 
 data Expr
   = Var Var
-  | Constant Integer
+  | Constant Int
   | BinOp
       { op :: BinOp,
         lhs :: Var,
         rhs :: ConstantExpr
       }
-  | Length Var
+  | Length

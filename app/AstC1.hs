@@ -25,14 +25,14 @@ data Ast
   | Copy Index
   | Loop
       { index :: Index,
-        start :: Integer,
-        end :: Integer,
+        start :: Int,
+        end :: Int,
         body :: Ast
       }
 
 data IndexElement
-  = ZeroPlus Integer
-  | LenMinus Integer
+  = ZeroPlus Int
+  | LenMinus Int
 
 type Index = [IndexElement]
 
@@ -42,8 +42,8 @@ data AstF r
   | CopyF Index
   | LoopF
       { indexF :: Index,
-        startF :: Integer,
-        endF :: Integer,
+        startF :: Int,
+        endF :: Int,
         bodyF :: r
       }
   deriving (Functor)

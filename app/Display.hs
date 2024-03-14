@@ -8,6 +8,7 @@ module Display
     display1,
     displayC0,
     displayC1,
+    displayStmts,
   )
 where
 
@@ -15,8 +16,13 @@ import Ast0 qualified
 import Ast1 qualified
 import AstC0 qualified
 import AstC1 qualified
+import ConstantExpr (ConstantExpr (Constant, Var))
 import Data.Functor.Foldable (cata)
 import Data.List (intercalate)
+import Expr (Expr (..))
+import Op qualified
+import Stmt (Stmt (..))
+import Var (Var)
 
 display0 :: Ast0.Ast -> String
 display0 = cata $ \case
@@ -90,3 +96,54 @@ displayIndexC1 index = "[" ++ intercalate "," (map displayIndexElementC1 index) 
 displayIndexElementC1 :: AstC1.IndexElement -> String
 displayIndexElementC1 (AstC1.ZeroPlus i) = show i
 displayIndexElementC1 (AstC1.LenMinus i) = "(len-" ++ show i ++ ")"
+
+displayStmts :: [Stmt] -> String
+displayStmts = unlines . zipWith indent [0 ..] . map displayStmt
+  where
+    indent :: Int -> String -> String
+    indent lineNum str = show lineNum ++ ":\t" ++ str
+
+displayStmt :: Stmt -> String
+displayStmt (Stmt.Assign lhs rhs) = displayVar lhs ++ " = " ++ displayExpr rhs
+displayStmt (Stmt.PushSymbolToDataStack s) = "data_stack.push(" ++ show s ++ ")"
+displayStmt (Stmt.PushIndexToIndexStack i) = "index_stack.push(" ++ displayConstantExpr i ++ ")"
+displayStmt (Stmt.PopFromIndexStack count) = "index_stack.pop(" ++ show count ++ " " ++ name ++ ")"
+  where
+    name = case count of
+      1 -> "index"
+      _ -> "indices"
+displayStmt Stmt.PushIndexedTermToDataStack = "data_stack.push(input[index_stack])"
+displayStmt (Stmt.BuildCompoundTermFromDataStack term_count) =
+  "data_stack.push(new CompoundTerm(data_stack.pop(" ++ show term_count ++ " " ++ name ++ ")))"
+  where
+    name = case term_count of
+      1 -> "term"
+      _ -> "terms"
+displayStmt (Stmt.Jump label) = "jump to instruction " ++ show label
+displayStmt (Stmt.JumpWhenLessThan label when_var le_var) =
+  "jump to instruction "
+    ++ show label
+    ++ " when "
+    ++ displayVar when_var
+    ++ " < "
+    ++ displayVar le_var
+
+displayVar :: Var -> String
+displayVar v = "var #" ++ show v
+
+displayConstant :: Int -> String
+displayConstant = show
+
+displayExpr :: Expr -> String
+displayExpr (Expr.Var v) = displayVar v
+displayExpr (Expr.Constant c) = displayConstant c
+displayExpr (Expr.BinOp op lhs rhs) = displayVar lhs ++ opstr ++ displayConstantExpr rhs
+  where
+    opstr = case op of
+      Op.Add -> " + "
+      Op.Sub -> " - "
+displayExpr Expr.Length = "index_stack.length()"
+
+displayConstantExpr :: ConstantExpr -> String
+displayConstantExpr (ConstantExpr.Var v) = displayVar v
+displayConstantExpr (ConstantExpr.Constant c) = displayConstant c

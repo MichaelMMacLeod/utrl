@@ -4,4 +4,4 @@ import Var (Var)
 
 data ConstantExpr
   = Var Var
-  | Constant Integer
+  | Constant Int

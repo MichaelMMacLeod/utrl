@@ -14,7 +14,7 @@ import Read qualified
 -- (fn xs (flatten (list (list xs ..) ..)) -> (list xs .. ..))
 main :: IO ()
 main =
-  print
-    . Display.displayC1
+  putStrLn
+    . Display.displayStmts
     . Compile.compile (H.fromList [("xs", [AstC0.ZeroPlus 1, AstC0.Between 1 0, AstC0.Between 1 0])])
     $ Read.read "(list xs .. ..)"

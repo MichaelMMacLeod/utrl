@@ -12,17 +12,17 @@ data Stmt
   | PushSymbolToDataStack String
   | PushIndexToIndexStack ConstantExpr
   | PopFromIndexStack
-      { index_count :: Integer
+      { index_count :: Int
       }
   | PushIndexedTermToDataStack
   | BuildCompoundTermFromDataStack
-      { term_count :: Integer
+      { term_count :: Int
       }
   | Jump
-      { label :: Integer
+      { label :: Int
       }
   | JumpWhenLessThan
-      { label :: Integer,
-        when_var :: Integer,
-        le_var :: Integer
+      { label :: Int,
+        when_var :: Int,
+        le_var :: Int
       }

@@ -1,3 +1,3 @@
 module Var (Var) where
 
-type Var = Integer
+type Var = Int
