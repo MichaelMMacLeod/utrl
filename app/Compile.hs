@@ -10,8 +10,11 @@ import Ast1 qualified
 import AstC0 qualified
 import AstC1 qualified
 import ConstantExpr (ConstantExpr (..))
+import Control.Monad.ST (runST)
+import Control.Monad.State.Strict (MonadState (get, put, state), State, gets, modify, runState)
 import Data.Functor.Foldable (Base, ListF (..), fold)
 import Data.HashMap.Strict qualified as H
+import Data.Maybe (fromJust)
 import Expr qualified
 import Op qualified
 import Op qualified as Expr
@@ -73,80 +76,137 @@ compileC0toC1 = verify . fold go
          in (loopC1, fstC0)
       (_, Nothing) -> error "Too many '..'"
 
-pushIndexToStackStmts :: AstC1.Index -> [Stmt]
+pushIndexToStackStmts :: AstC1.Index -> State C1ToStmtsState [Stmt]
 pushIndexToStackStmts = fold $ \case
-  Nil -> []
-  Cons (AstC1.ZeroPlus zp) stmts -> Stmt.PushIndexToIndexStack (Constant zp) : stmts
-  Cons (AstC1.LenMinus lm) stmts -> [assign, sub, push] ++ stmts
-    where
-      var = 3 -- FIXME, new var
-      assign = Stmt.Assign {lhs = var, rhs = Expr.Length}
-      sub =
-        Stmt.Assign
-          { lhs = var,
-            rhs =
-              Expr.BinOp
-                { Expr.op = Op.Sub,
-                  Expr.lhs = var,
-                  Expr.rhs = ConstantExpr.Constant lm
-                }
-          }
-      push = Stmt.PushIndexToIndexStack $ ConstantExpr.Var var
+  Nil -> return []
+  Cons (AstC1.ZeroPlus zp) stmts -> do
+    stmts <- stmts
+    return $ Stmt.PushIndexToIndexStack (Constant zp) : stmts
+  Cons (AstC1.LenMinus lm) stmts -> do
+    stmts <- stmts
+    var <- gets currentVar
+    modify incVar
+    let assign = Stmt.Assign {lhs = var, rhs = Expr.Length}
+    let sub =
+          Stmt.Assign
+            { lhs = var,
+              rhs =
+                Expr.BinOp
+                  { Expr.op = Op.Sub,
+                    Expr.lhs = var,
+                    Expr.rhs = ConstantExpr.Constant lm
+                  }
+            }
+    let push = Stmt.PushIndexToIndexStack $ ConstantExpr.Var var
+    return $ [assign, sub, push] ++ stmts
 
 popFromIndexStackStmt :: AstC1.Index -> Stmt
 popFromIndexStackStmt =
   Stmt.PopFromIndexStack . length
 
-newtype C1ToStmtsState = C1ToStmtsState
-  { currentVar :: Var
+data C1ToStmtsState = C1ToStmtsState
+  { currentVar :: Var,
+    currentStmt :: Int,
+    iteration_count_var :: Maybe Var
   }
 
+incVar :: C1ToStmtsState -> C1ToStmtsState
+incVar (C1ToStmtsState currentVar currentStmt iteration_count_var) = C1ToStmtsState (currentVar + 1) currentStmt iteration_count_var
+
+incStmts :: Int -> C1ToStmtsState -> C1ToStmtsState
+incStmts i (C1ToStmtsState currentVar currentStmt iteration_count_var) = C1ToStmtsState currentVar (currentStmt + i) iteration_count_var
+
+setIterationCountVar :: C1ToStmtsState -> C1ToStmtsState
+setIterationCountVar (C1ToStmtsState currentVar currentStmt iteration_count_var) = C1ToStmtsState (currentVar + 1) currentStmt (Just currentVar)
+
+initialC1ToStmtsState :: C1ToStmtsState
+initialC1ToStmtsState = C1ToStmtsState {currentVar = 0, currentStmt = 0, iteration_count_var = Nothing}
+
 compileC1toStmts :: AstC1.Ast -> [Stmt]
-compileC1toStmts = fold go
-  where 
-    go :: Base AstC1.Ast [Stmt] -> [Stmt]
+compileC1toStmts = fst . flip runState initialC1ToStmtsState . fold go
+  where
+    go :: Base AstC1.Ast (State C1ToStmtsState [Stmt]) -> State C1ToStmtsState [Stmt]
     go = \case
-      AstC1.SymbolF s -> [PushSymbolToDataStack s]
-      AstC1.CompoundF xs -> concat xs ++ [BuildCompoundTermFromDataStack {term_count = length xs}]
-      AstC1.CopyF i -> pushIndexToStackStmts i ++ [Stmt.PushIndexedTermToDataStack, popFromIndexStackStmt i]
-      AstC1.LoopF index start end body -> prologue ++ body' ++ epilogue
-        where
-          loopVar = 0 -- FIXME, create new var
-          endVar = 1 -- FIXME, create new var
-          lengthVar = 2 -- FIXME, create new var
-          prologue =
-            [Stmt.Assign {lhs = loopVar, rhs = Expr.Constant start}]
-              ++ pushIndexToStackStmts index
-              ++ [ Stmt.Assign {lhs = lengthVar, rhs = Expr.Length},
-                   Stmt.Assign {lhs = endVar, rhs = Expr.Constant end},
-                   Stmt.Assign
-                     { lhs = endVar,
-                       rhs =
-                         Expr.BinOp
-                           { Expr.op = Op.Sub,
-                             Expr.lhs = lengthVar,
-                             Expr.rhs = ConstantExpr.Var endVar
-                           }
-                     },
-                   Stmt.Jump 0 -- FIXME, jump to end of loop
-                 ]
-          body' = pushLoopVar : body ++ [popLoopVar]
-          pushLoopVar = Stmt.PushIndexToIndexStack (ConstantExpr.Var loopVar)
-          popLoopVar = Stmt.PopFromIndexStack 1
-          epilogue =
-            [ Stmt.Assign
-                { lhs = loopVar,
-                  rhs =
-                    Expr.BinOp
-                      { Expr.op = Op.Add,
-                        Expr.lhs = loopVar,
-                        Expr.rhs = ConstantExpr.Constant 1
-                      }
-                },
-              Stmt.JumpWhenLessThan
-                { label = 0, -- FIXME, jump to top of body'
-                  when_var = loopVar,
-                  le_var = endVar
-                },
-              popFromIndexStackStmt index
-            ]
+      AstC1.SymbolF s -> return [PushSymbolToDataStack s]
+      AstC1.CompoundF xs -> do
+        modify setIterationCountVar
+        xs <- sequence xs
+        count <- gets iteration_count_var
+        case count of
+          Nothing -> error "no iteration counter"
+          Just count_var ->
+            return $ concat xs ++ [BuildCompoundTermFromDataStack {term_count = ConstantExpr.Var count_var}]
+      AstC1.CopyF i -> do
+        pushStackStmts <- pushIndexToStackStmts i
+        return $ pushStackStmts ++ [Stmt.PushIndexedTermToDataStack, popFromIndexStackStmt i]
+      AstC1.LoopF index start end body -> do
+        loopVar <- gets currentVar
+        modify incVar
+
+        pushStackStmts <- pushIndexToStackStmts index
+
+        lengthVar <- gets currentVar
+        modify incVar
+
+        endVar <- gets currentVar
+        modify incVar
+
+        count <- gets iteration_count_var
+        case count of
+          Nothing -> error "no iteration counter"
+          Just count_var -> do
+            let pushLoopVar = Stmt.PushIndexToIndexStack (ConstantExpr.Var loopVar)
+            let popLoopVar = Stmt.PopFromIndexStack 1
+            body <- body
+            let body' = pushLoopVar : body ++ [popLoopVar]
+
+            initialLabel <- gets currentStmt
+            let startLabel = initialLabel + 1 + length pushStackStmts + 5
+            let endLabel = startLabel + length body' + 2
+
+            let prologue =
+                  [Stmt.Assign {lhs = loopVar, rhs = Expr.Constant start}]
+                    ++ pushStackStmts
+                    ++ [ Stmt.Assign {lhs = lengthVar, rhs = Expr.Length},
+                         Stmt.Assign {lhs = endVar, rhs = Expr.Constant end},
+                         Stmt.Assign
+                           { lhs = endVar,
+                             rhs =
+                               Expr.BinOp
+                                 { Expr.op = Op.Sub,
+                                   Expr.lhs = lengthVar,
+                                   Expr.rhs = ConstantExpr.Var endVar
+                                 }
+                           },
+                         Stmt.Jump endLabel
+                       ]
+            let epilogue =
+                  [ Stmt.Assign
+                      { lhs = loopVar,
+                        rhs =
+                          Expr.BinOp
+                            { Expr.op = Op.Add,
+                              Expr.lhs = loopVar,
+                              Expr.rhs = ConstantExpr.Constant 1
+                            }
+                      },
+                    Stmt.Assign
+                      {
+                        lhs = count_var,
+                        rhs =
+                          Expr.BinOp
+                            { Expr.op = Op.Add,
+                              Expr.lhs = count_var,
+                              Expr.rhs = ConstantExpr.Constant 1 -- TODO this shouldn't be 1? FIXME
+                            }
+                      },
+                    Stmt.JumpWhenLessThan
+                      { label = startLabel,
+                        when_var = loopVar,
+                        le_var = endVar
+                      },
+                    popFromIndexStackStmt index
+                  ]
+            let result = prologue ++ body' ++ epilogue
+            modify . incStmts $ length result
+            return result

@@ -114,11 +114,9 @@ displayStmt (Stmt.PopFromIndexStack count) = "index_stack.pop(" ++ show count ++
       _ -> "indices"
 displayStmt Stmt.PushIndexedTermToDataStack = "data_stack.push(input[index_stack])"
 displayStmt (Stmt.BuildCompoundTermFromDataStack term_count) =
-  "data_stack.push(new CompoundTerm(data_stack.pop(" ++ show term_count ++ " " ++ name ++ ")))"
-  where
-    name = case term_count of
-      1 -> "term"
-      _ -> "terms"
+  "data_stack.push(new CompoundTerm(data_stack.pop(" 
+  ++ displayConstantExpr term_count 
+  ++ ")))"
 displayStmt (Stmt.Jump label) = "jump to instruction " ++ show label
 displayStmt (Stmt.JumpWhenLessThan label when_var le_var) =
   "jump to instruction "
@@ -142,7 +140,7 @@ displayExpr (Expr.BinOp op lhs rhs) = displayVar lhs ++ opstr ++ displayConstant
     opstr = case op of
       Op.Add -> " + "
       Op.Sub -> " - "
-displayExpr Expr.Length = "index_stack.length()"
+displayExpr Expr.Length = "input[index_stack].length()"
 
 displayConstantExpr :: ConstantExpr -> String
 displayConstantExpr (ConstantExpr.Var v) = displayVar v

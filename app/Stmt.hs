@@ -16,7 +16,7 @@ data Stmt
       }
   | PushIndexedTermToDataStack
   | BuildCompoundTermFromDataStack
-      { term_count :: Int
+      { term_count :: ConstantExpr
       }
   | Jump
       { label :: Int
