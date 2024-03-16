@@ -139,18 +139,28 @@ compileC1toStmts = fst . flip runState initialC1ToStmtsState . histo go
     shouldIncrementIterationCount (_ :< loop@(AstC1.LoopF {})) = False
     shouldIncrementIterationCount _ = True
 
+    isLoopF :: AstC1.AstF a -> Bool
+    isLoopF (AstC1.LoopF {}) = True
+    isLoopF _ = False
+
     go :: AstC1.AstF (Cofree AstC1.AstF (State C1ToStmtsState [Stmt NamedLabel])) -> State C1ToStmtsState [Stmt NamedLabel]
     go = \case
       AstC1.SymbolF s -> return [PushSymbolToDataStack s]
       AstC1.CompoundF xs -> do
         modify setIterationCountVar
         let g = map (\(a :< b) -> a) xs :: [State C1ToStmtsState [Stmt NamedLabel]]
+        let orig = map unwrap xs
+        let numLoopyBodies = length $ filter isLoopF orig
+        let numNonLoopyBodies = length orig - numLoopyBodies
         xs <- sequence g
         count <- gets iteration_count_var
         case count of
           Nothing -> error "no iteration counter"
           Just count_var ->
-            return $ concat xs ++ [BuildCompoundTermFromDataStack {term_count = ConstantExpr.Var count_var}]
+            return $
+              Stmt.Assign {lhs = count_var, rhs = Expr.Constant numNonLoopyBodies}
+                : concat xs
+                ++ [BuildCompoundTermFromDataStack {term_count = ConstantExpr.Var count_var}]
       AstC1.CopyF i -> do
         pushStackStmts <- pushIndexToStackStmts i
         return $ pushStackStmts ++ [Stmt.PushIndexedTermToDataStack, popFromIndexStackStmt i]

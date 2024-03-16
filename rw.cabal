@@ -62,14 +62,16 @@ executable rw
 
     -- Modules included in this executable, other than Main.
     other-modules: Ast0, Ast1, AstC0, AstC1, Lex, Read, Display,
-                   Compile, Stmt, ConstantExpr, Expr, Op, Var
+                   Compile, Stmt, ConstantExpr, Expr, Op, Var,
+                   Interpret
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.17.2.1, recursion-schemes,
-                      unordered-containers, mtl, free, hashable
+                      unordered-containers, mtl, free, hashable,
+                      transformers
 
     -- Directories containing source files.
     hs-source-dirs:   app

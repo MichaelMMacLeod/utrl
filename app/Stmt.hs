@@ -25,7 +25,7 @@ data Stmt l
       }
   | JumpWhenLessThan
       { label :: l,
-        when_var :: Int,
-        le_var :: Int
+        when_var :: Var,
+        le_var :: Var
       }
-  deriving (Functor)
+  deriving (Show, Functor)

@@ -8,6 +8,7 @@ module Display
     display1,
     displayC0,
     displayC1,
+    displayStmt,
     displayStmts,
   )
 where
