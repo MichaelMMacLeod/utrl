@@ -1,10 +1,12 @@
+{-# LANGUAGE DeriveFunctor #-}
+
 module Stmt where
 
 import ConstantExpr (ConstantExpr)
 import Expr (Expr)
 import Var (Var)
 
-data Stmt
+data Stmt l
   = Assign
       { lhs :: Var,
         rhs :: Expr
@@ -19,10 +21,11 @@ data Stmt
       { term_count :: ConstantExpr
       }
   | Jump
-      { label :: Int
+      { label :: l
       }
   | JumpWhenLessThan
-      { label :: Int,
+      { label :: l,
         when_var :: Int,
         le_var :: Int
       }
+  deriving (Functor)

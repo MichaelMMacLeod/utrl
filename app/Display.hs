@@ -97,13 +97,13 @@ displayIndexElementC1 :: AstC1.IndexElement -> String
 displayIndexElementC1 (AstC1.ZeroPlus i) = show i
 displayIndexElementC1 (AstC1.LenMinus i) = "(len-" ++ show i ++ ")"
 
-displayStmts :: [Stmt] -> String
+displayStmts :: Show a => [Stmt a] -> String
 displayStmts = unlines . zipWith indent [0 ..] . map displayStmt
   where
     indent :: Int -> String -> String
     indent lineNum str = show lineNum ++ ":\t" ++ str
 
-displayStmt :: Stmt -> String
+displayStmt :: Show a => Stmt a -> String
 displayStmt (Stmt.Assign lhs rhs) = displayVar lhs ++ " = " ++ displayExpr rhs
 displayStmt (Stmt.PushSymbolToDataStack s) = "data_stack.push(" ++ show s ++ ")"
 displayStmt (Stmt.PushIndexToIndexStack i) = "index_stack.push(" ++ displayConstantExpr i ++ ")"

@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -10,12 +11,17 @@ import Ast1 qualified
 import AstC0 qualified
 import AstC1 qualified
 import ConstantExpr (ConstantExpr (..))
+import Control.Comonad.Cofree (Cofree ((:<)), ComonadCofree (unwrap))
 import Control.Monad.ST (runST)
 import Control.Monad.State.Strict (MonadState (get, put, state), State, gets, modify, runState)
-import Data.Functor.Foldable (Base, ListF (..), fold)
+import Data.Functor.Foldable (Base, ListF (..), fold, histo)
+import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
-import Data.Maybe (fromJust)
+import Data.Hashable
+import Data.Maybe (fromJust, mapMaybe)
+import Debug.Trace (trace)
 import Expr qualified
+import GHC.Generics (Generic)
 import Op qualified
 import Op qualified as Expr
 import Stmt (Stmt (..))
@@ -25,8 +31,8 @@ import Var (Var)
 
 type Variables = H.HashMap String AstC0.Index
 
-compile :: Variables -> Ast0.Ast -> [Stmt]
-compile vars = compileC1toStmts . compileC0toC1 . compile1toC0 vars . compile0to1
+compile :: Variables -> Ast0.Ast -> [Stmt Int]
+compile vars = compileLabels . compileC1toStmts . compileC0toC1 . compile1toC0 vars . compile0to1
 
 compile0to1 :: Ast0.Ast -> Ast1.Ast
 compile0to1 = fold $ \case
@@ -76,7 +82,7 @@ compileC0toC1 = verify . fold go
          in (loopC1, fstC0)
       (_, Nothing) -> error "Too many '..'"
 
-pushIndexToStackStmts :: AstC1.Index -> State C1ToStmtsState [Stmt]
+pushIndexToStackStmts :: AstC1.Index -> State C1ToStmtsState [Stmt a]
 pushIndexToStackStmts = fold $ \case
   Nil -> return []
   Cons (AstC1.ZeroPlus zp) stmts -> do
@@ -100,7 +106,7 @@ pushIndexToStackStmts = fold $ \case
     let push = Stmt.PushIndexToIndexStack $ ConstantExpr.Var var
     return $ [assign, sub, push] ++ stmts
 
-popFromIndexStackStmt :: AstC1.Index -> Stmt
+popFromIndexStackStmt :: AstC1.Index -> Stmt a
 popFromIndexStackStmt =
   Stmt.PopFromIndexStack . length
 
@@ -122,15 +128,24 @@ setIterationCountVar (C1ToStmtsState currentVar currentStmt iteration_count_var)
 initialC1ToStmtsState :: C1ToStmtsState
 initialC1ToStmtsState = C1ToStmtsState {currentVar = 0, currentStmt = 0, iteration_count_var = Nothing}
 
-compileC1toStmts :: AstC1.Ast -> [Stmt]
-compileC1toStmts = fst . flip runState initialC1ToStmtsState . fold go
+data NamedLabel = TopOfLoop Int | BotOfLoop Int deriving (Eq, Generic)
+
+instance Hashable NamedLabel
+
+compileC1toStmts :: AstC1.Ast -> [Stmt NamedLabel]
+compileC1toStmts = fst . flip runState initialC1ToStmtsState . histo go
   where
-    go :: Base AstC1.Ast (State C1ToStmtsState [Stmt]) -> State C1ToStmtsState [Stmt]
+    shouldIncrementIterationCount :: Cofree AstC1.AstF (State C1ToStmtsState [Stmt NamedLabel]) -> Bool
+    shouldIncrementIterationCount (_ :< loop@(AstC1.LoopF {})) = False
+    shouldIncrementIterationCount _ = True
+
+    go :: AstC1.AstF (Cofree AstC1.AstF (State C1ToStmtsState [Stmt NamedLabel])) -> State C1ToStmtsState [Stmt NamedLabel]
     go = \case
       AstC1.SymbolF s -> return [PushSymbolToDataStack s]
       AstC1.CompoundF xs -> do
         modify setIterationCountVar
-        xs <- sequence xs
+        let g = map (\(a :< b) -> a) xs :: [State C1ToStmtsState [Stmt NamedLabel]]
+        xs <- sequence g
         count <- gets iteration_count_var
         case count of
           Nothing -> error "no iteration counter"
@@ -152,17 +167,33 @@ compileC1toStmts = fst . flip runState initialC1ToStmtsState . fold go
         modify incVar
 
         count <- gets iteration_count_var
+
+        label <- gets currentVar
+        modify incVar
+
         case count of
           Nothing -> error "no iteration counter"
           Just count_var -> do
+            let inc_stmt =
+                  ( [ Stmt.Assign
+                        { lhs = count_var,
+                          rhs =
+                            Expr.BinOp
+                              { Expr.op = Op.Add,
+                                Expr.lhs = count_var,
+                                Expr.rhs = ConstantExpr.Constant 1
+                              }
+                        }
+                      | shouldIncrementIterationCount body
+                    ]
+                  ) ::
+                    [Stmt NamedLabel]
             let pushLoopVar = Stmt.PushIndexToIndexStack (ConstantExpr.Var loopVar)
             let popLoopVar = Stmt.PopFromIndexStack 1
-            body <- body
-            let body' = pushLoopVar : body ++ [popLoopVar]
 
-            initialLabel <- gets currentStmt
-            let startLabel = initialLabel + 1 + length pushStackStmts + 5
-            let endLabel = startLabel + length body' + 2
+            body <- (\(a :< b) -> a) body
+
+            let body' = pushLoopVar : body ++ [popLoopVar]
 
             let prologue =
                   [Stmt.Assign {lhs = loopVar, rhs = Expr.Constant start}]
@@ -178,7 +209,7 @@ compileC1toStmts = fst . flip runState initialC1ToStmtsState . fold go
                                    Expr.rhs = ConstantExpr.Var endVar
                                  }
                            },
-                         Stmt.Jump endLabel
+                         Stmt.Jump $ TopOfLoop label
                        ]
             let epilogue =
                   [ Stmt.Assign
@@ -189,24 +220,38 @@ compileC1toStmts = fst . flip runState initialC1ToStmtsState . fold go
                               Expr.lhs = loopVar,
                               Expr.rhs = ConstantExpr.Constant 1
                             }
-                      },
-                    Stmt.Assign
-                      {
-                        lhs = count_var,
-                        rhs =
-                          Expr.BinOp
-                            { Expr.op = Op.Add,
-                              Expr.lhs = count_var,
-                              Expr.rhs = ConstantExpr.Constant 1 -- TODO this shouldn't be 1? FIXME
-                            }
-                      },
-                    Stmt.JumpWhenLessThan
-                      { label = startLabel,
-                        when_var = loopVar,
-                        le_var = endVar
-                      },
-                    popFromIndexStackStmt index
+                      }
                   ]
+                    ++ inc_stmt
+                    ++ [ Stmt.JumpWhenLessThan
+                           { label = BotOfLoop label,
+                             when_var = loopVar,
+                             le_var = endVar
+                           },
+                         popFromIndexStackStmt index
+                       ]
             let result = prologue ++ body' ++ epilogue
-            modify . incStmts $ length result
             return result
+
+compileLabels :: [Stmt NamedLabel] -> [Stmt Int]
+compileLabels xs = go (calculateInstructionNumbers (zip [0 ..] xs)) xs
+  where
+    calculateInstructionNumbers :: [(Int, Stmt NamedLabel)] -> H.HashMap NamedLabel Int
+    calculateInstructionNumbers =
+      H.fromList
+        . mapMaybe
+          ( \case
+              (offset, Jump label) -> Just (label, offset)
+              (offset, JumpWhenLessThan label _ _) -> Just (label, offset)
+              (_, _) -> Nothing
+          )
+    go :: H.HashMap NamedLabel Int -> [Stmt NamedLabel] -> [Stmt Int]
+    go ht = fold $ \case
+      Nil -> []
+      Cons stmt others -> stmt' : others
+        where
+          stmt' = fmap namedInstructionNumber stmt
+
+          namedInstructionNumber :: NamedLabel -> Int
+          namedInstructionNumber (TopOfLoop l) = fromJust $ ht !? BotOfLoop l
+          namedInstructionNumber (BotOfLoop l) = 1 + fromJust (ht !? TopOfLoop l)

@@ -69,7 +69,7 @@ executable rw
 
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.17.2.1, recursion-schemes,
-                      unordered-containers, mtl
+                      unordered-containers, mtl, free, hashable
 
     -- Directories containing source files.
     hs-source-dirs:   app
