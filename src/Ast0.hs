@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Ast0 (Ast (..), AstF (..)) where
 
@@ -29,5 +30,6 @@ instance Recursive Ast where
   project (Compound xs) = CompoundF xs
 
 instance Corecursive Ast where
+  embed :: Base Ast Ast -> Ast
   embed (SymbolF s) = Symbol s
   embed (CompoundF xs) = Compound xs

@@ -17,7 +17,7 @@ import Control.Monad.State.Strict (MonadState (get, put, state), State, gets, mo
 import Data.Functor.Foldable (Base, ListF (..), fold, histo)
 import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
-import Data.Hashable
+import Data.Hashable (Hashable)
 import Data.Maybe (fromJust, mapMaybe)
 import Debug.Trace (trace)
 import Expr qualified
@@ -59,19 +59,13 @@ compileC0toC1 = verify . fold go
     verify (ast, []) = ast
     verify _ = error "Needs more '..'"
 
+    sharedIndex :: [(AstC1.Ast, AstC0.Index)] -> AstC0.Index
+    sharedIndex ((_, i) : _) = i
+    sharedIndex _ = []
+
     go :: Base AstC0.Ast (AstC1.Ast, AstC0.Index) -> (AstC1.Ast, AstC0.Index)
     go (AstC0.SymbolF s) = (AstC1.Symbol s, [])
-    go (AstC0.CompoundF xs) =
-      let indexesAllEqual = allEqual $ map snd xs
-          allEqual :: [AstC0.Index] -> Bool
-          allEqual [] = True
-          allEqual (y : ys) = all (== y) ys
-          sharedIndex :: [(AstC1.Ast, AstC0.Index)] -> AstC0.Index
-          sharedIndex ((_, i) : _) = i
-          sharedIndex _ = []
-       in if indexesAllEqual
-            then (AstC1.Compound $ map fst xs, sharedIndex xs)
-            else error "Variables not matched under same '..' used under same '..'"
+    go (AstC0.CompoundF xs) = (AstC1.Compound $ map fst xs, sharedIndex xs)
     go (AstC0.VariableF i) =
       let (c0Part, c1Part) = AstC0.cutC0 i
        in (AstC1.Copy c1Part, c0Part)
@@ -81,6 +75,26 @@ compileC0toC1 = verify . fold go
             loopC1 = AstC1.Loop {AstC1.index = sndC1, AstC1.start = zeroPlus, AstC1.end = lenMinus, AstC1.body = astC1}
          in (loopC1, fstC0)
       (_, Nothing) -> error "Too many '..'"
+
+-- we need to keep track of which symbol a var came from in AstC1 so we can diagnose errors
+
+-- data EllipsesCountError = EllipsesCountError
+--   { expected :: Int,
+--     actual :: Int
+--   }
+
+-- incorrectEllipesCounts :: AstC0.Ast -> H.HashMap String EllipsesCountError
+-- incorrectEllipesCounts = undefined
+
+-- ellipsesCounts :: AstC0.Ast -> H.HashMap String Int
+-- ellipsesCounts = fixup $ fold $ \case
+--   AstC0.SymbolF _ -> undefined
+--   AstC0.CompoundF xs -> undefined
+--   AstC0.EllipsesF x -> undefined
+--   AstC0.VariableF index -> undefined
+--   where
+--     fixup :: [AstC0.Index] ->
+--     fixup = undefined
 
 pushIndexToStackStmts :: AstC1.Index -> State C1ToStmtsState [Stmt a]
 pushIndexToStackStmts = fold $ \case

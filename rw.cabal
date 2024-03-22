@@ -71,10 +71,10 @@ executable rw
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.17.2.1, recursion-schemes,
                       unordered-containers, mtl, free, hashable,
-                      transformers
+                      transformers, tasty, tasty-hedgehog, tasty-hspec
 
     -- Directories containing source files.
-    hs-source-dirs:   app
+    hs-source-dirs:   src
 
     -- Base language which the package is written in.
     default-language: Haskell2010
