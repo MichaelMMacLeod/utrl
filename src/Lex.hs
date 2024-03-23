@@ -1,30 +1,19 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeFamilies #-}
-
 module Lex (Lex.lex, Token (..)) where
 
-import Control.Applicative (liftA2)
 import Data.Char (isSpace)
-import Data.Functor.Foldable (ListF (..), ana)
 
-data Token = TLeft | TRight | TSymbol String deriving (Show)
+data Token = TLeft | TRight | TSymbol String deriving (Show, Eq)
 
 lex :: String -> [Token]
-lex = ana $ \case
-  [] -> Nil
-  xs -> let (token, rest) = parseToken xs in Cons token rest
-    where
-      parseToken :: String -> (Token, String)
-      parseToken (' ' : ts) = parseToken ts
-      parseToken ('(' : ts) = (TLeft, ts)
-      parseToken (')' : ts) = (TRight, ts)
-      parseToken ts = (TSymbol $ takeWhile isSymbolChar ts, dropWhile isSymbolChar ts)
+lex [] = []
+lex ('(' : str) = TLeft : Lex.lex str
+lex (')' : str) = TRight : Lex.lex str
+lex (c : str)
+  | isSpace c = Lex.lex str
+  | otherwise = TSymbol symPart : Lex.lex otherPart
+  where
+    symPart, otherPart :: String
+    (symPart, otherPart) = span isSymbolChar (c : str)
 
-      isSymbolChar :: Char -> Bool
-      isSymbolChar =
-        notF isSpace
-          <&&> notF (== '(')
-          <&&> notF (== ')')
-        where
-          notF = (not .)
-          (<&&>) = liftA2 (&&)
+isSymbolChar :: Char -> Bool
+isSymbolChar c = c /= '(' && c /= ')' && not (isSpace c)

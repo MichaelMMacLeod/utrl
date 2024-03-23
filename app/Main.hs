@@ -1,16 +1,11 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeFamilies #-}
-
 module Main (main) where
 
-import AstC0 qualified
-import Compile qualified
-import Data.HashMap.Strict qualified as H
-import Display qualified
-import Interpret qualified
-import Read qualified
+import qualified AstC0
+import qualified Compile
+import qualified Data.HashMap.Strict as H
+import qualified Display
+import qualified Interpret
+import qualified Read
 
 -- (fn xs (flatten (list (list xs ..) ..)) -> (list xs .. ..))
 main :: IO ()
