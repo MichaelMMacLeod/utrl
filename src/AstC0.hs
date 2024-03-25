@@ -10,8 +10,8 @@ module AstC0
     IndexElement (..),
     c1Tail,
     c0Head,
-    cutC0,
-    cutC0Between,
+    popTrailingC1Index,
+    popBetweenTail,
   )
 where
 
@@ -57,11 +57,11 @@ c0Head = reverse . go . reverse
     go (_ : xs) = go xs
     go [] = []
 
-cutC0 :: Index -> (Index, AstC1.Index)
-cutC0 c0 = (c0Head c0, c1Tail c0)
+popTrailingC1Index :: Index -> (Index, AstC1.Index)
+popTrailingC1Index c0 = (c0Head c0, c1Tail c0)
 
-cutC0Between :: Index -> (Index, Maybe (Int, Int))
-cutC0Between = go . reverse
+popBetweenTail :: Index -> (Index, Maybe (Int, Int))
+popBetweenTail = go . reverse
   where
     go (AstC0.Between zp lm : others) = (reverse others, Just (zp, lm))
     go others = (others, Nothing)

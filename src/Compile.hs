@@ -4,7 +4,15 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Compile (compile) where
+module Compile
+  ( compile,
+    compile0to1,
+    compile1toC0,
+    compileC0toC1,
+    compileC1toStmts,
+    Variables,
+  )
+where
 
 import Ast0 qualified
 import Ast1 qualified
@@ -13,11 +21,13 @@ import AstC1 qualified
 import ConstantExpr (ConstantExpr (..))
 import Control.Comonad.Cofree (Cofree ((:<)), ComonadCofree (unwrap))
 import Control.Monad.State.Strict (State, gets, modify, runState)
-import Data.Functor.Foldable (Base, ListF (..), fold, histo)
+import Data.Functor.Foldable (ListF (..), fold, histo)
 import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
 import Data.Hashable (Hashable)
-import Data.Maybe (fromJust, mapMaybe)
+import Data.List (uncons)
+import Data.Maybe (catMaybes, fromJust, mapMaybe)
+import Error (CompileError (..), CompileResult)
 import Expr qualified
 import GHC.Generics (Generic)
 import Op qualified
@@ -26,8 +36,14 @@ import Var (Var)
 
 type Variables = H.HashMap String AstC0.Index
 
-compile :: Variables -> Ast0.Ast -> [Stmt Int]
-compile vars = compileLabels . compileC1toStmts . compileC0toC1 . compile1toC0 vars . compile0to1
+compile :: Variables -> Ast0.Ast -> CompileResult [Stmt Int]
+compile vars ast = do
+  let ast1 = compile0to1 ast
+  let astc0 = compile1toC0 vars ast1
+  astc1 <- compileC0toC1 astc0
+  let stmtsWithNamedLabels = compileC1toStmts astc1
+  let stmtsWithOffsetLabels = compileLabels stmtsWithNamedLabels
+  return stmtsWithOffsetLabels
 
 compile0to1 :: Ast0.Ast -> Ast1.Ast
 compile0to1 = fold $ \case
@@ -47,49 +63,49 @@ compile1toC0 vars = fold $ \case
   Ast1.CompoundF xs -> AstC0.Compound xs
   Ast1.EllipsesF x -> AstC0.Ellipses x
 
-compileC0toC1 :: AstC0.Ast -> AstC1.Ast
-compileC0toC1 = verify . fold go
+allEqual :: (Eq a) => [a] -> Bool
+allEqual [] = True
+allEqual (x : xs) = all (== x) xs
+
+combineCompoundTermIndices :: [Maybe AstC0.Index] -> CompileResult (Maybe AstC0.Index)
+combineCompoundTermIndices xs =
+  let xs' = catMaybes xs
+   in if allEqual xs'
+        then Right (fst <$> uncons xs')
+        else Left Error.VarsNotCapturedUnderSameEllipsisInConstructor
+
+compileC0toC1 :: AstC0.Ast -> CompileResult AstC1.Ast
+compileC0toC1 ast = do
+  (ast, index) <- fold go ast
+  case index of
+    Nothing -> Right ast
+    Just [] -> Right ast
+    Just _ -> Left Error.TooFewEllipsesInConstructor
   where
-    verify :: (AstC1.Ast, AstC0.Index) -> AstC1.Ast
-    verify (ast, []) = ast
-    verify _ = error "Needs more '..'"
-
-    sharedIndex :: [(AstC1.Ast, AstC0.Index)] -> AstC0.Index
-    sharedIndex ((_, i) : _) = i
-    sharedIndex _ = []
-
-    go :: Base AstC0.Ast (AstC1.Ast, AstC0.Index) -> (AstC1.Ast, AstC0.Index)
-    go (AstC0.SymbolF s) = (AstC1.Symbol s, [])
-    go (AstC0.CompoundF xs) = (AstC1.Compound $ map fst xs, sharedIndex xs)
+    go :: AstC0.AstF (CompileResult (AstC1.Ast, Maybe AstC0.Index)) -> CompileResult (AstC1.Ast, Maybe AstC0.Index)
+    go (AstC0.SymbolF s) = Right (AstC1.Symbol s, Nothing)
+    go (AstC0.CompoundF xs) = do
+      xs' <- sequence xs
+      index <- combineCompoundTermIndices (map snd xs')
+      return (AstC1.Compound $ map fst xs', index)
     go (AstC0.VariableF i) =
-      let (c0Part, c1Part) = AstC0.cutC0 i
-       in (AstC1.Copy c1Part, c0Part)
-    go (AstC0.EllipsesF (astC1, indexC0)) = case AstC0.cutC0Between indexC0 of
-      (indexC0', Just (zeroPlus, lenMinus)) ->
-        let (fstC0, sndC1) = AstC0.cutC0 indexC0'
-            loopC1 = AstC1.Loop {AstC1.index = sndC1, AstC1.start = zeroPlus, AstC1.end = lenMinus, AstC1.body = astC1}
-         in (loopC1, fstC0)
-      (_, Nothing) -> error "Too many '..'"
-
--- we need to keep track of which symbol a var came from in AstC1 so we can diagnose errors
-
--- data EllipsesCountError = EllipsesCountError
---   { expected :: Int,
---     actual :: Int
---   }
-
--- incorrectEllipesCounts :: AstC0.Ast -> H.HashMap String EllipsesCountError
--- incorrectEllipesCounts = undefined
-
--- ellipsesCounts :: AstC0.Ast -> H.HashMap String Int
--- ellipsesCounts = fixup $ fold $ \case
---   AstC0.SymbolF _ -> undefined
---   AstC0.CompoundF xs -> undefined
---   AstC0.EllipsesF x -> undefined
---   AstC0.VariableF index -> undefined
---   where
---     fixup :: [AstC0.Index] ->
---     fixup = undefined
+      let (c0Part, c1Part) = AstC0.popTrailingC1Index i
+       in Right (AstC1.Copy c1Part, Just c0Part)
+    go (AstC0.EllipsesF term) = do
+      (astC1, indexC0) <- term
+      case indexC0 of
+        Nothing ->
+          case astC1 of
+            AstC1.Symbol _ ->
+              Left Error.EllipsisAppliedToSymbolInConstructor
+            _other -> error "unreachable, possibly incorrect var bindings"
+        Just indexC0' ->
+          case AstC0.popBetweenTail indexC0' of
+            (indexC0'', Just (zeroPlus, lenMinus)) ->
+              let (fstC0, sndC1) = AstC0.popTrailingC1Index indexC0''
+                  loopC1 = AstC1.Loop {AstC1.index = sndC1, AstC1.start = zeroPlus, AstC1.end = lenMinus, AstC1.body = astC1}
+               in Right (loopC1, Just fstC0)
+            (_, Nothing) -> Left Error.TooManyEllipsesInConstructor
 
 pushIndexToStackStmts :: AstC1.Index -> State C1ToStmtsState [Stmt a]
 pushIndexToStackStmts = fold $ \case
