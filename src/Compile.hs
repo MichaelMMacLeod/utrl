@@ -12,21 +12,16 @@ import AstC0 qualified
 import AstC1 qualified
 import ConstantExpr (ConstantExpr (..))
 import Control.Comonad.Cofree (Cofree ((:<)), ComonadCofree (unwrap))
-import Control.Monad.ST (runST)
-import Control.Monad.State.Strict (MonadState (get, put, state), State, gets, modify, runState)
+import Control.Monad.State.Strict (State, gets, modify, runState)
 import Data.Functor.Foldable (Base, ListF (..), fold, histo)
 import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
 import Data.Hashable (Hashable)
 import Data.Maybe (fromJust, mapMaybe)
-import Debug.Trace (trace)
 import Expr qualified
 import GHC.Generics (Generic)
 import Op qualified
-import Op qualified as Expr
 import Stmt (Stmt (..))
-import Type.Reflection qualified as ConstantExpr
-import Type.Reflection qualified as Expr
 import Var (Var)
 
 type Variables = H.HashMap String AstC0.Index

@@ -16,7 +16,7 @@ import Data.Functor.Foldable
 data Ast
   = Symbol String
   | Compound [Ast]
-  deriving (Show)
+  deriving (Show, Eq)
 
 data AstF r
   = SymbolF String
