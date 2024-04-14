@@ -1,4 +1,9 @@
-module Predicate (Predicate (..), IndexedPredicate (..)) where
+module Predicate
+  ( Predicate (..),
+    IndexedPredicate (..),
+    applyPredicate,
+  )
+where
 
 import qualified Ast0
 import AstC0 (getAtC0Index)
@@ -11,8 +16,8 @@ data Predicate
 
 toFunc :: Predicate -> (Ast0.Ast -> Bool)
 toFunc (SymbolEqualTo str1) (Ast0.Symbol str2) = str1 == str2
-toFunc (LengthEqualTo n) (Ast0.Compound xs) = n == length xs
-toFunc (LengthGreaterThanOrEqualTo n) (Ast0.Compound xs) = n >= length xs
+toFunc (LengthEqualTo n) (Ast0.Compound xs) = length xs == n
+toFunc (LengthGreaterThanOrEqualTo n) (Ast0.Compound xs) = length xs >= n
 toFunc _ _ = False
 
 data IndexedPredicate = IndexedPredicate Predicate AstC0.Index
