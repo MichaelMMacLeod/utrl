@@ -63,6 +63,7 @@ setVariables x m = m {variables = x}
 nextInstruction :: Memory -> Memory
 nextInstruction m@(Memory {currentInstruction = c}) = setCurrentInstruction (c + 1) m
 
+iterateMaybe :: (b -> Maybe b) -> b -> [b]
 iterateMaybe f = unfoldr (fmap (\s -> (s, s)) . f)
 
 interpret :: Ast0.Ast -> [Stmt Int] -> Ast0.Ast

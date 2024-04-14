@@ -33,6 +33,7 @@ import GHC.Generics (Generic)
 import Op qualified
 import Stmt (Stmt (..))
 import Var (Var)
+import Control.Comonad (Comonad(..))
 
 type Variables = H.HashMap String AstC0.Index
 
@@ -75,11 +76,11 @@ combineCompoundTermIndices xs =
         else Left Error.VarsNotCapturedUnderSameEllipsisInConstructor
 
 compileC0toC1 :: AstC0.Ast -> CompileResult AstC1.Ast
-compileC0toC1 ast = do
-  (ast, index) <- fold go ast
+compileC0toC1 astC0 = do
+  (astC1, index) <- fold go astC0
   case index of
-    Nothing -> Right ast
-    Just [] -> Right ast
+    Nothing -> Right astC1
+    Just [] -> Right astC1
     Just _ -> Left Error.TooFewEllipsesInConstructor
   where
     go :: AstC0.AstF (CompileResult (AstC1.Ast, Maybe AstC0.Index)) -> CompileResult (AstC1.Ast, Maybe AstC0.Index)
@@ -103,20 +104,31 @@ compileC0toC1 ast = do
           case AstC0.popBetweenTail indexC0' of
             (indexC0'', Just (zeroPlus, lenMinus)) ->
               let (fstC0, sndC1) = AstC0.popTrailingC1Index indexC0''
-                  loopC1 = AstC1.Loop {AstC1.index = sndC1, AstC1.start = zeroPlus, AstC1.end = lenMinus, AstC1.body = astC1}
+                  loopC1 =
+                    AstC1.Loop
+                      { AstC1.index = sndC1,
+                        AstC1.start = zeroPlus,
+                        AstC1.end = lenMinus,
+                        AstC1.body = astC1
+                      }
                in Right (loopC1, Just fstC0)
             (_, Nothing) -> Left Error.TooManyEllipsesInConstructor
+
+newUniqueVar :: State C1ToStmtsState Var
+newUniqueVar = do
+  var <- gets currentVar
+  modify incVar
+  return var
 
 pushIndexToStackStmts :: AstC1.Index -> State C1ToStmtsState [Stmt a]
 pushIndexToStackStmts = fold $ \case
   Nil -> return []
   Cons (AstC1.ZeroPlus zp) stmts -> do
-    stmts <- stmts
-    return $ Stmt.PushIndexToIndexStack (Constant zp) : stmts
+    stmts' <- stmts
+    return $ Stmt.PushIndexToIndexStack (Constant zp) : stmts'
   Cons (AstC1.LenMinus lm) stmts -> do
-    stmts <- stmts
-    var <- gets currentVar
-    modify incVar
+    stmts' <- stmts
+    var <- newUniqueVar
     let assign = Stmt.Assign {lhs = var, rhs = Expr.Length}
     let sub =
           Stmt.Assign
@@ -129,39 +141,69 @@ pushIndexToStackStmts = fold $ \case
                   }
             }
     let push = Stmt.PushIndexToIndexStack $ ConstantExpr.Var var
-    return $ [assign, sub, push] ++ stmts
+    return $ [assign, sub, push] ++ stmts'
 
 popFromIndexStackStmt :: AstC1.Index -> Stmt a
 popFromIndexStackStmt =
   Stmt.PopFromIndexStack . length
 
 data C1ToStmtsState = C1ToStmtsState
-  { currentVar :: Var,
-    currentStmt :: Int,
-    iteration_count_var :: Maybe Var
+  { currentVar :: !Var,
+    iterationCountVar :: !(Maybe Var)
   }
 
 incVar :: C1ToStmtsState -> C1ToStmtsState
-incVar (C1ToStmtsState currentVar currentStmt iteration_count_var) = C1ToStmtsState (currentVar + 1) currentStmt iteration_count_var
+incVar state = state {currentVar = currentVar state + 1}
 
-incStmts :: Int -> C1ToStmtsState -> C1ToStmtsState
-incStmts i (C1ToStmtsState currentVar currentStmt iteration_count_var) = C1ToStmtsState currentVar (currentStmt + i) iteration_count_var
 
 setIterationCountVar :: C1ToStmtsState -> C1ToStmtsState
-setIterationCountVar (C1ToStmtsState currentVar currentStmt iteration_count_var) = C1ToStmtsState (currentVar + 1) currentStmt (Just currentVar)
+setIterationCountVar state = state {currentVar = currentVar state + 1, iterationCountVar = Just $ currentVar state}
 
 initialC1ToStmtsState :: C1ToStmtsState
-initialC1ToStmtsState = C1ToStmtsState {currentVar = 0, currentStmt = 0, iteration_count_var = Nothing}
+initialC1ToStmtsState = C1ToStmtsState {currentVar = 0, iterationCountVar = Nothing}
 
-data NamedLabel = TopOfLoop Int | BotOfLoop Int deriving (Eq, Generic)
+data NamedLabel = TopOfLoop !Int | BotOfLoop !Int deriving (Eq, Generic)
 
 instance Hashable NamedLabel
+
+-- data LoopPrologue = LoopPrologue
+--   { -- The variable that will be incremented during each iteration of the loop.
+--     var :: !Var,
+--     -- The initial value assigned to 'var'.
+--     start :: !Int,
+--     -- Given an input term (for example, '(a b c d e f g)'), represents the number of terms
+--     -- on the right that this loop will ignore. For example, if this
+--     -- number is '3', then the loop will iterate over 'a b c d' but will end before reaching
+--     -- 'e f g'.
+--     numTrailingElementsSkipped :: !Int
+--   }
+
+-- makeLoopPrologue :: Var -> Int -> Int -> State C1ToStmtsState [Stmt NamedLabel]
+-- makeLoopPrologue var start end = do
+--   endVar <- newUniqueVar
+
+--   return $
+--     [Stmt.Assign {lhs = var, rhs = Expr.Constant end}]
+--       ++ pushStackStmts
+--       ++ [ Stmt.Assign {lhs = lengthVar, rhs = Expr.Length},
+--            Stmt.Assign {lhs = endVar, rhs = Expr.Constant end},
+--            Stmt.Assign
+--              { lhs = endVar,
+--                rhs =
+--                  Expr.BinOp
+--                    { Expr.op = Op.Sub,
+--                      Expr.lhs = lengthVar,
+--                      Expr.rhs = ConstantExpr.Var endVar
+--                    }
+--              },
+--            Stmt.Jump $ TopOfLoop loopLabel
+--          ]
 
 compileC1toStmts :: AstC1.Ast -> [Stmt NamedLabel]
 compileC1toStmts = fst . flip runState initialC1ToStmtsState . histo go
   where
     shouldIncrementIterationCount :: Cofree AstC1.AstF (State C1ToStmtsState [Stmt NamedLabel]) -> Bool
-    shouldIncrementIterationCount (_ :< loop@(AstC1.LoopF {})) = False
+    shouldIncrementIterationCount (_ :< (AstC1.LoopF {})) = False
     shouldIncrementIterationCount _ = True
 
     isLoopF :: AstC1.AstF a -> Bool
@@ -173,41 +215,34 @@ compileC1toStmts = fst . flip runState initialC1ToStmtsState . histo go
       AstC1.SymbolF s -> return [PushSymbolToDataStack s]
       AstC1.CompoundF xs -> do
         modify setIterationCountVar
-        let g = map (\(a :< b) -> a) xs :: [State C1ToStmtsState [Stmt NamedLabel]]
-        let orig = map unwrap xs
-        let numLoopyBodies = length $ filter isLoopF orig
-        let numNonLoopyBodies = length orig - numLoopyBodies
-        xs <- sequence g
-        count <- gets iteration_count_var
+        let g = map extract xs :: [State C1ToStmtsState [Stmt NamedLabel]]
+            orig = map unwrap xs
+            numLoopyBodies = length $ filter isLoopF orig
+            numNonLoopyBodies = length orig - numLoopyBodies
+        xs' <- sequence g
+        count <- gets iterationCountVar
         case count of
           Nothing -> error "no iteration counter"
           Just count_var ->
             return $
               Stmt.Assign {lhs = count_var, rhs = Expr.Constant numNonLoopyBodies}
-                : concat xs
+                : concat xs'
                 ++ [BuildCompoundTermFromDataStack {term_count = ConstantExpr.Var count_var}]
       AstC1.CopyF i -> do
         pushStackStmts <- pushIndexToStackStmts i
         return $ pushStackStmts ++ [Stmt.PushIndexedTermToDataStack, popFromIndexStackStmt i]
       AstC1.LoopF index start end body -> do
-        loopVar <- gets currentVar
-        modify incVar
+        loopVar <- newUniqueVar
+        lengthVar <- newUniqueVar
+        endVar <- newUniqueVar
+        loopLabel <- newUniqueVar
 
         pushStackStmts <- pushIndexToStackStmts index
 
-        lengthVar <- gets currentVar
-        modify incVar
-
-        endVar <- gets currentVar
-        modify incVar
-
-        count <- gets iteration_count_var
-
-        label <- gets currentVar
-        modify incVar
+        count <- gets iterationCountVar
 
         case count of
-          Nothing -> error "no iteration counter"
+          Nothing -> error "uncreachable: no iteration counter"
           Just count_var -> do
             let inc_stmt =
                   ( [ Stmt.Assign
@@ -226,9 +261,9 @@ compileC1toStmts = fst . flip runState initialC1ToStmtsState . histo go
             let pushLoopVar = Stmt.PushIndexToIndexStack (ConstantExpr.Var loopVar)
             let popLoopVar = Stmt.PopFromIndexStack 1
 
-            body <- (\(a :< b) -> a) body
+            body' <- extract body
 
-            let body' = pushLoopVar : body ++ [popLoopVar]
+            let body'' = pushLoopVar : body' ++ [popLoopVar]
 
             let prologue =
                   [Stmt.Assign {lhs = loopVar, rhs = Expr.Constant start}]
@@ -244,7 +279,7 @@ compileC1toStmts = fst . flip runState initialC1ToStmtsState . histo go
                                    Expr.rhs = ConstantExpr.Var endVar
                                  }
                            },
-                         Stmt.Jump $ TopOfLoop label
+                         Stmt.Jump $ TopOfLoop loopLabel
                        ]
             let epilogue =
                   [ Stmt.Assign
@@ -259,13 +294,13 @@ compileC1toStmts = fst . flip runState initialC1ToStmtsState . histo go
                   ]
                     ++ inc_stmt
                     ++ [ Stmt.JumpWhenLessThan
-                           { label = BotOfLoop label,
+                           { label = BotOfLoop loopLabel,
                              when_var = loopVar,
                              le_var = endVar
                            },
                          popFromIndexStackStmt index
                        ]
-            let result = prologue ++ body' ++ epilogue
+            let result = prologue ++ body'' ++ epilogue
             return result
 
 compileLabels :: [Stmt NamedLabel] -> [Stmt Int]
@@ -276,8 +311,8 @@ compileLabels xs = go (calculateInstructionNumbers (zip [0 ..] xs)) xs
       H.fromList
         . mapMaybe
           ( \case
-              (offset, Jump label) -> Just (label, offset)
-              (offset, JumpWhenLessThan label _ _) -> Just (label, offset)
+              (offset, Jump l) -> Just (l, offset)
+              (offset, JumpWhenLessThan l _ _) -> Just (l, offset)
               (_, _) -> Nothing
           )
     go :: H.HashMap NamedLabel Int -> [Stmt NamedLabel] -> [Stmt Int]

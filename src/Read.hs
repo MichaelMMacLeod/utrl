@@ -1,14 +1,20 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Read (Read.read) where
+module Read (Read.read, Read.read') where
 
 import qualified Ast0
 import Error (CompileError)
 import qualified Error
 import Lex (Token (..), lex)
+import Data.Either.Extra (fromRight')
 
 read :: String -> Either CompileError Ast0.Ast
 read = parse . Lex.lex
+
+-- Partial read, which errors at runtime on compile errors. Useful for reducing
+-- boilerplate for tests.
+read' :: String -> Ast0.Ast
+read' = fromRight' . Read.read
 
 parse :: [Token] -> Either CompileError Ast0.Ast
 parse xs = go xs []

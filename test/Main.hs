@@ -1,9 +1,10 @@
 module Main (main) where
 
+import qualified ConstructorTests
 import qualified LexTests
+import qualified MiscTests
 import qualified ReadTests
 import Test.Tasty (TestTree, defaultMain, testGroup)
-import qualified ConstructorTests
 
 main :: IO ()
 main = defaultMain tests
@@ -14,5 +15,6 @@ tests =
     "tests"
     [ LexTests.tests,
       ReadTests.tests,
-      ConstructorTests.tests
+      ConstructorTests.tests,
+      MiscTests.tests
     ]

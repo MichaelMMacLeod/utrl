@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -12,17 +11,13 @@ module AstC0
     c0Head,
     popTrailingC1Index,
     popBetweenTail,
+    getAtC0Index,
   )
 where
 
-import AstC1 qualified
-import Data.Functor.Foldable
-  ( Base,
-    Corecursive,
-    Recursive,
-    embed,
-    project,
-  )
+import qualified Ast0
+import qualified AstC1
+import Data.Functor.Foldable (Base, Corecursive (..), Recursive (..))
 
 data Ast
   = Symbol String
@@ -65,6 +60,43 @@ popBetweenTail = go . reverse
   where
     go (AstC0.Between zp lm : others) = (reverse others, Just (zp, lm))
     go others = (others, Nothing)
+
+-- toZeroPlus :: Int -> IndexElement -> Int
+-- toZeroPlus _ (ZeroPlus zp) = zp
+-- toZeroPlus len (LenMinus lm) = len - lm
+-- toZeroPlus
+
+-- zipIndices :: Ast0.Ast -> Cofree Ast0.AstF AstC0.Index
+-- zipIndices x = evalState (histo go x) []
+--   where
+--     go ::
+--       Ast0.AstF (Cofree Ast0.AstF (State Index (Cofree Ast0.AstF AstC0.Index))) ->
+--       State Index (Cofree Ast0.AstF AstC0.Index)
+--     go = \case
+--       Ast0.SymbolF s -> do
+--         index <- get
+--         return $ index :< Ast0.SymbolF s
+--       Ast0.CompoundF xs -> do
+--         index <- get
+--         let subIndices =
+
+getAtC0Index :: Index -> Ast0.Ast -> [Ast0.Ast]
+getAtC0Index [] ast = [ast]
+getAtC0Index _ (Ast0.Symbol s) = []
+getAtC0Index (ZeroPlus zp : i) (Ast0.Compound xs) =
+  if zp < length xs
+    then getAtC0Index i (xs !! zp)
+    else []
+getAtC0Index (LenMinus lm : i) (Ast0.Compound xs) =
+  let zp = length xs - lm
+   in if zp > 0
+        then getAtC0Index i (xs !! zp)
+        else []
+getAtC0Index (Between zp lm : i) (Ast0.Compound xs) =
+  let zpEnd = length xs - lm
+   in if zp < length xs && zpEnd > 0
+        then concatMap (getAtC0Index i) (drop zp (take zpEnd xs))
+        else []
 
 data AstF r
   = SymbolF String

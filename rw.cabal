@@ -72,6 +72,7 @@ library
         , Lex
         , Lib
         , Op
+        , Predicate
         , Read
         , Stmt
         , Var
@@ -91,6 +92,8 @@ library
         , free
         , hashable
         , transformers
+        , comonad
+        , extra
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -135,6 +138,7 @@ test-suite rw-test
           LexTests
         , ReadTests
         , ConstructorTests
+        , MiscTests
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

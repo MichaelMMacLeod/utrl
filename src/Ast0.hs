@@ -1,15 +1,16 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE InstanceSigs #-}
 
 module Ast0 (Ast (..), AstF (..)) where
 
 import Data.Functor.Foldable
   ( Base,
     Corecursive,
-    Recursive,
+    Recursive (..),
     embed,
+    histo,
     project,
   )
 
