@@ -61,25 +61,6 @@ popBetweenTail = go . reverse
     go (AstC0.Between zp lm : others) = (reverse others, Just (zp, lm))
     go others = (others, Nothing)
 
--- toZeroPlus :: Int -> IndexElement -> Int
--- toZeroPlus _ (ZeroPlus zp) = zp
--- toZeroPlus len (LenMinus lm) = len - lm
--- toZeroPlus
-
--- zipIndices :: Ast0.Ast -> Cofree Ast0.AstF AstC0.Index
--- zipIndices x = evalState (histo go x) []
---   where
---     go ::
---       Ast0.AstF (Cofree Ast0.AstF (State Index (Cofree Ast0.AstF AstC0.Index))) ->
---       State Index (Cofree Ast0.AstF AstC0.Index)
---     go = \case
---       Ast0.SymbolF s -> do
---         index <- get
---         return $ index :< Ast0.SymbolF s
---       Ast0.CompoundF xs -> do
---         index <- get
---         let subIndices =
-
 getAtC0Index :: Index -> Ast0.Ast -> [Ast0.Ast]
 getAtC0Index [] ast = [ast]
 getAtC0Index _ (Ast0.Symbol s) = []
