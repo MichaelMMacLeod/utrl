@@ -9,4 +9,6 @@ data CompileError
   | TooManyEllipsesInConstructor
   | VarsNotCapturedUnderSameEllipsisInConstructor
   | EllipsisAppliedToSymbolInConstructor
+  | InvalidRuleDefinition
+  | MoreThanOneEllipsisInSingleCompoundTermOfPattern
   deriving (Eq, Show)

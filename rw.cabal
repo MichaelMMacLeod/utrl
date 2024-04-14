@@ -63,6 +63,7 @@ library
         , Ast1
         , AstC0
         , AstC1
+        , AstP0
         , Compile
         , ConstantExpr
         , Display
@@ -168,3 +169,4 @@ test-suite rw-test
         , hedgehog
         , recursion-schemes
         , unordered-containers
+        , extra

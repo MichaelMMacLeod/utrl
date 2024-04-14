@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
@@ -7,6 +6,7 @@
 module Compile
   ( compile,
     compile0to1,
+    compile1toP0,
     compile1toC0,
     compileC0toC1,
     compileC1toStmts,
@@ -18,9 +18,11 @@ import Ast0 qualified
 import Ast1 qualified
 import AstC0 qualified
 import AstC1 qualified
+import AstP0 qualified
 import ConstantExpr (ConstantExpr (..))
+import Control.Comonad (Comonad (..))
 import Control.Comonad.Cofree (Cofree ((:<)), ComonadCofree (unwrap))
-import Control.Monad.State.Strict (State, gets, modify, runState)
+import Control.Monad.State.Strict (MonadState (..), State, evalState, gets, modify, runState)
 import Data.Functor.Foldable (ListF (..), fold, histo)
 import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
@@ -31,9 +33,9 @@ import Error (CompileError (..), CompileResult)
 import Expr qualified
 import GHC.Generics (Generic)
 import Op qualified
+import Predicate (Predicate)
 import Stmt (Stmt (..))
 import Var (Var)
-import Control.Comonad (Comonad(..))
 
 type Variables = H.HashMap String AstC0.Index
 
@@ -45,6 +47,130 @@ compile vars ast = do
   let stmtsWithNamedLabels = compileC1toStmts astc1
   let stmtsWithOffsetLabels = compileLabels stmtsWithNamedLabels
   return stmtsWithOffsetLabels
+
+-- Finds the first element in a list that satisfies a predicate,
+-- returning the elements before it, itself, and the elements that
+-- follow it. Nothing is returned if no element satisfies the predicate.
+splitBeforeAndAfter :: (a -> Bool) -> [a] -> Maybe ([a], a, [a])
+splitBeforeAndAfter p = go []
+  where
+    go acc (x : xs)
+      | p x = Just (reverse acc, x, xs)
+      | otherwise = go (x : acc) xs
+    go _ [] = Nothing
+
+compile1toP0 :: Ast1.Ast -> CompileResult AstP0.Ast
+compile1toP0 = histo go
+  where
+    go :: Ast1.AstF (Cofree Ast1.AstF (CompileResult AstP0.Ast)) -> CompileResult AstP0.Ast
+    go = \case
+      Ast1.SymbolF s -> Right $ AstP0.Symbol s
+      Ast1.CompoundF xs ->
+        let wasEllipses :: Cofree Ast1.AstF a -> Bool
+            wasEllipses (_ :< Ast1.EllipsesF _) = True
+            wasEllipses _ = False
+            xsSplit = splitBeforeAndAfter wasEllipses xs
+         in case xsSplit of
+              Nothing -> do
+                xs' <- mapM extract xs
+                Right $ AstP0.CompoundWithoutEllipses xs'
+              Just (b, e, a) ->
+                if any wasEllipses a
+                  then Left MoreThanOneEllipsisInSingleCompoundTermOfPattern
+                  else do
+                    b' <- mapM extract b
+                    e' <- extract e
+                    a' <- mapM extract a
+                    Right $ AstP0.CompoundWithEllipses b' e' a'
+      Ast1.EllipsesF x -> extract x
+
+data RuleDefinition = RuleDefinition
+  { variables :: [String],
+    pattern :: Ast1.Ast,
+    constructor :: Ast1.Ast
+  }
+
+compile0toRuleDefinition :: Ast0.Ast -> CompileResult RuleDefinition
+compile0toRuleDefinition (Ast0.Symbol _) = Left InvalidRuleDefinition
+compile0toRuleDefinition (Ast0.Compound xs) =
+  -- rules must have at least 4 subterms:
+  --  1   2 3  4
+  -- (def a -> b)
+  --
+  -- they can have as many variables as necessary before the pattern 'a':
+  -- (def var1 var2 var3 a -> b)
+  if length xs < 4
+    then Left InvalidRuleDefinition
+    else
+      let (<&&>) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
+          (<&&>) f g x = f x && g x
+
+          isValidRuleSyntax :: [Ast0.Ast] -> Bool
+          isValidRuleSyntax =
+            startsWithDefSymbol
+              <&&> hasArrowBetweenPatternAndConstructor
+              <&&> allVariablesAreSymbols
+
+          startsWithDefSymbol :: [Ast0.Ast] -> Bool
+          startsWithDefSymbol (Ast0.Symbol "def" : _) = True
+          startsWithDefSymbol _ = False
+
+          hasArrowBetweenPatternAndConstructor :: [Ast0.Ast] -> Bool
+          hasArrowBetweenPatternAndConstructor ast =
+            let arrow = ast !! (length ast - 2)
+             in arrow == Ast0.Symbol "->"
+
+          allVariablesAreSymbols :: [Ast0.Ast] -> Bool
+          allVariablesAreSymbols ast =
+            let isSymbol :: Ast0.Ast -> Bool
+                isSymbol (Ast0.Symbol _) = True
+                isSymbol _ = False
+             in all isSymbol $ ruleDefinitionVariables ast
+
+          ruleDefinitionVariables :: [Ast0.Ast] -> [Ast0.Ast]
+          ruleDefinitionVariables ast =
+            let astWithoutPredicateAndArrowAndConstructor = take (length ast - 3) ast
+                astWithoutDefSymbol = drop 1 astWithoutPredicateAndArrowAndConstructor
+             in astWithoutDefSymbol
+
+          ruleDefinitionPattern :: [Ast0.Ast] -> Ast0.Ast
+          ruleDefinitionPattern ast = ast !! (length ast - 3)
+
+          ruleDefinitionConstructor :: [Ast0.Ast] -> Ast0.Ast
+          ruleDefinitionConstructor ast = ast !! (length ast - 1)
+       in if isValidRuleSyntax xs
+            then
+              let symbolToString :: Ast0.Ast -> String
+                  symbolToString (Ast0.Symbol s) = s
+                  symbolToString _ = error "not a symbol"
+
+                  vars = map symbolToString $ ruleDefinitionVariables xs
+                  pat = ruleDefinitionPattern xs
+                  constr = ruleDefinitionConstructor xs
+               in Right $ RuleDefinition vars (compile0to1 pat) (compile0to1 constr)
+            else Left InvalidRuleDefinition
+
+compilePredicateList :: RuleDefinition -> (Variables, [Predicate])
+compilePredicateList (RuleDefinition vars pat _) =
+  let vars' :: Variables
+      vars' = flip evalState [] $ fold go pat
+        where
+          go :: Ast1.AstF (State AstC0.Index Variables) -> State AstC0.Index Variables
+          go = \case
+            Ast1.SymbolF _ -> do
+              return H.empty
+            Ast1.CompoundF xs -> do
+              index <- get
+              return undefined
+            Ast1.EllipsesF x -> do
+              return undefined
+
+      preds :: [Predicate]
+      preds = flip evalState [] $ fold go pat
+        where
+          go :: Ast1.AstF (State AstC0.Index [Predicate]) -> State AstC0.Index [Predicate]
+          go = undefined
+   in (vars', preds)
 
 compile0to1 :: Ast0.Ast -> Ast1.Ast
 compile0to1 = fold $ \case
@@ -154,7 +280,6 @@ data C1ToStmtsState = C1ToStmtsState
 
 incVar :: C1ToStmtsState -> C1ToStmtsState
 incVar state = state {currentVar = currentVar state + 1}
-
 
 setIterationCountVar :: C1ToStmtsState -> C1ToStmtsState
 setIterationCountVar state = state {currentVar = currentVar state + 1, iterationCountVar = Just $ currentVar state}

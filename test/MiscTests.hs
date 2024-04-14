@@ -5,6 +5,10 @@ import AstC0
   ( IndexElement (Between, LenMinus, ZeroPlus),
     getAtC0Index,
   )
+import qualified AstP0
+import Compile (compile0to1, compile1toP0)
+import Data.Either.Extra (fromRight')
+import Error (CompileError (..))
 import Predicate
   ( IndexedPredicate (IndexedPredicate),
     Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo),
@@ -105,5 +109,31 @@ tests =
               applyPredicate
                 (IndexedPredicate (LengthGreaterThanOrEqualTo 1) [Between 0 0])
                 (Read.read' "((a) (b c) (d e f) () (g h i j))")
+          ),
+      testCase "compile1ToP00" $
+        assertEqual
+          ""
+          ( AstP0.CompoundWithEllipses
+              [AstP0.Symbol "a", AstP0.Symbol "b"]
+              (AstP0.Symbol "c")
+              [AstP0.Symbol "d", AstP0.Symbol "e"]
           )
+          (fromRight' $ compile1toP0 (compile0to1 (Read.read' "(a b c .. d e)"))),
+      testCase "compile1ToP01" $
+        assertEqual
+          ""
+          ( AstP0.CompoundWithoutEllipses
+              [ AstP0.Symbol "a",
+                AstP0.Symbol "b",
+                AstP0.Symbol "c",
+                AstP0.Symbol "d",
+                AstP0.Symbol "e"
+              ]
+          )
+          (fromRight' $ compile1toP0 (compile0to1 (Read.read' "(a b c d e)"))),
+      testCase "compile1ToP02" $
+        assertEqual
+          ""
+          (Left MoreThanOneEllipsisInSingleCompoundTermOfPattern)
+          (compile1toP0 (compile0to1 (Read.read' "(a .. b c d .. e)")))
     ]
