@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -17,37 +16,38 @@ module Compile
   )
 where
 
-import Ast0 qualified
-import Ast1 qualified
-import AstC0 qualified
-import AstC1 qualified
-import AstP0 qualified
+import qualified Ast0
+import qualified Ast1
+import qualified AstC0
+import qualified AstC1
+import AstP0 (enumerateP0Recursively)
+import qualified AstP0
 import ConstantExpr (ConstantExpr (..))
 import Control.Comonad (Comonad (..))
 import Control.Comonad.Cofree (Cofree ((:<)), ComonadCofree (unwrap))
+import qualified Control.Comonad.Cofree as CCC
+import Control.Comonad.Trans.Cofree (CofreeF (..))
+import qualified Control.Comonad.Trans.Cofree as CCTC
 import Control.Monad.Reader (MonadReader (ask), Reader, runReader, withReader)
 import Control.Monad.State.Strict
-  ( MonadState (..),
-    State,
+  ( State,
     evalState,
-    foldM,
     gets,
     modify,
     runState,
-    withState,
   )
 import Control.Monad.Trans.Reader (asks)
 import Data.Either.Extra (maybeToEither)
-import Data.Functor.Foldable (ListF (..), fold, histo)
+import Data.Functor.Foldable (ListF (..), histo, Recursive (..))
 import Data.HashMap.Strict ((!?))
-import Data.HashMap.Strict qualified as H
+import qualified Data.HashMap.Strict as H
 import Data.Hashable (Hashable)
 import Data.List (uncons)
 import Data.Maybe (catMaybes, fromJust, mapMaybe)
 import Error (CompileError (..), CompileResult)
-import Expr qualified
+import qualified Expr
 import GHC.Generics (Generic)
-import Op qualified
+import qualified Op
 import Predicate (Predicate)
 import Stmt (Stmt (..))
 import Var (Var)
@@ -82,7 +82,7 @@ compile1toP0 = histo go
       Ast1.SymbolF s -> Right $ AstP0.Symbol s
       Ast1.CompoundF xs ->
         let wasEllipses :: Cofree Ast1.AstF a -> Bool
-            wasEllipses (_ :< Ast1.EllipsesF _) = True
+            wasEllipses (_ CCC.:< Ast1.EllipsesF _) = True
             wasEllipses _ = False
             xsSplit = splitBeforeAndAfter wasEllipses xs
          in case xsSplit of
@@ -177,73 +177,35 @@ unionNonIntersectingHashMaps hs =
         else Nothing
 
 ruleDefinitionVariableBindings :: RuleDefinition -> CompileResult Variables
-ruleDefinitionVariableBindings (RuleDefinition vars pat _) =
-  flip runReader [] $ fold go pat
+ruleDefinitionVariableBindings (RuleDefinition vars pat _) = 
+  cata go (enumerateP0Recursively pat)
   where
-    applyNextIndexElement index (nextIndexElement, x) =
-      withReader (const (index ++ [nextIndexElement])) x
     go ::
-      AstP0.AstF (Reader AstC0.Index (CompileResult Variables)) ->
-      Reader AstC0.Index (CompileResult Variables)
+      CofreeF
+        AstP0.AstF
+        AstC0.Index
+        (CompileResult Variables) ->
+      CompileResult Variables
     go = \case
-      AstP0.SymbolF s ->
+      index CCTC.:< (AstP0.SymbolF s) ->
         if s `elem` vars
-          then asks (Right . H.singleton s)
-          else return $ Right H.empty
-      AstP0.CompoundWithoutEllipsesF xs -> do
-        index <- ask
-        let xs' :: [(AstC0.IndexElement, Reader AstC0.Index (CompileResult Variables))]
-            xs' = zip (map AstC0.ZeroPlus [0 ..]) xs
-
-            xs'' :: [Reader AstC0.Index (CompileResult Variables)]
-            xs'' = map (applyNextIndexElement index) xs'
-
-            xs''' :: [CompileResult Variables]
-            xs''' = map (`runReader` []) xs''
-
-            xs'''' :: Either CompileError [Variables]
-            xs'''' = sequence xs'''
-        return $ do
-          xs5 <- xs''''
-          maybeToEither
-            VariableUsedMoreThanOnceInPattern
-            (unionNonIntersectingHashMaps xs5)
-      AstP0.CompoundWithEllipsesF b e a -> do
-        index <- ask
-        let zipZeroPlusIndices :: [b] -> [(AstC0.IndexElement, b)]
-            zipZeroPlusIndices = zip (map AstC0.ZeroPlus [0 ..])
-
-            zipLenMinusIndices :: [b] -> [(AstC0.IndexElement, b)]
-            zipLenMinusIndices = reverse . zip (map AstC0.LenMinus [1 ..]) . reverse
-
-            applyNewIndexState ::
-              [(AstC0.IndexElement, Reader AstC0.Index (CompileResult Variables))] ->
-              [Reader AstC0.Index (CompileResult Variables)]
-            applyNewIndexState = map (applyNextIndexElement index)
-
-            runReaders :: [Reader AstC0.Index (CompileResult Variables)] -> [CompileResult Variables]
-            runReaders = map (`runReader` [])
-
-            getBeforeTerms, getAfterTerms :: [Reader AstC0.Index (CompileResult Variables)] -> [CompileResult Variables]
-            getBeforeTerms = runReaders . applyNewIndexState . zipZeroPlusIndices
-            getAfterTerms = runReaders . applyNewIndexState . zipLenMinusIndices
-
-            b', a' :: CompileResult [Variables]
-            b' = sequence $ getBeforeTerms b
-            a' = sequence $ getAfterTerms a
-
-            e' :: (CompileResult Variables)
-            e' = runReader (applyNextIndexElement index (AstC0.Between (length b) (length a), e)) []
-        return $ do
-          b'' <- b'
-          a'' <- a'
-          e'' <- e'
-          maybeToEither
-            VariableUsedMoreThanOnceInPattern
-            (unionNonIntersectingHashMaps (e'' : (b'' ++ a'')))
+          then Right $ H.singleton s index
+          else Right H.empty
+      _ CCTC.:< (AstP0.CompoundWithoutEllipsesF xs) -> do
+        xs' <- sequence xs
+        maybeToEither
+          VariableUsedMoreThanOnceInPattern
+          (unionNonIntersectingHashMaps xs')
+      _ CCTC.:< (AstP0.CompoundWithEllipsesF b e a) -> do
+        b' <- sequence b
+        e' <- e
+        a' <- sequence a
+        maybeToEither
+          VariableUsedMoreThanOnceInPattern
+          (unionNonIntersectingHashMaps $ e' : (b' ++ a'))
 
 ruleDefinitionPredicates :: RuleDefinition -> CompileResult [Predicate]
-ruleDefinitionPredicates (RuleDefinition vars pat _) = flip evalState [] $ fold go pat
+ruleDefinitionPredicates (RuleDefinition vars pat _) = flip evalState [] $ cata go pat
   where
     go ::
       AstP0.AstF (State AstC0.Index (CompileResult [Predicate])) ->
@@ -251,7 +213,7 @@ ruleDefinitionPredicates (RuleDefinition vars pat _) = flip evalState [] $ fold 
     go = undefined
 
 compile0to1 :: Ast0.Ast -> Ast1.Ast
-compile0to1 = fold $ \case
+compile0to1 = cata $ \case
   Ast0.SymbolF s -> Ast1.Symbol s
   Ast0.CompoundF xs -> Ast1.Compound $ go xs
     where
@@ -261,7 +223,7 @@ compile0to1 = fold $ \case
       go [] = []
 
 compile1toC0 :: Variables -> Ast1.Ast -> AstC0.Ast
-compile1toC0 vars = fold $ \case
+compile1toC0 vars = cata $ \case
   Ast1.SymbolF s -> case H.lookup s vars of
     Nothing -> AstC0.Symbol s
     Just index -> AstC0.Variable index
@@ -281,7 +243,7 @@ combineCompoundTermIndices xs =
 
 compileC0toC1 :: AstC0.Ast -> CompileResult AstC1.Ast
 compileC0toC1 astC0 = do
-  (astC1, index) <- fold go astC0
+  (astC1, index) <- cata go astC0
   case index of
     Nothing -> Right astC1
     Just [] -> Right astC1
@@ -325,7 +287,7 @@ newUniqueVar = do
   return var
 
 pushIndexToStackStmts :: AstC1.Index -> State C1ToStmtsState [Stmt a]
-pushIndexToStackStmts = fold $ \case
+pushIndexToStackStmts = cata $ \case
   Nil -> return []
   Cons (AstC1.ZeroPlus zp) stmts -> do
     stmts' <- stmts
@@ -406,7 +368,7 @@ compileC1toStmts :: AstC1.Ast -> [Stmt NamedLabel]
 compileC1toStmts = fst . flip runState initialC1ToStmtsState . histo go
   where
     shouldIncrementIterationCount :: Cofree AstC1.AstF (State C1ToStmtsState [Stmt NamedLabel]) -> Bool
-    shouldIncrementIterationCount (_ :< (AstC1.LoopF {})) = False
+    shouldIncrementIterationCount (_ CCC.:< (AstC1.LoopF {})) = False
     shouldIncrementIterationCount _ = True
 
     isLoopF :: AstC1.AstF a -> Bool
@@ -519,7 +481,7 @@ compileLabels xs = go (calculateInstructionNumbers (zip [0 ..] xs)) xs
               (_, _) -> Nothing
           )
     go :: H.HashMap NamedLabel Int -> [Stmt NamedLabel] -> [Stmt Int]
-    go ht = fold $ \case
+    go ht = cata $ \case
       Nil -> []
       Cons stmt others -> stmt' : others
         where
