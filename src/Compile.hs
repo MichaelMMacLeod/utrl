@@ -5,6 +5,8 @@
 
 module Compile
   ( compile,
+    compilePredicateList,
+    compile0toRuleDefinition,
     compile0to1,
     compile1toP0,
     compile1toC0,
@@ -22,7 +24,16 @@ import AstP0 qualified
 import ConstantExpr (ConstantExpr (..))
 import Control.Comonad (Comonad (..))
 import Control.Comonad.Cofree (Cofree ((:<)), ComonadCofree (unwrap))
-import Control.Monad.State.Strict (MonadState (..), State, evalState, gets, modify, runState)
+import Control.Monad.State.Strict
+  ( MonadState (..),
+    State,
+    evalState,
+    foldM,
+    gets,
+    modify,
+    runState,
+    withState,
+  )
 import Data.Functor.Foldable (ListF (..), fold, histo)
 import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
@@ -86,7 +97,7 @@ compile1toP0 = histo go
 
 data RuleDefinition = RuleDefinition
   { variables :: [String],
-    pattern :: Ast1.Ast,
+    pattern :: AstP0.Ast,
     constructor :: Ast1.Ast
   }
 
@@ -145,9 +156,11 @@ compile0toRuleDefinition (Ast0.Compound xs) =
                   symbolToString _ = error "not a symbol"
 
                   vars = map symbolToString $ ruleDefinitionVariables xs
-                  pat = ruleDefinitionPattern xs
+                  pat = compile0to1 $ ruleDefinitionPattern xs
                   constr = ruleDefinitionConstructor xs
-               in Right $ RuleDefinition vars (compile0to1 pat) (compile0to1 constr)
+               in do
+                    pat' <- compile1toP0 pat
+                    Right $ RuleDefinition vars pat' (compile0to1 constr)
             else Left InvalidRuleDefinition
 
 compilePredicateList :: RuleDefinition -> (Variables, [Predicate])
@@ -155,20 +168,59 @@ compilePredicateList (RuleDefinition vars pat _) =
   let vars' :: Variables
       vars' = flip evalState [] $ fold go pat
         where
-          go :: Ast1.AstF (State AstC0.Index Variables) -> State AstC0.Index Variables
+          applyNextIndexElement index (nextIndexElement, x) =
+            withState (const (index ++ [nextIndexElement])) x
+          go :: AstP0.AstF (State AstC0.Index Variables) -> State AstC0.Index Variables
           go = \case
-            Ast1.SymbolF _ -> do
-              return H.empty
-            Ast1.CompoundF xs -> do
+            AstP0.SymbolF s ->
+              if s `elem` vars
+                then H.singleton s <$> get
+                else return H.empty
+            AstP0.CompoundWithoutEllipsesF xs -> do
               index <- get
-              return undefined
-            Ast1.EllipsesF x -> do
-              return undefined
+              let xs' :: [(AstC0.IndexElement, State AstC0.Index Variables)]
+                  xs' = zip (map AstC0.ZeroPlus [0 ..]) xs
+
+                  xs'' :: [State AstC0.Index Variables]
+                  xs'' = map (applyNextIndexElement index) xs'
+
+                  xs''' :: [Variables]
+                  xs''' = map (`evalState` []) xs''
+              return $ H.unions xs'''
+            AstP0.CompoundWithEllipsesF b e a -> do
+              index <- get
+              let bs' :: [(AstC0.IndexElement, State AstC0.Index Variables)]
+                  bs' = zip (map AstC0.ZeroPlus [0 ..]) b
+
+                  as' :: [(AstC0.IndexElement, State AstC0.Index Variables)]
+                  as' = reverse $ zip (map AstC0.LenMinus [1 ..]) (reverse a)
+
+                  e' :: (AstC0.IndexElement, State AstC0.Index Variables)
+                  e' = (AstC0.Between (length bs') (length as'), e)
+
+                  bs'' :: [State AstC0.Index Variables]
+                  bs'' = map (applyNextIndexElement index) bs'
+
+                  as'' :: [State AstC0.Index Variables]
+                  as'' = map (applyNextIndexElement index) as'
+
+                  e'' :: State AstC0.Index Variables
+                  e'' = applyNextIndexElement index e'
+
+                  bs''' :: [Variables]
+                  bs''' = map (`evalState` []) bs''
+
+                  as''' :: [Variables]
+                  as''' = map (`evalState` []) as''
+
+                  e''' :: Variables
+                  e''' = evalState e'' []
+              return $ H.unions (e''' : (bs''' ++ as'''))
 
       preds :: [Predicate]
       preds = flip evalState [] $ fold go pat
         where
-          go :: Ast1.AstF (State AstC0.Index [Predicate]) -> State AstC0.Index [Predicate]
+          go :: AstP0.AstF (State AstC0.Index [Predicate]) -> State AstC0.Index [Predicate]
           go = undefined
    in (vars', preds)
 

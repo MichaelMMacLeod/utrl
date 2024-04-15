@@ -6,8 +6,9 @@ import AstC0
     getAtC0Index,
   )
 import qualified AstP0
-import Compile (compile0to1, compile1toP0)
+import Compile (compile0to1, compile0toRuleDefinition, compile1toP0, compilePredicateList)
 import Data.Either.Extra (fromRight')
+import qualified Data.HashMap.Strict as H
 import Error (CompileError (..))
 import Predicate
   ( IndexedPredicate (IndexedPredicate),
@@ -135,5 +136,63 @@ tests =
         assertEqual
           ""
           (Left MoreThanOneEllipsisInSingleCompoundTermOfPattern)
-          (compile1toP0 (compile0to1 (Read.read' "(a .. b c d .. e)")))
+          (compile1toP0 (compile0to1 (Read.read' "(a .. b c d .. e)"))),
+      testCase "compilePredicateList0" $
+        assertEqual
+          ""
+          ( H.fromList [("a", [])],
+            []
+          )
+          ( compilePredicateList $
+              fromRight' $
+                compile0toRuleDefinition $
+                  Read.read' "(def a a -> 0)"
+          ),
+      testCase "compilePredicateList1" $
+        assertEqual
+          ""
+          ( H.fromList [("a", [ZeroPlus 0])],
+            []
+          )
+          ( compilePredicateList $
+              fromRight' $
+                compile0toRuleDefinition $
+                  Read.read' "(def a (a) -> 0)"
+          ),
+      testCase "compilePredicateList2" $
+        assertEqual
+          ""
+          ( H.fromList [("a", [ZeroPlus 0]), ("b", [ZeroPlus 1])],
+            []
+          )
+          ( compilePredicateList $
+              fromRight' $
+                compile0toRuleDefinition $
+                  Read.read' "(def a b (a b) -> 0)"
+          ),
+      testCase "compilePredicateList3" $
+        assertEqual
+          ""
+          ( H.fromList [("a", [Between 0 1]), ("b", [LenMinus 1])],
+            []
+          )
+          ( compilePredicateList $
+              fromRight' $
+                compile0toRuleDefinition $
+                  Read.read' "(def a b (a .. b) -> 0)"
+          ),
+      testCase "compilePredicateList4" $
+        assertEqual
+          ""
+          ( H.fromList
+              [ ("a", [Between 0 0, Between 1 4]),
+                ("b", [Between 0 0, LenMinus 4])
+              ],
+            []
+          )
+          ( compilePredicateList $
+              fromRight' $
+                compile0toRuleDefinition $
+                  Read.read' "(def a b ((0 a .. b 1 2 3) ..) -> 0)"
+          )
     ]

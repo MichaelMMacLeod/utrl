@@ -13,6 +13,7 @@ data Predicate
   = SymbolEqualTo String
   | LengthEqualTo Int
   | LengthGreaterThanOrEqualTo Int
+  deriving (Eq, Show)
 
 toFunc :: Predicate -> (Ast0.Ast -> Bool)
 toFunc (SymbolEqualTo str1) (Ast0.Symbol str2) = str1 == str2
