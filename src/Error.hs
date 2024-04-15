@@ -11,4 +11,5 @@ data CompileError
   | EllipsisAppliedToSymbolInConstructor
   | InvalidRuleDefinition
   | MoreThanOneEllipsisInSingleCompoundTermOfPattern
+  | VariableUsedMoreThanOnceInPattern
   deriving (Eq, Show)

@@ -2,14 +2,15 @@ module MiscTests (tests) where
 
 import Ast0 (Ast (..))
 import AstC0
-  ( IndexElement (Between, LenMinus, ZeroPlus),
+  ( Index,
+    IndexElement (Between, LenMinus, ZeroPlus),
     getAtC0Index,
   )
 import qualified AstP0
-import Compile (compile0to1, compile0toRuleDefinition, compile1toP0, compilePredicateList)
+import Compile (Variables, compile0to1, compile0toRuleDefinition, compile1toP0, ruleDefinitionVariableBindings)
 import Data.Either.Extra (fromRight')
 import qualified Data.HashMap.Strict as H
-import Error (CompileError (..))
+import Error (CompileError (..), CompileResult)
 import Predicate
   ( IndexedPredicate (IndexedPredicate),
     Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo),
@@ -17,7 +18,7 @@ import Predicate
   )
 import qualified Read
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, assertEqual, testCase)
+import Test.Tasty.HUnit (Assertion, assertBool, assertEqual, testCase)
 
 compoundToList :: Ast -> [Ast]
 compoundToList (Compound xs) = xs
@@ -137,62 +138,55 @@ tests =
           ""
           (Left MoreThanOneEllipsisInSingleCompoundTermOfPattern)
           (compile1toP0 (compile0to1 (Read.read' "(a .. b c d .. e)"))),
-      testCase "compilePredicateList0" $
-        assertEqual
-          ""
-          ( H.fromList [("a", [])],
-            []
-          )
-          ( compilePredicateList $
-              fromRight' $
-                compile0toRuleDefinition $
-                  Read.read' "(def a a -> 0)"
+      testCase "ruleDefinitionVariableBindings0" $
+        ruleDefinitionVariableBindingsTest
+          "(def a a -> 0)"
+          (Right [("a", [])]),
+      testCase "ruleDefinitionVariableBindings1" $
+        ruleDefinitionVariableBindingsTest
+          "(def a (a) -> 0)"
+          (Right [("a", [ZeroPlus 0])]),
+      testCase "ruleDefinitionVariableBindings2" $
+        ruleDefinitionVariableBindingsTest
+          "(def a b (a b) -> 0)"
+          ( Right
+              [ ("a", [ZeroPlus 0]),
+                ("b", [ZeroPlus 1])
+              ]
           ),
-      testCase "compilePredicateList1" $
-        assertEqual
-          ""
-          ( H.fromList [("a", [ZeroPlus 0])],
-            []
-          )
-          ( compilePredicateList $
-              fromRight' $
-                compile0toRuleDefinition $
-                  Read.read' "(def a (a) -> 0)"
+      testCase "ruleDefinitionVariableBindings3" $
+        ruleDefinitionVariableBindingsTest
+          "(def a b (a .. b) -> 0)"
+          ( Right
+              [ ("a", [Between 0 1]),
+                ("b", [LenMinus 1])
+              ]
           ),
-      testCase "compilePredicateList2" $
-        assertEqual
-          ""
-          ( H.fromList [("a", [ZeroPlus 0]), ("b", [ZeroPlus 1])],
-            []
-          )
-          ( compilePredicateList $
-              fromRight' $
-                compile0toRuleDefinition $
-                  Read.read' "(def a b (a b) -> 0)"
-          ),
-      testCase "compilePredicateList3" $
-        assertEqual
-          ""
-          ( H.fromList [("a", [Between 0 1]), ("b", [LenMinus 1])],
-            []
-          )
-          ( compilePredicateList $
-              fromRight' $
-                compile0toRuleDefinition $
-                  Read.read' "(def a b (a .. b) -> 0)"
-          ),
-      testCase "compilePredicateList4" $
-        assertEqual
-          ""
-          ( H.fromList
+      testCase "ruleDefinitionVariableBindings4" $
+        ruleDefinitionVariableBindingsTest
+          "(def a b ((0 a .. b 1 2 3) ..) -> 0)"
+          ( Right
               [ ("a", [Between 0 0, Between 1 4]),
                 ("b", [Between 0 0, LenMinus 4])
-              ],
-            []
-          )
-          ( compilePredicateList $
-              fromRight' $
-                compile0toRuleDefinition $
-                  Read.read' "(def a b ((0 a .. b 1 2 3) ..) -> 0)"
-          )
+              ]
+          ),
+      testCase "ruleDefinitionVariableBindings5" $
+        ruleDefinitionVariableBindingsTest
+          "(def a (a a) -> 0)"
+          (Left VariableUsedMoreThanOnceInPattern),
+      testCase "ruleDefinitionVariableBindings6" $
+        ruleDefinitionVariableBindingsTest
+          "(def a (a .. ((((((a)))) ..) ..)) -> 0)"
+          (Left VariableUsedMoreThanOnceInPattern)
     ]
+
+ruleDefinitionVariableBindingsTest :: String -> CompileResult [(String, AstC0.Index)] -> Assertion
+ruleDefinitionVariableBindingsTest input expected =
+  assertEqual
+    ""
+    (fmap H.fromList expected)
+    ( ruleDefinitionVariableBindings $
+        fromRight' $
+          compile0toRuleDefinition $
+            Read.read' input
+    )
