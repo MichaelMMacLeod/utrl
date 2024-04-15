@@ -47,6 +47,8 @@ import Op qualified
 import Predicate (Predicate)
 import Stmt (Stmt (..))
 import Var (Var)
+import Control.Monad.Reader (Reader, runReader, withReader, MonadReader (ask))
+import Control.Monad.Trans.Reader (asks)
 
 type Variables = H.HashMap String AstC0.Index
 
@@ -166,55 +168,55 @@ compile0toRuleDefinition (Ast0.Compound xs) =
 compilePredicateList :: RuleDefinition -> (Variables, [Predicate])
 compilePredicateList (RuleDefinition vars pat _) =
   let vars' :: Variables
-      vars' = flip evalState [] $ fold go pat
+      vars' = flip runReader [] $ fold go pat
         where
           applyNextIndexElement index (nextIndexElement, x) =
-            withState (const (index ++ [nextIndexElement])) x
-          go :: AstP0.AstF (State AstC0.Index Variables) -> State AstC0.Index Variables
+            withReader (const (index ++ [nextIndexElement])) x
+          go :: AstP0.AstF (Reader AstC0.Index Variables) -> Reader AstC0.Index Variables
           go = \case
             AstP0.SymbolF s ->
               if s `elem` vars
-                then H.singleton s <$> get
+                then asks (H.singleton s)
                 else return H.empty
             AstP0.CompoundWithoutEllipsesF xs -> do
-              index <- get
-              let xs' :: [(AstC0.IndexElement, State AstC0.Index Variables)]
+              index <- ask
+              let xs' :: [(AstC0.IndexElement, Reader AstC0.Index Variables)]
                   xs' = zip (map AstC0.ZeroPlus [0 ..]) xs
 
-                  xs'' :: [State AstC0.Index Variables]
+                  xs'' :: [Reader AstC0.Index Variables]
                   xs'' = map (applyNextIndexElement index) xs'
 
                   xs''' :: [Variables]
-                  xs''' = map (`evalState` []) xs''
+                  xs''' = map (`runReader` []) xs''
               return $ H.unions xs'''
             AstP0.CompoundWithEllipsesF b e a -> do
-              index <- get
-              let bs' :: [(AstC0.IndexElement, State AstC0.Index Variables)]
+              index <- ask
+              let bs' :: [(AstC0.IndexElement, Reader AstC0.Index Variables)]
                   bs' = zip (map AstC0.ZeroPlus [0 ..]) b
 
-                  as' :: [(AstC0.IndexElement, State AstC0.Index Variables)]
+                  as' :: [(AstC0.IndexElement, Reader AstC0.Index Variables)]
                   as' = reverse $ zip (map AstC0.LenMinus [1 ..]) (reverse a)
 
-                  e' :: (AstC0.IndexElement, State AstC0.Index Variables)
+                  e' :: (AstC0.IndexElement, Reader AstC0.Index Variables)
                   e' = (AstC0.Between (length bs') (length as'), e)
 
-                  bs'' :: [State AstC0.Index Variables]
+                  bs'' :: [Reader AstC0.Index Variables]
                   bs'' = map (applyNextIndexElement index) bs'
 
-                  as'' :: [State AstC0.Index Variables]
+                  as'' :: [Reader AstC0.Index Variables]
                   as'' = map (applyNextIndexElement index) as'
 
-                  e'' :: State AstC0.Index Variables
+                  e'' :: Reader AstC0.Index Variables
                   e'' = applyNextIndexElement index e'
 
                   bs''' :: [Variables]
-                  bs''' = map (`evalState` []) bs''
+                  bs''' = map (`runReader` []) bs''
 
                   as''' :: [Variables]
-                  as''' = map (`evalState` []) as''
+                  as''' = map (`runReader` []) as''
 
                   e''' :: Variables
-                  e''' = evalState e'' []
+                  e''' = runReader e'' []
               return $ H.unions (e''' : (bs''' ++ as'''))
 
       preds :: [Predicate]
@@ -222,7 +224,7 @@ compilePredicateList (RuleDefinition vars pat _) =
         where
           go :: AstP0.AstF (State AstC0.Index [Predicate]) -> State AstC0.Index [Predicate]
           go = undefined
-   in (vars', preds)
+   in (vars', [])
 
 compile0to1 :: Ast0.Ast -> Ast1.Ast
 compile0to1 = fold $ \case
