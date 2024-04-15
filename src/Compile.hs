@@ -20,7 +20,7 @@ import qualified Ast0
 import qualified Ast1
 import qualified AstC0
 import qualified AstC1
-import AstP0 (enumerateP0Recursively)
+import AstP0 (indexP0ByC0)
 import qualified AstP0
 import ConstantExpr (ConstantExpr (..))
 import Control.Comonad (Comonad (..))
@@ -178,7 +178,7 @@ unionNonIntersectingHashMaps hs =
 
 ruleDefinitionVariableBindings :: RuleDefinition -> CompileResult Variables
 ruleDefinitionVariableBindings (RuleDefinition vars pat _) = 
-  cata go (enumerateP0Recursively pat)
+  cata go (indexP0ByC0 pat)
   where
     go ::
       CofreeF

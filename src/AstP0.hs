@@ -3,7 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module AstP0 (Ast (..), AstF (..), enumerateP0, enumerateP0Recursively) where
+module AstP0 (Ast (..), AstF (..), indexP0ByC0) where
 
 import AstC0 qualified
 import Control.Comonad.Cofree (Cofree (..))
@@ -16,6 +16,7 @@ import Data.Functor.Foldable
     embed,
     project,
   )
+import Data.List.Extra (snoc)
 
 data Ast
   = Symbol String
@@ -27,37 +28,10 @@ data Ast
       }
   deriving (Show, Eq)
 
--- Finds the first element in a list that satisfies a predicate,
--- returning the elements before it, itself, and the elements that
--- follow it. Nothing is returned if no element satisfies the predicate.
-splitBeforeAndAfter :: (a -> Bool) -> [a] -> Maybe ([a], a, [a])
-splitBeforeAndAfter p = go []
-  where
-    go acc (x : xs)
-      | p x = Just (reverse acc, x, xs)
-      | otherwise = go (x : acc) xs
-    go _ [] = Nothing
-
-subindexZP :: [AstC0.IndexElement] -> Int -> [AstC0.IndexElement]
-subindexZP i e = i ++ [AstC0.ZeroPlus e]
-
-subindexLM :: [AstC0.IndexElement] -> Int -> [AstC0.IndexElement]
-subindexLM i e = i ++ [AstC0.LenMinus e]
-
-enumerateP0 :: AstC0.Index -> Ast -> AstF (AstC0.Index, Ast)
-enumerateP0 _ (Symbol s) = SymbolF s
-enumerateP0 index (CompoundWithoutEllipses xs) =
-  CompoundWithoutEllipsesF (zip (map (subindexZP index) [0 ..]) xs)
-enumerateP0 index (CompoundWithEllipses b e a) =
-  let b' = zip (map (subindexZP index) [0 ..]) b
-      e' = (index ++ [AstC0.Between (length b) (length a)], e)
-      a' = reverse $ zip (map (subindexLM index) [1 ..]) $ reverse b
-   in CompoundWithEllipsesF b' e' a'
-
 type RR = Reader AstC0.Index (Cofree AstF AstC0.Index)
 
-enumerateP0Recursively :: Ast -> Cofree AstF AstC0.Index
-enumerateP0Recursively = flip runReader [] . cata go
+indexP0ByC0 :: Ast -> Cofree AstF AstC0.Index
+indexP0ByC0 = flip runReader [] . cata go
   where
     go :: AstF RR -> RR
     go = \case
@@ -66,14 +40,31 @@ enumerateP0Recursively = flip runReader [] . cata go
         pure $ index :< SymbolF s
       CompoundWithoutEllipsesF xs -> do
         index <- ask
-        let xs' = map (`runReader` []) $ zipWith (\i r -> withReader (const (index ++ [AstC0.ZeroPlus i])) r) [0 ..] xs
+        let xs' = map (`runReader` []) $ zipWith (setZeroPlusReader index) [0 ..] xs
         pure $ index :< CompoundWithoutEllipsesF xs'
       CompoundWithEllipsesF b e a -> do
         index <- ask
-        let b' = map (`runReader` []) $ zipWith (\i r -> withReader (const (index ++ [AstC0.ZeroPlus i])) r) [0 ..] b
-            e' = runReader (withReader (const (index ++ [AstC0.Between (length b) (length a)])) e) []
-            a' = map (`runReader` []) $ reverse $ zipWith (\i r -> withReader (const (index ++ [AstC0.LenMinus i])) r) [1 ..] $ reverse a
+        let b' = map (`runReader` []) $ zipWith (setZeroPlusReader index) [0 ..] b
+            e' = runReader (setBetweenReader index (length b) (length a) e) []
+            a' = map (`runReader` []) $ reverse $ zipWith (setLenMinusReader index) [1 ..] $ reverse a
         pure $ index :< CompoundWithEllipsesF b' e' a'
+
+    setZeroPlusReader,
+      setLenMinusReader ::
+        AstC0.Index ->
+        Int ->
+        Reader AstC0.Index a ->
+        Reader AstC0.Index a
+    setZeroPlusReader index i = withReader $ const $ snoc index $ AstC0.ZeroPlus i
+    setLenMinusReader index i = withReader $ const $ snoc index $ AstC0.LenMinus i
+
+    setBetweenReader ::
+      AstC0.Index ->
+      Int ->
+      Int ->
+      Reader AstC0.Index a ->
+      Reader AstC0.Index a
+    setBetweenReader index b a = withReader $ const $ snoc index $ AstC0.Between b a
 
 data AstF r
   = SymbolF String
