@@ -27,10 +27,8 @@ import Control.Comonad (Comonad (..))
 import Control.Comonad.Cofree (Cofree, ComonadCofree (unwrap))
 import qualified Control.Comonad.Cofree as CCC
 import Control.Comonad.Trans.Cofree (CofreeF (..))
-import qualified Control.Comonad.Trans.Cofree as CCTC
 import Control.Monad.State.Strict
   ( State,
-    evalState,
     gets,
     modify,
     runState,
@@ -46,7 +44,7 @@ import Error (CompileError (..), CompileResult)
 import qualified Expr
 import GHC.Generics (Generic)
 import qualified Op
-import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, SymbolEqualTo, LengthGreaterThanOrEqualTo))
+import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo))
 import Stmt (Stmt (..))
 import Var (Var)
 
@@ -196,16 +194,17 @@ ruleDefinitionVariableBindings (RuleDefinition vars pat _) =
         AstC0.Index
         (CompileResult Variables) ->
       CompileResult Variables
-    go = \case
-      index CCTC.:< (AstP0.SymbolF s) ->
-        if s `elem` vars
-          then Right $ H.singleton s index
-          else Right H.empty
-      _ CCTC.:< (AstP0.CompoundWithoutEllipsesF xs) -> do
+    go (index :< ast) = case ast of
+      AstP0.SymbolF s ->
+        Right $
+          if s `elem` vars
+            then H.singleton s index
+            else H.empty
+      AstP0.CompoundWithoutEllipsesF xs -> do
         xs' <- sequence xs
         let combined = unionNonIntersectingHashMaps xs'
         maybeToEither VariableUsedMoreThanOnceInPattern combined
-      _ CCTC.:< (AstP0.CompoundWithEllipsesF b e a) -> do
+      AstP0.CompoundWithEllipsesF b e a -> do
         b' <- sequence b
         e' <- e
         a' <- sequence a
@@ -226,7 +225,7 @@ ruleDefinitionVariableBindings (RuleDefinition vars pat _) =
 -- - Index [1] is a compound term of length >= 1
 -- - Index [1,0] == "list"
 -- - Indices [1,1..length] are compound terms of length >= 1
--- - Indices [1,1..length,0] == "list" 
+-- - Indices [1,1..length,0] == "list"
 ruleDefinitionPredicates :: RuleDefinition -> CompileResult [IndexedPredicate]
 ruleDefinitionPredicates (RuleDefinition vars pat _) = cata go (indexP0ByC0 pat)
   where
