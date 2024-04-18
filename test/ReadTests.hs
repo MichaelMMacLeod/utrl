@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module ReadTests where
 
 import qualified Ast0
@@ -8,7 +6,7 @@ import qualified Hedgehog.Gen as Gen
 import Hedgehog.Internal.Property (success)
 import qualified Hedgehog.Internal.Range as Range
 import qualified Read
-import Test.Tasty (TestTree, defaultMain, testGroup)
+import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertEqual, testCase)
 import Test.Tasty.Hedgehog (testProperty)
 

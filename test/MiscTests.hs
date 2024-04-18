@@ -7,7 +7,12 @@ import AstC0
     getAtC0Index,
   )
 import qualified AstP0
-import Compile (Variables, compile0to1, compile0toRuleDefinition, compile1toP0, ruleDefinitionVariableBindings)
+import Compile
+  ( compile0to1,
+    compile0toRuleDefinition,
+    compile1toP0,
+    ruleDefinitionVariableBindings,
+  )
 import Data.Either.Extra (fromRight')
 import qualified Data.HashMap.Strict as H
 import Error (CompileError (..), CompileResult)

@@ -1,26 +1,14 @@
-{-# LANGUAGE LambdaCase #-}
-{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
-
 module ConstructorTests (tests) where
 
 import qualified AstC0
 import Compile (Variables)
 import qualified Compile
-import Data.Char (isSpace)
-import Data.Functor.Foldable (Base, ListF (..), fold)
 import qualified Data.HashMap.Strict as H
 import qualified Display
-import qualified Error
-import Hedgehog (Property, forAll, property, (===))
-import qualified Hedgehog.Gen as Gen
-import qualified Hedgehog.Internal.Range as Range
 import qualified Interpret
-import Lex (Token (..))
-import qualified Lex
 import qualified Read
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertEqual, assertFailure, testCase)
-import Test.Tasty.Hedgehog (testProperty)
 
 tests :: TestTree
 tests =

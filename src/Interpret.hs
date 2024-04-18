@@ -1,14 +1,9 @@
-{-# LANGUAGE ImportQualifiedPost #-}
+module Interpret (interpret, displayMemory) where
 
-module Interpret (interpret) where
-
-import Ast0 qualified
+import qualified Ast0
 import ConstantExpr (ConstantExpr (..))
-import Control.Monad.State.Strict (State, runState)
-import Control.Monad.Trans.State.Strict (evalState, get, gets, modify)
 import Data.List (unfoldr)
 import Data.Maybe (fromJust)
--- import Debug.Trace (trace)
 import Display (display0, displayStmt)
 import Expr (Expr (..))
 import Op (BinOp (..))
@@ -16,17 +11,17 @@ import Stmt (Stmt (..))
 import Var (Var)
 
 data Memory = Memory
-  { input :: Ast0.Ast,
-    instructions :: [Stmt Int],
-    currentInstruction :: Int,
-    dataStack :: [Ast0.Ast],
-    indexStack :: [Int],
-    variables :: [Int]
+  { _input :: !Ast0.Ast,
+    _instructions :: ![Stmt Int],
+    _currentInstruction :: !Int,
+    _dataStack :: ![Ast0.Ast],
+    _indexStack :: ![Int],
+    _variables :: ![Int]
   }
   deriving (Show)
 
 displayMemory :: Memory -> String
-displayMemory (Memory input instructions currentInstruction dataStack indexStack variables) =
+displayMemory (Memory _ instructions currentInstruction dataStack indexStack variables) =
   if currentInstruction < length instructions
     then
       displayStmt (instructions !! currentInstruction)
@@ -48,36 +43,21 @@ setNth i x xs = left ++ [x] ++ right
     left = take i (xs ++ repeat 0)
     right = drop (i + 1) xs
 
-setCurrentInstruction :: Int -> Memory -> Memory
-setCurrentInstruction x m = m {currentInstruction = x}
-
-setDataStack :: [Ast0.Ast] -> Memory -> Memory
-setDataStack x m = m {dataStack = x}
-
-setIndexStack :: [Int] -> Memory -> Memory
-setIndexStack x m = m {indexStack = x}
-
-setVariables :: [Int] -> Memory -> Memory
-setVariables x m = m {variables = x}
-
-nextInstruction :: Memory -> Memory
-nextInstruction m@(Memory {currentInstruction = c}) = setCurrentInstruction (c + 1) m
-
 iterateMaybe :: (b -> Maybe b) -> b -> [b]
 iterateMaybe f = unfoldr (fmap (\s -> (s, s)) . f)
 
 interpret :: Ast0.Ast -> [Stmt Int] -> Ast0.Ast
-interpret i stmts = head . dataStack . last $ iterateMaybe transition initialState
+interpret i stmts = head . _dataStack . last $ iterateMaybe transition initialState
   where
     initialState :: Memory
     initialState =
       Memory
-        { input = i,
-          instructions = stmts,
-          currentInstruction = 0,
-          dataStack = [],
-          indexStack = [],
-          variables = []
+        { _input = i,
+          _instructions = stmts,
+          _currentInstruction = 0,
+          _dataStack = [],
+          _indexStack = [],
+          _variables = []
         }
 
     transition :: Memory -> Maybe Memory
@@ -86,47 +66,47 @@ interpret i stmts = head . dataStack . last $ iterateMaybe transition initialSta
       if currentInstruction == length instructions
         then Nothing
         else Just $ case instructions !! currentInstruction of
-          Assign lhs rhs ->
+          Assign l r ->
             m
-              { variables = setNth lhs (evalExpr m rhs) variables,
-                currentInstruction = currentInstruction + 1
+              { _variables = setNth l (evalExpr m r) variables,
+                _currentInstruction = currentInstruction + 1
               }
           PushSymbolToDataStack s ->
             m
-              { dataStack = Ast0.Symbol s : dataStack,
-                currentInstruction = currentInstruction + 1
+              { _dataStack = Ast0.Symbol s : dataStack,
+                _currentInstruction = currentInstruction + 1
               }
           PushIndexToIndexStack ce ->
             m
-              { indexStack = indexStack ++ [evalConstantExpr m ce],
-                currentInstruction = currentInstruction + 1
+              { _indexStack = indexStack ++ [evalConstantExpr m ce],
+                _currentInstruction = currentInstruction + 1
               }
-          PopFromIndexStack index_count ->
+          PopFromIndexStack c ->
             m
-              { indexStack = take (length indexStack - index_count) indexStack,
-                currentInstruction = currentInstruction + 1
+              { _indexStack = take (length indexStack - c) indexStack,
+                _currentInstruction = currentInstruction + 1
               }
           PushIndexedTermToDataStack ->
             m
-              { dataStack = fromJust (termAtIndex indexStack input) : dataStack,
-                currentInstruction = currentInstruction + 1
+              { _dataStack = fromJust (termAtIndex indexStack input) : dataStack,
+                _currentInstruction = currentInstruction + 1
               }
           BuildCompoundTermFromDataStack termCount ->
             let termCount' = evalConstantExpr m termCount
                 newTerm = Ast0.Compound . reverse $ take termCount' dataStack
              in m
-                  { dataStack = newTerm : drop termCount' dataStack,
-                    currentInstruction = currentInstruction + 1
+                  { _dataStack = newTerm : drop termCount' dataStack,
+                    _currentInstruction = currentInstruction + 1
                   }
-          Jump label -> m {currentInstruction = label}
-          JumpWhenLessThan label when_var le_var ->
-            let when_var' = evalConstantExpr m (ConstantExpr.Var when_var)
-                le_var' = evalConstantExpr m (ConstantExpr.Var le_var)
-                nextInstruction =
+          Jump l -> m {_currentInstruction = l}
+          JumpWhenLessThan l w le ->
+            let when_var' = evalConstantExpr m (ConstantExpr.Var w)
+                le_var' = evalConstantExpr m (ConstantExpr.Var le)
+                n =
                   if when_var' < le_var'
-                    then label
+                    then l
                     else currentInstruction + 1
-             in m {currentInstruction = nextInstruction}
+             in m {_currentInstruction = n}
 
 termAtIndex :: [Int] -> Ast0.Ast -> Maybe Ast0.Ast
 termAtIndex [] ast = Just ast
@@ -142,22 +122,22 @@ termAtIndex _ _ = Nothing
 -- tr x = trace (show x) x
 
 evalVar :: Memory -> Var -> Int
-evalVar (Memory {variables = vars}) v = vars !! v
+evalVar (Memory {_variables = vars}) v = vars !! v
 
 evalConstantExpr :: Memory -> ConstantExpr -> Int
 evalConstantExpr m (ConstantExpr.Var v) = evalVar m v
-evalConstantExpr m (ConstantExpr.Constant c) = c
+evalConstantExpr _ (ConstantExpr.Constant c) = c
 
 evalExpr :: Memory -> Expr -> Int
 evalExpr m (Expr.Var v) = evalVar m v
 evalExpr _ (Expr.Constant c) = c
-evalExpr m (BinOp op lhs rhs) =
-  let rhs' = evalConstantExpr m rhs
-      lhs' = evalVar m lhs
-   in case op of
+evalExpr m (BinOp o l r) =
+  let rhs' = evalConstantExpr m r
+      lhs' = evalVar m l
+   in case o of
         Add -> lhs' + rhs'
         Sub -> lhs' - rhs'
-evalExpr (Memory {input = i, indexStack = index}) Length =
+evalExpr (Memory {_input = i, _indexStack = index}) Length =
   case fromJust $ termAtIndex index i of
     Ast0.Symbol _ -> error "can't take length of symbol"
     Ast0.Compound cs -> length cs

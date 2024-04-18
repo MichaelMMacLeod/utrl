@@ -1,6 +1,4 @@
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Ast1 (Ast (..), AstF (..)) where

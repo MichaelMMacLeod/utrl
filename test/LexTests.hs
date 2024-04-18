@@ -3,7 +3,7 @@
 module LexTests (tests) where
 
 import Data.Char (isSpace)
-import Data.Functor.Foldable (Base, ListF (..), fold)
+import Data.Functor.Foldable (ListF (..), fold)
 import Hedgehog (Property, forAll, property, (===))
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Internal.Range as Range

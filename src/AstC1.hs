@@ -1,6 +1,4 @@
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module AstC1

@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module AstC0
@@ -63,7 +62,7 @@ popBetweenTail = go . reverse
 
 getAtC0Index :: Index -> Ast0.Ast -> [Ast0.Ast]
 getAtC0Index [] ast = [ast]
-getAtC0Index _ (Ast0.Symbol s) = []
+getAtC0Index _ (Ast0.Symbol _) = []
 getAtC0Index (ZeroPlus zp : i) (Ast0.Compound xs) =
   if zp < length xs
     then getAtC0Index i (xs !! zp)

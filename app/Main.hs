@@ -1,12 +1,6 @@
 module Main (main) where
 
-import qualified AstC0
-import qualified Compile
-import qualified Data.HashMap.Strict as H
-import qualified Display
-import qualified Interpret
-import qualified Read
-
+main :: IO ()
 main = print "Hello, world!"
 -- (fn xs (flatten (list (list xs ..) ..)) -> (list xs .. ..))
 -- main :: IO ()

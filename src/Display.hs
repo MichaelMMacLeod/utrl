@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -105,7 +104,7 @@ displayStmts = unlines . zipWith indent [0 ..] . map displayStmt
     indent lineNum str = show lineNum ++ ":\t" ++ str
 
 displayStmt :: Show a => Stmt a -> String
-displayStmt (Stmt.Assign lhs rhs) = displayVar lhs ++ " = " ++ displayExpr rhs
+displayStmt (Stmt.Assign l r) = displayVar l ++ " = " ++ displayExpr r
 displayStmt (Stmt.PushSymbolToDataStack s) = "data_stack.push(" ++ show s ++ ")"
 displayStmt (Stmt.PushIndexToIndexStack i) = "index_stack.push(" ++ displayConstantExpr i ++ ")"
 displayStmt (Stmt.PopFromIndexStack count) = "index_stack.pop(" ++ show count ++ " " ++ name ++ ")"
@@ -114,18 +113,18 @@ displayStmt (Stmt.PopFromIndexStack count) = "index_stack.pop(" ++ show count ++
       1 -> "index"
       _ -> "indices"
 displayStmt Stmt.PushIndexedTermToDataStack = "data_stack.push(input[index_stack])"
-displayStmt (Stmt.BuildCompoundTermFromDataStack term_count) =
+displayStmt (Stmt.BuildCompoundTermFromDataStack c) =
   "data_stack.push(new CompoundTerm(data_stack.pop(" 
-  ++ displayConstantExpr term_count 
+  ++ displayConstantExpr c 
   ++ ")))"
-displayStmt (Stmt.Jump label) = "jump to instruction " ++ show label
-displayStmt (Stmt.JumpWhenLessThan label when_var le_var) =
+displayStmt (Stmt.Jump l) = "jump to instruction " ++ show l
+displayStmt (Stmt.JumpWhenLessThan l w le) =
   "jump to instruction "
-    ++ show label
+    ++ show l
     ++ " when "
-    ++ displayVar when_var
+    ++ displayVar w
     ++ " < "
-    ++ displayVar le_var
+    ++ displayVar le
 
 displayVar :: Var -> String
 displayVar v = "var #" ++ show v
@@ -136,9 +135,9 @@ displayConstant = show
 displayExpr :: Expr -> String
 displayExpr (Expr.Var v) = displayVar v
 displayExpr (Expr.Constant c) = displayConstant c
-displayExpr (Expr.BinOp op lhs rhs) = displayVar lhs ++ opstr ++ displayConstantExpr rhs
+displayExpr (Expr.BinOp o l r) = displayVar l ++ opstr ++ displayConstantExpr r
   where
-    opstr = case op of
+    opstr = case o of
       Op.Add -> " + "
       Op.Sub -> " - "
 displayExpr Expr.Length = "input[index_stack].length()"

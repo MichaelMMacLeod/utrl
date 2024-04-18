@@ -24,11 +24,10 @@ import AstP0 (indexP0ByC0)
 import qualified AstP0
 import ConstantExpr (ConstantExpr (..))
 import Control.Comonad (Comonad (..))
-import Control.Comonad.Cofree (Cofree ((:<)), ComonadCofree (unwrap))
+import Control.Comonad.Cofree (Cofree, ComonadCofree (unwrap))
 import qualified Control.Comonad.Cofree as CCC
 import Control.Comonad.Trans.Cofree (CofreeF (..))
 import qualified Control.Comonad.Trans.Cofree as CCTC
-import Control.Monad.Reader (MonadReader (ask), Reader, runReader, withReader)
 import Control.Monad.State.Strict
   ( State,
     evalState,
@@ -36,7 +35,6 @@ import Control.Monad.State.Strict
     modify,
     runState,
   )
-import Control.Monad.Trans.Reader (asks)
 import Data.Either.Extra (maybeToEither)
 import Data.Functor.Foldable (ListF (..), Recursive (..), histo)
 import Data.HashMap.Strict ((!?))
@@ -100,9 +98,9 @@ compile1toP0 = histo go
       Ast1.EllipsesF x -> extract x
 
 data RuleDefinition = RuleDefinition
-  { variables :: [String],
-    pattern :: AstP0.Ast,
-    constructor :: Ast1.Ast
+  { _variables :: ![String],
+    _pattern :: !AstP0.Ast,
+    _constructor :: !Ast1.Ast
   }
 
 compile0toRuleDefinition :: Ast0.Ast -> CompileResult RuleDefinition
@@ -215,7 +213,7 @@ ruleDefinitionVariableBindings (RuleDefinition vars pat _) =
         maybeToEither VariableUsedMoreThanOnceInPattern combined
 
 ruleDefinitionPredicates :: RuleDefinition -> CompileResult [Predicate]
-ruleDefinitionPredicates (RuleDefinition vars pat _) = flip evalState [] $ cata go pat
+ruleDefinitionPredicates (RuleDefinition _vars pat _) = flip evalState [] $ cata go pat
   where
     go ::
       AstP0.AstF (State AstC0.Index (CompileResult [Predicate])) ->
