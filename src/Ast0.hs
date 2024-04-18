@@ -10,7 +10,6 @@ import Data.Functor.Foldable
     Corecursive,
     Recursive (..),
     embed,
-    histo,
     project,
   )
 

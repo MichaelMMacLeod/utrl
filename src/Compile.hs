@@ -38,7 +38,7 @@ import Control.Monad.State.Strict
   )
 import Control.Monad.Trans.Reader (asks)
 import Data.Either.Extra (maybeToEither)
-import Data.Functor.Foldable (ListF (..), histo, Recursive (..))
+import Data.Functor.Foldable (ListF (..), Recursive (..), histo)
 import Data.HashMap.Strict ((!?))
 import qualified Data.HashMap.Strict as H
 import Data.Hashable (Hashable)
@@ -167,6 +167,8 @@ compile0toRuleDefinition (Ast0.Compound xs) =
                     Right $ RuleDefinition vars pat' (compile0to1 constr)
             else Left InvalidRuleDefinition
 
+-- Returns the union of all hashmaps in the input list, or Nothing if there
+-- exists at least one key present in more than of the hashmaps.
 unionNonIntersectingHashMaps :: (Hashable k) => [H.HashMap k v] -> Maybe (H.HashMap k v)
 unionNonIntersectingHashMaps hs =
   let keyCountBeforeUnion = sum $ map (length . H.keys) hs
@@ -176,8 +178,18 @@ unionNonIntersectingHashMaps hs =
         then Just union
         else Nothing
 
+-- Returns a hashmap of variable names to their locations in the pattern
+-- of the given rule definition.
+--
+-- For example, in the following rule:
+--
+--  (def x y (0 1 x 3 4 (50 51 y)) -> result)
+--
+-- the variable 'x' is located at index [2], and the variable 'y' is
+-- located at index [5, 2]. Returns a compile error instead if any variable
+-- occurs more than once in the pattern.
 ruleDefinitionVariableBindings :: RuleDefinition -> CompileResult Variables
-ruleDefinitionVariableBindings (RuleDefinition vars pat _) = 
+ruleDefinitionVariableBindings (RuleDefinition vars pat _) =
   cata go (indexP0ByC0 pat)
   where
     go ::
@@ -193,16 +205,14 @@ ruleDefinitionVariableBindings (RuleDefinition vars pat _) =
           else Right H.empty
       _ CCTC.:< (AstP0.CompoundWithoutEllipsesF xs) -> do
         xs' <- sequence xs
-        maybeToEither
-          VariableUsedMoreThanOnceInPattern
-          (unionNonIntersectingHashMaps xs')
+        let combined = unionNonIntersectingHashMaps xs'
+        maybeToEither VariableUsedMoreThanOnceInPattern combined
       _ CCTC.:< (AstP0.CompoundWithEllipsesF b e a) -> do
         b' <- sequence b
         e' <- e
         a' <- sequence a
-        maybeToEither
-          VariableUsedMoreThanOnceInPattern
-          (unionNonIntersectingHashMaps $ e' : (b' ++ a'))
+        let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
+        maybeToEither VariableUsedMoreThanOnceInPattern combined
 
 ruleDefinitionPredicates :: RuleDefinition -> CompileResult [Predicate]
 ruleDefinitionPredicates (RuleDefinition vars pat _) = flip evalState [] $ cata go pat
