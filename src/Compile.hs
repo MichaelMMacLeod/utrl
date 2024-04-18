@@ -46,7 +46,7 @@ import Error (CompileError (..), CompileResult)
 import qualified Expr
 import GHC.Generics (Generic)
 import qualified Op
-import Predicate (Predicate)
+import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, SymbolEqualTo, LengthGreaterThanOrEqualTo))
 import Stmt (Stmt (..))
 import Var (Var)
 
@@ -212,13 +212,40 @@ ruleDefinitionVariableBindings (RuleDefinition vars pat _) =
         let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
         maybeToEither VariableUsedMoreThanOnceInPattern combined
 
-ruleDefinitionPredicates :: RuleDefinition -> CompileResult [Predicate]
-ruleDefinitionPredicates (RuleDefinition _vars pat _) = flip evalState [] $ cata go pat
+-- Returns a list of conditions that must hold for a given rule's pattern to
+-- match a term.
+--
+-- For example, in the following rule:
+--
+--   (def xs (flatten (list (list xs ..) ..)) -> (list xs .. ..))
+--
+-- the following conditions must hold if the rule is to match a given term:
+--
+-- - Index [] is a compound term of length == 2
+-- - Index [0] == "flatten"
+-- - Index [1] is a compound term of length >= 1
+-- - Index [1,0] == "list"
+-- - Indices [1,1..length] are compound terms of length >= 1
+-- - Indices [1,1..length,0] == "list" 
+ruleDefinitionPredicates :: RuleDefinition -> CompileResult [IndexedPredicate]
+ruleDefinitionPredicates (RuleDefinition vars pat _) = cata go (indexP0ByC0 pat)
   where
     go ::
-      AstP0.AstF (State AstC0.Index (CompileResult [Predicate])) ->
-      State AstC0.Index (CompileResult [Predicate])
-    go = undefined
+      CofreeF AstP0.AstF AstC0.Index (CompileResult [IndexedPredicate]) ->
+      CompileResult [IndexedPredicate]
+    go (index :< ast) = case ast of
+      AstP0.SymbolF s ->
+        Right [IndexedPredicate (SymbolEqualTo s) index | s `notElem` vars]
+      AstP0.CompoundWithoutEllipsesF xs -> do
+        xs' <- concat <$> sequence xs
+        let p = IndexedPredicate (LengthEqualTo (length xs)) index
+        pure $ p : xs'
+      AstP0.CompoundWithEllipsesF b e a -> do
+        b' <- concat <$> sequence b
+        e' <- e
+        a' <- concat <$> sequence a
+        let p = IndexedPredicate (LengthGreaterThanOrEqualTo $ length b + length a) index
+        pure $ p : (b' ++ e' ++ a')
 
 compile0to1 :: Ast0.Ast -> Ast1.Ast
 compile0to1 = cata $ \case

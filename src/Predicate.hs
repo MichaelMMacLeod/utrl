@@ -22,6 +22,7 @@ toFunc (LengthGreaterThanOrEqualTo n) (Ast0.Compound xs) = length xs >= n
 toFunc _ _ = False
 
 data IndexedPredicate = IndexedPredicate Predicate AstC0.Index
+  deriving (Eq, Show)
 
 applyPredicate :: IndexedPredicate -> Ast0.Ast -> Bool
 applyPredicate (IndexedPredicate p i) ast = all (toFunc p) (getAtC0Index i ast)

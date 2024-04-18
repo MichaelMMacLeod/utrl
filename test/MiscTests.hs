@@ -7,12 +7,7 @@ import AstC0
     getAtC0Index,
   )
 import qualified AstP0
-import Compile
-  ( compile0to1,
-    compile0toRuleDefinition,
-    compile1toP0,
-    ruleDefinitionVariableBindings,
-  )
+import Compile (compile0to1, compile0toRuleDefinition, compile1toP0, ruleDefinitionPredicates, ruleDefinitionVariableBindings)
 import Data.Either.Extra (fromRight')
 import qualified Data.HashMap.Strict as H
 import Error (CompileError (..), CompileResult)
@@ -182,7 +177,19 @@ tests =
       testCase "ruleDefinitionVariableBindings6" $
         ruleDefinitionVariableBindingsTest
           "(def a (a .. ((((((a)))) ..) ..)) -> 0)"
-          (Left VariableUsedMoreThanOnceInPattern)
+          (Left VariableUsedMoreThanOnceInPattern),
+      testCase "ruleDefinitionPredicates0" $
+        ruleDefinitionPredicatesTest
+          "(def xs (flatten (list (list xs ..) ..)) -> (list xs .. ..))"
+          ( Right
+              [ IndexedPredicate (LengthEqualTo 2) [],
+                IndexedPredicate (SymbolEqualTo "flatten") [ZeroPlus 0],
+                IndexedPredicate (LengthGreaterThanOrEqualTo 1) [ZeroPlus 1],
+                IndexedPredicate (SymbolEqualTo "list") [ZeroPlus 1, ZeroPlus 0],
+                IndexedPredicate (LengthGreaterThanOrEqualTo 1) [ZeroPlus 1, Between 1 0],
+                IndexedPredicate (SymbolEqualTo "list") [ZeroPlus 1, Between 1 0, ZeroPlus 0]
+              ]
+          )
     ]
 
 ruleDefinitionVariableBindingsTest :: String -> CompileResult [(String, AstC0.Index)] -> Assertion
@@ -191,6 +198,17 @@ ruleDefinitionVariableBindingsTest input expected =
     ""
     (fmap H.fromList expected)
     ( ruleDefinitionVariableBindings $
+        fromRight' $
+          compile0toRuleDefinition $
+            Read.read' input
+    )
+
+ruleDefinitionPredicatesTest :: String -> CompileResult [IndexedPredicate] -> Assertion
+ruleDefinitionPredicatesTest input expected =
+  assertEqual
+    ""
+    expected
+    ( ruleDefinitionPredicates $
         fromRight' $
           compile0toRuleDefinition $
             Read.read' input
