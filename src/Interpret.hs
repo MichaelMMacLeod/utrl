@@ -4,6 +4,7 @@ import qualified Ast0
 import ConstantExpr (ConstantExpr (..))
 import Data.List (unfoldr)
 import Data.Maybe (fromJust)
+import Debug.Trace (trace)
 import Display (display0, displayStmt)
 import Expr (Expr (..))
 import Op (BinOp (..))
@@ -94,10 +95,13 @@ interpret i stmts = head . _dataStack . last $ iterateMaybe transition initialSt
           BuildCompoundTermFromDataStack termCount ->
             let termCount' = evalConstantExpr m termCount
                 newTerm = Ast0.Compound . reverse $ take termCount' dataStack
-             in m
-                  { _dataStack = newTerm : drop termCount' dataStack,
-                    _currentInstruction = currentInstruction + 1
-                  }
+             in if termCount' > length dataStack
+                  then error "internal bug"
+                  else
+                    m
+                      { _dataStack = newTerm : drop termCount' dataStack,
+                        _currentInstruction = currentInstruction + 1
+                      }
           Jump l -> m {_currentInstruction = l}
           JumpWhenLessThan l w le ->
             let when_var' = evalConstantExpr m (ConstantExpr.Var w)

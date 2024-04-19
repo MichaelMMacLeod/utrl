@@ -374,39 +374,6 @@ data NamedLabel = TopOfLoop !Int | BotOfLoop !Int deriving (Eq, Generic)
 
 instance Hashable NamedLabel
 
--- data LoopPrologue = LoopPrologue
---   { -- The variable that will be incremented during each iteration of the loop.
---     var :: !Var,
---     -- The initial value assigned to 'var'.
---     start :: !Int,
---     -- Given an input term (for example, '(a b c d e f g)'), represents the number of terms
---     -- on the right that this loop will ignore. For example, if this
---     -- number is '3', then the loop will iterate over 'a b c d' but will end before reaching
---     -- 'e f g'.
---     numTrailingElementsSkipped :: !Int
---   }
-
--- makeLoopPrologue :: Var -> Int -> Int -> State C1ToStmtsState [Stmt NamedLabel]
--- makeLoopPrologue var start end = do
---   endVar <- newUniqueVar
-
---   return $
---     [Stmt.Assign {lhs = var, rhs = Expr.Constant end}]
---       ++ pushStackStmts
---       ++ [ Stmt.Assign {lhs = lengthVar, rhs = Expr.Length},
---            Stmt.Assign {lhs = endVar, rhs = Expr.Constant end},
---            Stmt.Assign
---              { lhs = endVar,
---                rhs =
---                  Expr.BinOp
---                    { Expr.op = Op.Sub,
---                      Expr.lhs = lengthVar,
---                      Expr.rhs = ConstantExpr.Var endVar
---                    }
---              },
---            Stmt.Jump $ TopOfLoop loopLabel
---          ]
-
 compileC1toStmts :: AstC1.Ast -> [Stmt NamedLabel]
 compileC1toStmts = fst . flip runState initialC1ToStmtsState . histo go
   where
@@ -422,13 +389,13 @@ compileC1toStmts = fst . flip runState initialC1ToStmtsState . histo go
     go = \case
       AstC1.SymbolF s -> return [PushSymbolToDataStack s]
       AstC1.CompoundF xs -> do
-        modify setIterationCountVar
         let g = map extract xs :: [State C1ToStmtsState [Stmt NamedLabel]]
             orig = map unwrap xs
             numLoopyBodies = length $ filter isLoopF orig
             numNonLoopyBodies = length orig - numLoopyBodies
-        xs' <- sequence g
+        modify setIterationCountVar
         count <- gets iterationCountVar
+        xs' <- sequence g
         case count of
           Nothing -> error "no iteration counter"
           Just count_var ->

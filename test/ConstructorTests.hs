@@ -6,12 +6,13 @@ import qualified AstC0
 import Compile (Variables)
 import qualified Compile
 import qualified Data.HashMap.Strict as H
+import Data.Text (Text, unpack)
 import qualified Display
 import qualified Interpret
 import qualified Read
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertEqual, assertFailure, testCase)
-import Data.Text (Text)
+import Debug.Trace (trace)
 
 tests :: TestTree
 tests =
@@ -118,7 +119,17 @@ tests =
           (H.fromList [("xs", [AstC0.Between 0 0, AstC0.Between 0 0])])
           "((x xs ..) ..)"
           "((a b c) () (1 2 3 4 5))"
-          "((x a b c) (x) (x 1 2 3 4 5))"
+          "((x a b c) (x) (x 1 2 3 4 5))",
+      testCase "compile17" $
+        constructorTest
+          ( H.fromList
+              [ ("n", [AstC0.ZeroPlus 1]),
+                ("m", [AstC0.ZeroPlus 2, AstC0.ZeroPlus 1])
+              ]
+          )
+          "(succ (add n m))"
+          "(add 3 (succ 2))"
+          "(succ (add 3 2))"
     ]
 
 constructorTest :: Variables -> Text -> Text -> String -> Assertion

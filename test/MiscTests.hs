@@ -13,6 +13,7 @@ import Compile (compile0to1, compile0toRuleDefinition, compile1toP0, ruleDefinit
 import Data.Either.Extra (fromRight')
 import qualified Data.HashMap.Strict as H
 import Data.Text (Text)
+import Environment (Environment (Environment), createEnvironment)
 import Error (CompileError (..), CompileResult)
 import Predicate
   ( IndexedPredicate (IndexedPredicate),
@@ -22,6 +23,7 @@ import Predicate
 import qualified Read
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertBool, assertEqual, testCase)
+import Data.Graph.Inductive (Graph(mkGraph))
 
 tests :: TestTree
 tests =
@@ -115,6 +117,23 @@ tests =
                 IndexedPredicate (SymbolEqualTo "list") [ZeroPlus 1, Between 1 0, ZeroPlus 0]
               ]
           )
+      --     ,
+      -- testCase "createEnvironment0" $
+      --   assertEqual
+      --     ""
+      --     ( Right $
+      --         Environment
+      --           (mkGraph
+      --             [
+      --               (0, [])
+      --             ]
+      --             [])
+      --           0
+      --     )
+      --     ( createEnvironment
+      --         "(def n m (add n (succ m)) -> (succ (add n m)))\
+      --         \(def n (add n 0) -> n)"
+      --     )
     ]
 
 compoundToList :: Ast -> [Ast]
