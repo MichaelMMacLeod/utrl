@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module ConstructorTests (tests) where
 
 import qualified AstC0
@@ -9,6 +11,7 @@ import qualified Interpret
 import qualified Read
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertEqual, assertFailure, testCase)
+import Data.Text (Text)
 
 tests :: TestTree
 tests =
@@ -118,7 +121,7 @@ tests =
           "((x a b c) (x) (x 1 2 3 4 5))"
     ]
 
-constructorTest :: Variables -> Text -> String -> String -> Assertion
+constructorTest :: Variables -> Text -> Text -> String -> Assertion
 constructorTest vars constructor input expectedOutput = do
   let inputAst = head <$> Read.read input
   case inputAst of

@@ -5,8 +5,6 @@ type CompileResult a = Either CompileError a
 
 data CompileError
   = ParsecParseError ParseError
-  | NoInput
-  | ExpectedLeftParen
   | TooFewEllipsesInConstructor
   | TooManyEllipsesInConstructor
   | VarsNotCapturedUnderSameEllipsisInConstructor

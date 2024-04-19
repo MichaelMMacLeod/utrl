@@ -1,6 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module ReadTests where
 
 import qualified Ast0
+import Data.Text (Text, pack)
 import Error (CompileResult)
 import Hedgehog (MonadGen, Property, evalEither, forAll, property)
 import qualified Hedgehog.Gen as Gen
@@ -37,7 +40,7 @@ tests =
       testProperty "readN" termIsReadable
     ]
 
-readTest :: Int -> String -> CompileResult [Ast0.Ast] -> TestTree
+readTest :: Int -> Text -> CompileResult [Ast0.Ast] -> TestTree
 readTest number input expected =
   testCase ("readTest#" ++ show number) $
     assertEqual "" expected (Read.read input)
@@ -60,6 +63,6 @@ genTerm =
 termIsReadable :: Property
 termIsReadable =
   property $ do
-    term <- forAll genTerm
+    term <- pack <$> forAll genTerm
     _ <- evalEither $ Read.read term
     success

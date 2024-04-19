@@ -1,13 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeFamilies #-}
-
 module Read (parseRW, Read.read, read') where
 
 import qualified Ast0
 import Control.Comonad.Identity (Identity)
 import Data.Char (isSpace)
 import Data.Either.Extra (fromRight', mapLeft)
-import Data.Text (Text, pack)
+import Data.Text (Text)
 import Error (CompileError (..), CompileResult)
 import Text.Parsec
   ( ParseError,
@@ -16,11 +13,12 @@ import Text.Parsec
     between,
     choice,
     eof,
-    many,
     many1,
     satisfy,
     sepBy,
+    skipMany1,
     space,
+    spaces,
   )
 import Text.Parsec.Char (char)
 import Text.ParserCombinators.Parsec (parse)
@@ -38,7 +36,7 @@ parseRW = parse rwFile ""
 
 rwFile :: Parsec Text () [Ast0.Ast]
 rwFile = do
-  ast <- between (many space) (many space) (term `sepBy` many space)
+  ast <- between spaces spaces (term `sepBy` spaces)
   eof
   pure ast
 
@@ -49,7 +47,7 @@ compoundTerm :: ParsecT Text () Identity Ast0.Ast
 compoundTerm = Ast0.Compound <$> between (char '(') (char ')') compoundTermInternals
 
 compoundTermInternals :: ParsecT Text () Identity [Ast0.Ast]
-compoundTermInternals = between (many space) (many space) (term `sepBy` many1 space)
+compoundTermInternals = between spaces spaces (term `sepBy` skipMany1 space)
 
 symbolTerm :: ParsecT Text () Identity Ast0.Ast
 symbolTerm = Ast0.Symbol <$> many1 symbolChar

@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module MiscTests (tests) where
 
 import Ast0 (Ast (..))
@@ -10,6 +12,7 @@ import qualified AstP0
 import Compile (compile0to1, compile0toRuleDefinition, compile1toP0, ruleDefinitionPredicates, ruleDefinitionVariableBindings)
 import Data.Either.Extra (fromRight')
 import qualified Data.HashMap.Strict as H
+import Data.Text (Text)
 import Error (CompileError (..), CompileResult)
 import Predicate
   ( IndexedPredicate (IndexedPredicate),
@@ -19,40 +22,6 @@ import Predicate
 import qualified Read
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertBool, assertEqual, testCase)
-
-compoundToList :: Ast -> [Ast]
-compoundToList (Compound xs) = xs
-compoundToList _ = error "expected compound in compoundToList"
-
-getAtC0IndexTest :: Int -> String -> AstC0.Index -> String -> TestTree
-getAtC0IndexTest number input index expected =
-  testCase ("getAtC0IndexTest#" ++ show number) $
-    assertEqual
-      ""
-      (compoundToList $ head $ Read.read' expected)
-      ( getAtC0Index
-          index
-          (head $ Read.read' input)
-      )
-
-applyPredicateTest :: Int -> String -> Predicate -> AstC0.Index -> Bool -> TestTree
-applyPredicateTest number input predicate index expected =
-  testCase ("applyPredicate#" ++ show number) $
-    assertBool
-      ""
-      ( expected
-          == applyPredicate
-            (IndexedPredicate predicate index)
-            (head $ Read.read' input)
-      )
-
-compile1ToP0Test :: Int -> String -> CompileResult AstP0.Ast -> TestTree
-compile1ToP0Test number input expected =
-  testCase ("compile1ToP0#" ++ show number) $
-    assertEqual
-      ""
-      expected
-      (compile1toP0 (compile0to1 $ head $ Read.read' input))
 
 tests :: TestTree
 tests =
@@ -75,23 +44,25 @@ tests =
       compile1ToP0Test
         0
         "(a b c .. d e)"
-        ( Right $ AstP0.CompoundWithEllipses
-            [AstP0.Symbol "a", AstP0.Symbol "b"]
-            (AstP0.Symbol "c")
-            [AstP0.Symbol "d", AstP0.Symbol "e"]
+        ( Right $
+            AstP0.CompoundWithEllipses
+              [AstP0.Symbol "a", AstP0.Symbol "b"]
+              (AstP0.Symbol "c")
+              [AstP0.Symbol "d", AstP0.Symbol "e"]
         ),
       compile1ToP0Test
         1
         "(a b c d e)"
-        ( Right $ AstP0.CompoundWithoutEllipses
+        ( Right $
+            AstP0.CompoundWithoutEllipses
               [ AstP0.Symbol "a",
                 AstP0.Symbol "b",
                 AstP0.Symbol "c",
                 AstP0.Symbol "d",
                 AstP0.Symbol "e"
               ]
-          ),
-      compile1ToP0Test 2 "(a .. b c d .. e)"  (Left MoreThanOneEllipsisInSingleCompoundTermOfPattern),
+        ),
+      compile1ToP0Test 2 "(a .. b c d .. e)" (Left MoreThanOneEllipsisInSingleCompoundTermOfPattern),
       testCase "ruleDefinitionVariableBindings0" $
         ruleDefinitionVariableBindingsTest
           "(def a a -> 0)"
@@ -146,7 +117,41 @@ tests =
           )
     ]
 
-ruleDefinitionVariableBindingsTest :: String -> CompileResult [(String, AstC0.Index)] -> Assertion
+compoundToList :: Ast -> [Ast]
+compoundToList (Compound xs) = xs
+compoundToList _ = error "expected compound in compoundToList"
+
+getAtC0IndexTest :: Int -> Text -> AstC0.Index -> Text -> TestTree
+getAtC0IndexTest number input index expected =
+  testCase ("getAtC0IndexTest#" ++ show number) $
+    assertEqual
+      ""
+      (compoundToList $ head $ Read.read' expected)
+      ( getAtC0Index
+          index
+          (head $ Read.read' input)
+      )
+
+applyPredicateTest :: Int -> Text -> Predicate -> AstC0.Index -> Bool -> TestTree
+applyPredicateTest number input predicate index expected =
+  testCase ("applyPredicate#" ++ show number) $
+    assertBool
+      ""
+      ( expected
+          == applyPredicate
+            (IndexedPredicate predicate index)
+            (head $ Read.read' input)
+      )
+
+compile1ToP0Test :: Int -> Text -> CompileResult AstP0.Ast -> TestTree
+compile1ToP0Test number input expected =
+  testCase ("compile1ToP0#" ++ show number) $
+    assertEqual
+      ""
+      expected
+      (compile1toP0 (compile0to1 $ head $ Read.read' input))
+
+ruleDefinitionVariableBindingsTest :: Text -> CompileResult [(String, AstC0.Index)] -> Assertion
 ruleDefinitionVariableBindingsTest input expected =
   assertEqual
     ""
@@ -158,7 +163,7 @@ ruleDefinitionVariableBindingsTest input expected =
               Read.read' input
     )
 
-ruleDefinitionPredicatesTest :: String -> CompileResult [IndexedPredicate] -> Assertion
+ruleDefinitionPredicatesTest :: Text -> CompileResult [IndexedPredicate] -> Assertion
 ruleDefinitionPredicatesTest input expected =
   assertEqual
     ""
