@@ -118,14 +118,14 @@ tests =
           "((x a b c) (x) (x 1 2 3 4 5))"
     ]
 
-constructorTest :: Variables -> String -> String -> String -> Assertion
+constructorTest :: Variables -> Text -> String -> String -> Assertion
 constructorTest vars constructor input expectedOutput = do
-  let inputAst = Read.read input
+  let inputAst = head <$> Read.read input
   case inputAst of
     Left e -> assertFailure ("inputAst read error " ++ show e)
     Right inputAst' -> do
       let stmts = do
-            constructorAst <- Read.read constructor
+            constructorAst <- head <$> Read.read constructor
             Compile.compile vars constructorAst
       case stmts of
         Left e -> assertFailure ("constructor compile error " ++ show e)

@@ -67,6 +67,7 @@ library
         , Compile
         , ConstantExpr
         , Display
+        , Environment
         , Error
         , Expr
         , Interpret
@@ -91,10 +92,13 @@ library
         , unordered-containers
         , mtl
         , free
+        , fgl
         , hashable
         , transformers
         , comonad
         , extra
+        , parsec
+        , text
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -170,3 +174,6 @@ test-suite rw-test
         , recursion-schemes
         , unordered-containers
         , extra
+        , fgl
+        , text
+

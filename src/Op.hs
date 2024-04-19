@@ -1,3 +1,3 @@
 module Op (BinOp (..)) where
 
-data BinOp = Add | Sub deriving (Show)
+data BinOp = Add | Sub deriving (Show, Eq, Ord)

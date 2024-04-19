@@ -28,4 +28,4 @@ data Stmt l
         when_var :: Var,
         le_var :: Var
       }
-  deriving (Show, Functor)
+  deriving (Show, Functor, Eq, Ord)

@@ -13,4 +13,4 @@ data Expr
         rhs :: ConstantExpr
       }
   | Length
-  deriving (Show)
+  deriving (Show, Eq, Ord)

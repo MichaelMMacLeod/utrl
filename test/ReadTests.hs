@@ -1,6 +1,7 @@
 module ReadTests where
 
 import qualified Ast0
+import Error (CompileResult)
 import Hedgehog (MonadGen, Property, evalEither, forAll, property)
 import qualified Hedgehog.Gen as Gen
 import Hedgehog.Internal.Property (success)
@@ -14,12 +15,32 @@ tests :: TestTree
 tests =
   testGroup
     "read tests"
-    [ testCase "read0" $
-        assertEqual "" (Right $ Ast0.Symbol "hello-world") (Read.read "hello-world"),
-      testCase "read1" $
-        assertEqual "" (Right $ Ast0.Compound [Ast0.Symbol "x", Ast0.Symbol "y"]) (Read.read "(x y)"),
-      testProperty "read2" termIsReadable
+    [ readTest 0 "hello-world" (Right [Ast0.Symbol "hello-world"]),
+      readTest 1 "(x y)" (Right [Ast0.Compound [Ast0.Symbol "x", Ast0.Symbol "y"]]),
+      readTest 2 "()" (Right [Ast0.Compound []]),
+      readTest
+        3
+        "(     \n\n\r\r \n    )"
+        (Right [Ast0.Compound []]),
+      readTest
+        4
+        "(     \n\n\r\r \n    )\n     \r()"
+        (Right [Ast0.Compound [], Ast0.Compound []]),
+      readTest
+        5
+        "(a b)(c d)"
+        ( Right
+            [ Ast0.Compound [Ast0.Symbol "a", Ast0.Symbol "b"],
+              Ast0.Compound [Ast0.Symbol "c", Ast0.Symbol "d"]
+            ]
+        ),
+      testProperty "readN" termIsReadable
     ]
+
+readTest :: Int -> String -> CompileResult [Ast0.Ast] -> TestTree
+readTest number input expected =
+  testCase ("readTest#" ++ show number) $
+    assertEqual "" expected (Read.read input)
 
 genSymbol :: (MonadGen m) => m String
 genSymbol = Gen.string (Range.linear 1 16) Gen.alphaNum

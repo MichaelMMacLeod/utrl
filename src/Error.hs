@@ -1,9 +1,11 @@
 module Error (CompileError(..), CompileResult) where
+import Text.Parsec (ParseError)
 
 type CompileResult a = Either CompileError a
 
 data CompileError
-  = NoInput
+  = ParsecParseError ParseError
+  | NoInput
   | ExpectedLeftParen
   | TooFewEllipsesInConstructor
   | TooManyEllipsesInConstructor

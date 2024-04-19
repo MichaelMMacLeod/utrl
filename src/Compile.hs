@@ -12,7 +12,9 @@ module Compile
     compile1toC0,
     compileC0toC1,
     compileC1toStmts,
+    compileRule,
     Variables,
+    RuleDefinition (..),
   )
 where
 
@@ -98,8 +100,15 @@ compile1toP0 = histo go
 data RuleDefinition = RuleDefinition
   { _variables :: ![String],
     _pattern :: !AstP0.Ast,
-    _constructor :: !Ast1.Ast
+    _constructor :: !Ast0.Ast
   }
+
+compileRule :: RuleDefinition -> CompileResult ([IndexedPredicate], [Stmt Int])
+compileRule rule@(RuleDefinition _ _ constructor) = do
+  vars <- ruleDefinitionVariableBindings rule
+  preds <- ruleDefinitionPredicates rule
+  stmts <- compile vars constructor
+  Right (preds, stmts)
 
 compile0toRuleDefinition :: Ast0.Ast -> CompileResult RuleDefinition
 compile0toRuleDefinition (Ast0.Symbol _) = Left InvalidRuleDefinition
@@ -160,7 +169,7 @@ compile0toRuleDefinition (Ast0.Compound xs) =
                   constr = ruleDefinitionConstructor xs
                in do
                     pat' <- compile1toP0 pat
-                    Right $ RuleDefinition vars pat' (compile0to1 constr)
+                    Right $ RuleDefinition vars pat' constr
             else Left InvalidRuleDefinition
 
 -- Returns the union of all hashmaps in the input list, or Nothing if there

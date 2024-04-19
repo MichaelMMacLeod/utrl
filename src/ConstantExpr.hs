@@ -5,4 +5,4 @@ import Var (Var)
 data ConstantExpr
   = Var Var
   | Constant Int
-  deriving (Show)
+  deriving (Show, Eq, Ord)

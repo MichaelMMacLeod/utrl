@@ -31,7 +31,7 @@ data IndexElement
       { zeroPlus :: Int,
         lenMinus :: Int
       }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
 
 type Index = [IndexElement]
 

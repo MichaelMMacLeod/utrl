@@ -1,29 +1,58 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Read (Read.read, Read.read') where
+module Read (parseRW, Read.read, read') where
 
 import qualified Ast0
-import Error (CompileError)
-import qualified Error
-import Lex (Token (..), lex)
-import Data.Either.Extra (fromRight')
+import Control.Comonad.Identity (Identity)
+import Data.Char (isSpace)
+import Data.Either.Extra (fromRight', mapLeft)
+import Data.Text (Text, pack)
+import Error (CompileError (..), CompileResult)
+import Text.Parsec
+  ( ParseError,
+    Parsec,
+    ParsecT,
+    between,
+    choice,
+    eof,
+    many,
+    many1,
+    satisfy,
+    sepBy,
+    space,
+  )
+import Text.Parsec.Char (char)
+import Text.ParserCombinators.Parsec (parse)
 
-read :: String -> Either CompileError Ast0.Ast
-read = parse . Lex.lex
+read :: Text -> CompileResult [Ast0.Ast]
+read input = mapLeft ParsecParseError (parseRW input)
 
 -- Partial read, which errors at runtime on compile errors. Useful for reducing
 -- boilerplate for tests.
-read' :: String -> Ast0.Ast
+read' :: Text -> [Ast0.Ast]
 read' = fromRight' . Read.read
 
-parse :: [Token] -> Either CompileError Ast0.Ast
-parse xs = go xs []
-  where
-    go :: [Token] -> [[Ast0.Ast]] -> Either CompileError Ast0.Ast
-    go (TLeft : ts) acc = go ts ([] : acc)
-    go (TRight : ts) (a1 : a2 : acc) = let c = Ast0.Compound (reverse a1) in go ts ((c : a2) : acc)
-    go (TRight : _) [a1] = Right $ Ast0.Compound (reverse a1)
-    go (TRight : _) [] = Left Error.ExpectedLeftParen
-    go (TSymbol s : ts) (a : acc) = go ts ((Ast0.Symbol s : a) : acc)
-    go (TSymbol s : _) [] = Right $ Ast0.Symbol s
-    go [] _ = Left Error.NoInput
+parseRW :: Text -> Either ParseError [Ast0.Ast]
+parseRW = parse rwFile ""
+
+rwFile :: Parsec Text () [Ast0.Ast]
+rwFile = do
+  ast <- between (many space) (many space) (term `sepBy` many space)
+  eof
+  pure ast
+
+term :: ParsecT Text () Identity Ast0.Ast
+term = choice [compoundTerm, symbolTerm]
+
+compoundTerm :: ParsecT Text () Identity Ast0.Ast
+compoundTerm = Ast0.Compound <$> between (char '(') (char ')') compoundTermInternals
+
+compoundTermInternals :: ParsecT Text () Identity [Ast0.Ast]
+compoundTermInternals = between (many space) (many space) (term `sepBy` many1 space)
+
+symbolTerm :: ParsecT Text () Identity Ast0.Ast
+symbolTerm = Ast0.Symbol <$> many1 symbolChar
+
+symbolChar :: ParsecT Text () Identity Char
+symbolChar = satisfy $ \c -> not (isSpace c) && c /= '(' && c /= ')'
