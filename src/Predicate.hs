@@ -26,3 +26,6 @@ data IndexedPredicate = IndexedPredicate Predicate AstC0.Index
 
 applyPredicate :: IndexedPredicate -> Ast0.Ast -> Bool
 applyPredicate (IndexedPredicate p i) ast = all (toFunc p) (getAtC0Index i ast)
+
+applyPredicates :: [IndexedPredicate] -> Ast0.Ast -> Bool
+applyPredicates ps x = all (($ x) . applyPredicate) ps
