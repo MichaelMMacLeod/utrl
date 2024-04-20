@@ -2,7 +2,7 @@
 
 module MiscTests (tests) where
 
-import Ast0 (Ast (..))
+import Ast0 (Ast (..), replace0At)
 import AstC0
   ( Index,
     IndexElement (Between, LenMinus, ZeroPlus),
@@ -11,6 +11,7 @@ import AstC0
 import qualified AstP0
 import Compile (compile0to1, compile0toRuleDefinition, compile1toP0, ruleDefinitionPredicates, ruleDefinitionVariableBindings)
 import Data.Either.Extra (fromRight')
+import Data.Graph.Inductive (Graph (mkGraph))
 import qualified Data.HashMap.Strict as H
 import Data.Text (Text)
 import Environment (Environment (Environment), createEnvironment)
@@ -23,7 +24,6 @@ import Predicate
 import qualified Read
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertBool, assertEqual, testCase)
-import Data.Graph.Inductive (Graph(mkGraph))
 
 tests :: TestTree
 tests =
@@ -116,7 +116,19 @@ tests =
                 IndexedPredicate (LengthGreaterThanOrEqualTo 1) [ZeroPlus 1, Between 1 0],
                 IndexedPredicate (SymbolEqualTo "list") [ZeroPlus 1, Between 1 0, ZeroPlus 0]
               ]
-          )
+          ),
+      testCase ("replace0At#" ++ show 0) $
+        assertEqual
+          ""
+          (head $ Read.read' "(0 1 2 THREE 4 5)")
+          ( replace0At
+              (head $ Read.read' "(0 1 2 3 4 5)")
+              [3]
+              (head $ Read.read' "THREE")
+          ),
+      replaceAtTest 0 "(0 1 2 3 4 5)" [3] "THREE" "(0 1 2 THREE 4 5)",
+      replaceAtTest 1 "(0 (10 11))" [1, 0] "ten" "(0 (ten 11))",
+      replaceAtTest 2 "()" [1, 2, 3, 4, 5] "x" "()"
       --     ,
       -- testCase "createEnvironment0" $
       --   assertEqual
@@ -135,6 +147,18 @@ tests =
       --         \(def n (add n 0) -> n)"
       --     )
     ]
+
+replaceAtTest :: Int -> Text -> [Int] -> Text -> Text -> TestTree
+replaceAtTest number ast index replacement expected =
+  testCase ("replace0At#" ++ show number) $
+    assertEqual
+      ""
+      (head $ Read.read' expected)
+      ( replace0At
+          (head $ Read.read' ast)
+          index
+          (head $ Read.read' replacement)
+      )
 
 compoundToList :: Ast -> [Ast]
 compoundToList (Compound xs) = xs
