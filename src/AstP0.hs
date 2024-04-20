@@ -1,13 +1,9 @@
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module AstP0 (Ast (..), AstF (..), indexP0ByC0) where
 
-import AstC0 qualified
+import qualified AstC0
 import Control.Comonad.Cofree (Cofree (..))
-import Control.Monad.Reader (MonadReader (ask), Reader, runReader, withReader)
 import Data.Functor.Foldable
   ( Base,
     Corecursive,
@@ -28,43 +24,21 @@ data Ast
       }
   deriving (Show, Eq)
 
-type RR = Reader AstC0.Index (Cofree AstF AstC0.Index)
-
 indexP0ByC0 :: Ast -> Cofree AstF AstC0.Index
-indexP0ByC0 = flip runReader [] . cata go
+indexP0ByC0 ast = cata go ast []
   where
-    go :: AstF RR -> RR
-    go = \case
-      SymbolF s -> do
-        index <- ask
-        pure $ index :< SymbolF s
-      CompoundWithoutEllipsesF xs -> do
-        index <- ask
-        let xs' = map (`runReader` []) $ zipWith (setZeroPlusReader index) [0 ..] xs
-        pure $ index :< CompoundWithoutEllipsesF xs'
-      CompoundWithEllipsesF b e a -> do
-        index <- ask
-        let b' = map (`runReader` []) $ zipWith (setZeroPlusReader index) [0 ..] b
-            e' = runReader (setBetweenReader index (length b) (length a) e) []
-            a' = map (`runReader` []) $ reverse $ zipWith (setLenMinusReader index) [1 ..] $ reverse a
-        pure $ index :< CompoundWithEllipsesF b' e' a'
-
-    setZeroPlusReader,
-      setLenMinusReader ::
-        AstC0.Index ->
-        Int ->
-        Reader AstC0.Index a ->
-        Reader AstC0.Index a
-    setZeroPlusReader index i = withReader $ const $ snoc index $ AstC0.ZeroPlus i
-    setLenMinusReader index i = withReader $ const $ snoc index $ AstC0.LenMinus i
-
-    setBetweenReader ::
-      AstC0.Index ->
-      Int ->
-      Int ->
-      Reader AstC0.Index a ->
-      Reader AstC0.Index a
-    setBetweenReader index b a = withReader $ const $ snoc index $ AstC0.Between b a
+    go ::
+      AstF (AstC0.Index -> Cofree AstF AstC0.Index) ->
+      (AstC0.Index -> Cofree AstF AstC0.Index)
+    go (SymbolF s) index = index :< SymbolF s
+    go (CompoundWithoutEllipsesF xs) index =
+      let xs' = zipWith (. snoc index . AstC0.ZeroPlus) xs [0 ..]
+       in index :< CompoundWithoutEllipsesF xs'
+    go (CompoundWithEllipsesF b e a) index =
+      let b' = zipWith (. snoc index . AstC0.ZeroPlus) b [0 ..]
+          e' = e $ snoc index $ AstC0.Between (length b) (length a)
+          a' = reverse $ zipWith (. snoc index . AstC0.LenMinus) (reverse a) [1 ..]
+       in index :< CompoundWithEllipsesF b' e' a'
 
 data AstF r
   = SymbolF String
