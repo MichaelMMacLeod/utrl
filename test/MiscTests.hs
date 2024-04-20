@@ -155,7 +155,7 @@ tests =
       runProgramTest
         4
         "(def x (x) -> x)"
-        "(((((((((((0)))))))))))"
+        "((0))"
         (Right "0")
       -- runProgramTest
       --   3

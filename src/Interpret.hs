@@ -11,7 +11,8 @@ import Control.Comonad.Env (ComonadTrans (lower), extract)
 import Control.Comonad.Trans.Cofree (CofreeF, ComonadCofree (unwrap), tailF)
 import qualified Control.Comonad.Trans.Cofree as CCTC
 import Data.Foldable (find)
-import Data.Functor.Foldable (Base, Corecursive (..), cata)
+import Data.Functor.Base (ListF)
+import Data.Functor.Foldable (Base, Corecursive (..), ListF (Cons, Nil), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.List (unfoldr)
 import Data.Maybe (catMaybes, fromJust, listToMaybe)
@@ -41,7 +42,8 @@ runProgram rules input = do
 interpretInEnvironment :: Environment -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
 interpretInEnvironment e input =
   let initialMatcher = Matcher (_start e) input
-   in _ast $ last $ iterateMaybe (transitionInEnvironment e) initialMatcher
+   in --  in _ast $ last $ (\x -> trace (show (map (display0 . uncofree . _ast) x)) x) $ iterateMaybe (\m -> trace (display0 $ uncofree (_ast m)) $ transitionInEnvironment e m) initialMatcher
+      _ast $ last $ (\x -> trace (show (map (display0 . uncofree . _ast) x)) x) $ iterateMaybe (transitionInEnvironment e) initialMatcher
 
 uncofree :: Cofree Ast0.AstF [Int] -> Ast0.Ast
 uncofree = cata go
@@ -49,9 +51,11 @@ uncofree = cata go
     go :: CofreeF Ast0.AstF [Int] Ast0.Ast -> Ast0.Ast
     go (_ CCTC.:< ast) = embed ast
 
+-- data TransitionResult = Done Ast0.Ast | Continue Matcher
+
 transitionInEnvironment :: Environment -> Matcher -> Maybe Matcher
 transitionInEnvironment environment matcher =
-  trace (display0 $ uncofree (_ast matcher)) $
+  -- trace (display0 $ uncofree (_ast matcher)) $
   let currentNode = _node matcher
       currentAst = _ast matcher
       graph = _graph environment
@@ -61,7 +65,12 @@ transitionInEnvironment environment matcher =
         Just nextNode ->
           let constructor = snd $ labNode' $ context graph nextNode
               nextAst = interpret (uncofree currentAst) constructor
-           in Just $ Matcher nextNode (index0 nextAst)
+              nextNodeNeighbors = lsuc graph nextNode
+              newNode =
+                if null nextNodeNeighbors
+                  then _start environment
+                  else nextNode
+           in Just $ Matcher newNode (index0 nextAst)
         Nothing -> case unwrap currentAst of
           Ast0.SymbolF _ -> Nothing
           Ast0.CompoundF xs ->
@@ -126,7 +135,11 @@ setNth i x xs = left ++ [x] ++ right
     right = drop (i + 1) xs
 
 iterateMaybe :: (b -> Maybe b) -> b -> [b]
-iterateMaybe f = unfoldr (fmap (\s -> (s, s)) . f)
+iterateMaybe f b = b : ana go b
+  where
+    go x = case f x of
+      Nothing -> Nil
+      Just x' -> Cons x' x'
 
 interpret :: Ast0.Ast -> [Stmt Int] -> Ast0.Ast
 interpret i stmts = head . _dataStack . last $ iterateMaybe transition initialState
