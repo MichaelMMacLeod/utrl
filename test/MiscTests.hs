@@ -16,6 +16,7 @@ import qualified Data.HashMap.Strict as H
 import Data.Text (Text)
 import Environment (Environment (Environment), createEnvironment)
 import Error (CompileError (..), CompileResult)
+import Interpret (runProgram)
 import Predicate
   ( IndexedPredicate (IndexedPredicate),
     Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo),
@@ -128,25 +129,66 @@ tests =
           ),
       replaceAtTest 0 "(0 1 2 3 4 5)" [3] "THREE" "(0 1 2 THREE 4 5)",
       replaceAtTest 1 "(0 (10 11))" [1, 0] "ten" "(0 (ten 11))",
-      replaceAtTest 2 "()" [1, 2, 3, 4, 5] "x" "()"
-      --     ,
-      -- testCase "createEnvironment0" $
-      --   assertEqual
-      --     ""
-      --     ( Right $
-      --         Environment
-      --           (mkGraph
-      --             [
-      --               (0, [])
-      --             ]
-      --             [])
-      --           0
-      --     )
-      --     ( createEnvironment
-      --         "(def n m (add n (succ m)) -> (succ (add n m)))\
-      --         \(def n (add n 0) -> n)"
-      --     )
+      replaceAtTest 2 "()" [1, 2, 3, 4, 5] "x" "()",
+      runProgramTest
+        0
+        "(def x -> y)"
+        "x"
+        (Right "y"),
+      runProgramTest
+        1
+        "(def a -> A)\
+        \(def b -> B)"
+        "a"
+        (Right "A"),
+      runProgramTest
+        2
+        "(def a -> A)\
+        \(def b -> B)"
+        "b"
+        (Right "B"),
+      runProgramTest
+        3
+        "(def x y (x y) -> y)"
+        "(a (b (c (d (f (g (h e)))))))"
+        (Right "e"),
+      runProgramTest
+        4
+        "(def x (x) -> x)"
+        "(((((((((((0)))))))))))"
+        (Right "0")
+      -- runProgramTest
+      --   3
+      --   "(def n (add n 0) -> n)\
+      --   \(def n m (add n (succ m)) -> (succ (add n m)))"
+      --   "(add 0 (succ (succ (succ 0))))"
+      --   (Right "(succ (succ (succ 0)))")
+        --     ,
+        -- testCase "createEnvironment0" $
+        --   assertEqual
+        --     ""
+        --     ( Right $
+        --         Environment
+        --           (mkGraph
+        --             [
+        --               (0, [])
+        --             ]
+        --             [])
+        --           0
+        --     )
+        --     ( createEnvironment
+        --         "(def n m (add n (succ m)) -> (succ (add n m)))\
+        --         \(def n (add n 0) -> n)"
+        --     )
     ]
+
+runProgramTest :: Int -> Text -> Text -> CompileResult Text -> TestTree
+runProgramTest number rules input expected =
+  testCase ("runProgram#" ++ show number) $
+    assertEqual
+      ""
+      (head . Read.read' <$> expected)
+      (runProgram rules input)
 
 replaceAtTest :: Int -> Text -> [Int] -> Text -> Text -> TestTree
 replaceAtTest number ast index replacement expected =
