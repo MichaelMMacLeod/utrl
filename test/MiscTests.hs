@@ -150,19 +150,98 @@ tests =
       runProgramTest
         3
         "(def x y (x y) -> y)"
-        "(a (b (c (d (f (g (h e)))))))"
-        (Right "e"),
+        "(a (b (c (d (e (f (g h)))))))"
+        (Right "h"),
       runProgramTest
         4
         "(def x (x) -> x)"
         "((0))"
-        (Right "0")
-      -- runProgramTest
-      --   3
-      --   "(def n (add n 0) -> n)\
-      --   \(def n m (add n (succ m)) -> (succ (add n m)))"
-      --   "(add 0 (succ (succ (succ 0))))"
-      --   (Right "(succ (succ (succ 0)))")
+        (Right "0"),
+      runProgramTest
+        5
+        "(def x (x) -> x)"
+        "(0)"
+        (Right "0"),
+      runProgramTest
+        6
+        "(def n (add n 0) -> n)\
+        \(def n m (add n (succ m)) -> (succ (add n m)))"
+        "(add 0 (succ 0))"
+        (Right "(succ 0)"),
+      runProgramTest
+        7
+        "(def n (1 (2 n)) -> n)"
+        "(1 (2 3))"
+        (Right "3"),
+      runProgramTest
+        8
+        "(def n (1 (2 (3 n))) -> n)"
+        "(1 (2 (3 4)))"
+        (Right "4"),
+      runProgramTest
+        9
+        "(def (A B) -> C)\
+        \(def b -> B)"
+        "(A b)"
+        (Right "C"),
+      runProgramTest
+        10
+        "(def (A B) -> B)\
+        \(def b -> B)"
+        "(A (A b))"
+        (Right "B"),
+      runProgramTest
+        11
+        "(def n (add n 0) -> n)\
+        \(def n m (add n (succ m)) -> (succ (add n m)))"
+        "(add 0 (succ (succ 0)))"
+        (Right "(succ (succ 0))"),
+      runProgramTest
+        12
+        "(def 1 -> (S 0))\
+        \(def 2 -> (S 1))\
+        \(def 3 -> (S 2))\
+        \(def 4 -> (S 3))\
+        \(def 5 -> (S 4))\
+        \(def 6 -> (S 5))\
+        \(def 7 -> (S 6))\
+        \(def 8 -> (S 7))\
+        \(def n   (+ n    0)  ->       n)\
+        \(def n m (+ n (S m)) -> (+ (S n) m))\
+        \(def   (fib       0)   ->    0)\
+        \(def   (fib    (S 0))  -> (S 0))\
+        \(def n (fib (S (S n))) -> (+ (fib    n)\
+        \                             (fib (S n))))\
+        \(def     (equal    0     0)  -> true)\
+        \(def m   (equal (S m)    0)  -> false)\
+        \(def n   (equal    0  (S n)) -> false)\
+        \(def m n (equal (S m) (S n)) -> (equal m n))"
+        "(equal (fib 6) 8)"
+        (Right "true"),
+      runProgramTest
+        13
+        "(def     (equal    0     0)  -> true)\
+        \(def m   (equal (S m)    0)  -> false)\
+        \(def n   (equal    0  (S n)) -> false)\
+        \(def m n (equal (S m) (S n)) -> (equal m n))\
+        \(def t e (if true t e) -> t)\
+        \(def t e (if false t e) -> e)\
+        \(def v b x\
+        \  (apply (v -> b) x)\ 
+        \  ->\
+        \  (replace (Var v) for x in b))\
+        \(def x y z\
+        \  (replace (Var x) for y in (Var z))\
+        \  ->\
+        \  (if (equal x z) y (Var z)))\
+        \(def x y f z\
+        \  (replace x for y in (apply f z))\
+        \  ->\
+        \  (apply (replace x for y in f)\
+        \         (replace x for y in z)))\
+        \"
+        "(apply (0 -> (Var 0)) 123)"
+        (Right "123")
         --     ,
         -- testCase "createEnvironment0" $
         --   assertEqual

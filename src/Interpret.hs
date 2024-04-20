@@ -42,8 +42,11 @@ runProgram rules input = do
 interpretInEnvironment :: Environment -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
 interpretInEnvironment e input =
   let initialMatcher = Matcher (_start e) input
-   in --  in _ast $ last $ (\x -> trace (show (map (display0 . uncofree . _ast) x)) x) $ iterateMaybe (\m -> trace (display0 $ uncofree (_ast m)) $ transitionInEnvironment e m) initialMatcher
-      _ast $ last $ (\x -> trace (show (map (display0 . uncofree . _ast) x)) x) $ iterateMaybe (transitionInEnvironment e) initialMatcher
+   in _ast $ last $ (\x -> trace ("\n" ++ unlines (map (display0 . uncofree . _ast) x)) x) $ iterateMaybe (transitionInEnvironment e) initialMatcher
+
+--  in _ast $ last $ iterateMaybe (transitionInEnvironment e) initialMatcher
+
+-- _ast $ last $ (\x -> trace (show (map (display0 . uncofree . _ast) x)) x) $ iterateMaybe (transitionInEnvironment e) initialMatcher
 
 uncofree :: Cofree Ast0.AstF [Int] -> Ast0.Ast
 uncofree = cata go
@@ -79,7 +82,7 @@ transitionInEnvironment environment matcher =
                   let newMatcher =
                         transitionInEnvironment
                           environment
-                          (Matcher (_start environment) (index :< x))
+                          (Matcher (_start environment) (index0 (uncofree (index :< x))))
                    in (\m -> (m, index)) <$> newMatcher
                 maybeSubtermMatcher :: Maybe (Matcher, [Int])
                 maybeSubtermMatcher = listToMaybe $ catMaybes xs'
@@ -87,7 +90,9 @@ transitionInEnvironment environment matcher =
                   Nothing -> Nothing
                   Just (subtermMatcher, subtermIndex) ->
                     let newAst = replace0At (uncofree currentAst) subtermIndex (uncofree (_ast subtermMatcher))
-                     in Just $ Matcher currentNode (index0 newAst)
+                     in Just $ Matcher (_start environment) (index0 newAst)
+
+--  in Just $ Matcher (_start environment) (index0 newAst)
 
 -- f1 :: Environment -> Matcher -> Ast0.Ast -> Maybe (Matcher, [Int])
 -- f1 environment matcher ast = case ast of
