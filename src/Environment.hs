@@ -28,5 +28,4 @@ createEnvironment text = do
   let lnodes = (start, []) : zip [(start + 1) ..] (map snd rules')
   let ledges = zipWith (\i p -> (start, i, p)) [(start + 1) ..] (map fst rules')
   let gr = mkGraph lnodes ledges
-  -- error $ show gr
   Right $ Environment gr start

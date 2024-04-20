@@ -2,6 +2,7 @@ module Predicate
   ( Predicate (..),
     IndexedPredicate (..),
     applyPredicate,
+    applyPredicates
   )
 where
 
