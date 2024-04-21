@@ -124,6 +124,7 @@ executable rw
           base
         , rw
         , unordered-containers
+        , optparse-applicative
 
     -- Directories containing source files.
     hs-source-dirs:   app
