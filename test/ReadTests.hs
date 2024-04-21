@@ -43,6 +43,10 @@ tests =
         ( Right
             [Ast0.Compound [Ast0.Symbol "add", Ast0.Symbol "0", Ast0.Symbol "0"]]
         ),
+      readTest
+        7
+        "\nx"
+        (Right [Ast0.Symbol "x"]),
       testProperty "readN" termIsReadable
     ]
 

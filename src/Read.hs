@@ -23,6 +23,7 @@ parseRW = parse rwFile ""
 
 rwFile :: Parsec Text () [Ast0.Ast]
 rwFile = do
+  skipMany space
   ast <- many term
   eof
   pure ast
