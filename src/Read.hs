@@ -6,20 +6,7 @@ import Data.Char (isSpace)
 import Data.Either.Extra (fromRight', mapLeft)
 import Data.Text (Text)
 import Error (CompileError (..), CompileResult)
-import Text.Parsec
-  ( ParseError,
-    Parsec,
-    ParsecT,
-    between,
-    choice,
-    eof,
-    many1,
-    satisfy,
-    sepBy,
-    skipMany1,
-    space,
-    spaces,
-  )
+import Text.Parsec (ParseError, Parsec, ParsecT, between, choice, eof, many, many1, satisfy, sepBy, skipMany, skipMany1, space, spaces, (<?>))
 import Text.Parsec.Char (char)
 import Text.ParserCombinators.Parsec (parse)
 
@@ -36,21 +23,29 @@ parseRW = parse rwFile ""
 
 rwFile :: Parsec Text () [Ast0.Ast]
 rwFile = do
-  ast <- between spaces spaces (term `sepBy` spaces)
+  ast <- many term
   eof
   pure ast
 
-term :: ParsecT Text () Identity Ast0.Ast
-term = choice [compoundTerm, symbolTerm]
+term :: Parsec Text () Ast0.Ast
+term = do
+  t <- choice [compoundTerm, symbolTerm]
+  skipMany space
+  pure t
 
-compoundTerm :: ParsecT Text () Identity Ast0.Ast
-compoundTerm = Ast0.Compound <$> between (char '(') (char ')') compoundTermInternals
+compoundTerm :: Parsec Text () Ast0.Ast
+compoundTerm =
+  Ast0.Compound
+    <$> between
+      (char '(')
+      (char ')')
+      ( do
+          skipMany space
+          many term
+      )
 
-compoundTermInternals :: ParsecT Text () Identity [Ast0.Ast]
-compoundTermInternals = between spaces spaces (term `sepBy` skipMany1 space)
-
-symbolTerm :: ParsecT Text () Identity Ast0.Ast
+symbolTerm :: Parsec Text () Ast0.Ast
 symbolTerm = Ast0.Symbol <$> many1 symbolChar
 
-symbolChar :: ParsecT Text () Identity Char
+symbolChar :: Parsec Text () Char
 symbolChar = satisfy $ \c -> not (isSpace c) && c /= '(' && c /= ')'

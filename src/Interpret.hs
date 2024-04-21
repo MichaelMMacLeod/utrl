@@ -42,9 +42,9 @@ runProgram rules input = do
 interpretInEnvironment :: Environment -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
 interpretInEnvironment e input =
   let initialMatcher = Matcher (_start e) input
-   in _ast $ last $ (\x -> trace ("\n" ++ unlines (map (display0 . uncofree . _ast) x)) x) $ iterateMaybe (transitionInEnvironment e) initialMatcher
+   in _ast $ last $ iterateMaybe (transitionInEnvironment e) initialMatcher
 
---  in _ast $ last $ iterateMaybe (transitionInEnvironment e) initialMatcher
+--  in _ast $ last $ (\x -> trace ("\n" ++ unlines (map (display0 . uncofree . _ast) x)) x) $ iterateMaybe (transitionInEnvironment e) initialMatcher
 
 -- _ast $ last $ (\x -> trace (show (map (display0 . uncofree . _ast) x)) x) $ iterateMaybe (transitionInEnvironment e) initialMatcher
 
