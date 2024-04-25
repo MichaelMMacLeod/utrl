@@ -129,7 +129,17 @@ tests =
           )
           "(succ (add n m))"
           "(add 3 (succ 2))"
-          "(succ (add 3 2))"
+          "(succ (add 3 2))",
+      testCase "compile18" $
+        constructorTest
+          ( H.fromList
+              [ ("f", [AstC0.ZeroPlus 1]),
+                ("x", [AstC0.ZeroPlus 2, AstC0.Between 1 0])
+              ]
+          )
+          "(list (f x) ..)"
+          "(map add1 (list 1 2 3))"
+          "(list (add1 1) (add1 2) (add1 3))"
     ]
 
 constructorTest :: Variables -> Text -> Text -> String -> Assertion

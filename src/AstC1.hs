@@ -27,10 +27,12 @@ data Ast
         end :: Int,
         body :: Ast
       }
+  deriving (Show)
 
 data IndexElement
   = ZeroPlus Int
   | LenMinus Int
+  deriving (Show)
 
 type Index = [IndexElement]
 
@@ -44,7 +46,7 @@ data AstF r
         endF :: Int,
         bodyF :: r
       }
-  deriving (Functor)
+  deriving (Functor, Show)
 
 type instance Base Ast = AstF
 

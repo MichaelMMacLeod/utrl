@@ -49,6 +49,8 @@ import qualified Op
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo))
 import Stmt (Stmt (..))
 import Var (Var)
+import Debug.Trace (trace)
+import Display (displayC0)
 
 type Variables = H.HashMap String AstC0.Index
 
@@ -273,20 +275,22 @@ compile1toC0 vars = cata $ \case
   Ast1.CompoundF xs -> AstC0.Compound xs
   Ast1.EllipsesF x -> AstC0.Ellipses x
 
-allEqual :: (Eq a) => [a] -> Bool
-allEqual [] = True
-allEqual (x : xs) = all (== x) xs
+allEqualOrEmpty :: (Eq a) => [[a]] -> Bool
+allEqualOrEmpty = go . filter (not . null)
+  where
+    go [] = True
+    go (x : xs) = all (== x) xs
 
 combineCompoundTermIndices :: [Maybe AstC0.Index] -> CompileResult (Maybe AstC0.Index)
 combineCompoundTermIndices xs =
   let xs' = catMaybes xs
-   in if allEqual xs'
-        then Right (fst <$> uncons xs')
+   in if allEqualOrEmpty xs'
+        then Right (fst <$> uncons (filter (not . null) xs'))
         else Left Error.VarsNotCapturedUnderSameEllipsisInConstructor
 
 compileC0toC1 :: AstC0.Ast -> CompileResult AstC1.Ast
 compileC0toC1 astC0 = do
-  (astC1, index) <- cata go astC0
+  (astC1, index) <- cata go $ trace (displayC0 astC0) astC0
   case index of
     Nothing -> Right astC1
     Just [] -> Right astC1
@@ -301,7 +305,7 @@ compileC0toC1 astC0 = do
     go (AstC0.VariableF i) =
       let (c0Part, c1Part) = AstC0.popTrailingC1Index i
        in Right (AstC1.Copy c1Part, Just c0Part)
-    go (AstC0.EllipsesF term) = do
+    go (AstC0.EllipsesF term) = trace (show $ show <$> term) $ do
       (astC1, indexC0) <- term
       case indexC0 of
         Nothing ->
@@ -310,7 +314,7 @@ compileC0toC1 astC0 = do
               Left Error.EllipsisAppliedToSymbolInConstructor
             _other -> error "unreachable, possibly incorrect var bindings"
         Just indexC0' ->
-          case AstC0.popBetweenTail indexC0' of
+          case AstC0.popBetweenTail (trace (show indexC0') indexC0') of
             (indexC0'', Just (zeroPlus, lenMinus)) ->
               let (fstC0, sndC1) = AstC0.popTrailingC1Index indexC0''
                   loopC1 =
@@ -321,6 +325,7 @@ compileC0toC1 astC0 = do
                         AstC1.body = astC1
                       }
                in Right (loopC1, Just fstC0)
+            ([], Nothing) -> undefined
             (_, Nothing) -> Left Error.TooManyEllipsesInConstructor
 
 newUniqueVar :: State C1ToStmtsState Var
