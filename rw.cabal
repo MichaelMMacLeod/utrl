@@ -63,6 +63,13 @@ library
         , Ast1
         , AstC0
         , AstC1
+        , AstC1P
+        , AstC2
+        , AstC2Assign
+        , AstC2Expr
+        , AstC2ExprBinOp
+        , AstC2ExprVar
+        , AstC2Jump
         , AstP0
         , Compile
         , ConstantExpr
@@ -84,6 +91,13 @@ library
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
+
+    default-extensions:
+          DeriveFunctor
+        , InstanceSigs
+        , LambdaCase
+        , TypeFamilies
+        , OverloadedStrings
 
     -- Other library packages from which modules are imported.
     build-depends:
@@ -151,8 +165,13 @@ test-suite rw-test
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
+ 
     default-extensions:
-        LambdaCase
+          DeriveFunctor
+        , InstanceSigs
+        , LambdaCase
+        , TypeFamilies
+        , OverloadedStrings
 
     -- The interface type and version of the test suite.
     type:             exitcode-stdio-1.0

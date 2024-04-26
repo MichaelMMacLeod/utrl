@@ -1,6 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE TypeFamilies #-}
-
 module Ast1 (Ast (..), AstF (..)) where
 
 import Data.Functor.Foldable

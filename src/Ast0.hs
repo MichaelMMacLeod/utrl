@@ -1,8 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeFamilies #-}
-
 module Ast0 (Ast (..), AstF (..), index0, replace0At) where
 
 import Control.Comonad.Cofree (Cofree (..))

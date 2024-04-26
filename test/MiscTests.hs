@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module MiscTests (tests) where
 
 import Ast0 (Ast (..), replace0At)

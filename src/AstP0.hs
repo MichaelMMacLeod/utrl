@@ -1,6 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE TypeFamilies #-}
-
 module AstP0 (Ast (..), AstF (..), indexP0ByC0) where
 
 import qualified AstC0

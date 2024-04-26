@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module LexTests (tests) where
 
 import Data.Char (isSpace)

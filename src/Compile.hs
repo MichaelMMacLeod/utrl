@@ -1,6 +1,4 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module Compile
   ( compile,
@@ -22,6 +20,7 @@ import qualified Ast0
 import qualified Ast1
 import qualified AstC0
 import qualified AstC1
+import qualified AstC1P
 import AstP0 (indexP0ByC0)
 import qualified AstP0
 import ConstantExpr (ConstantExpr (..))
@@ -287,6 +286,19 @@ combineCompoundTermIndices xs =
    in if allEqualOrEmpty xs'
         then Right (fst <$> uncons (filter (not . null) xs'))
         else Left Error.VarsNotCapturedUnderSameEllipsisInConstructor
+
+compileC0toC1P :: AstC0.Ast -> CompileResult AstC1P.Ast
+compileC0toC1P = cata go
+  where
+    go :: AstC0.AstF (CompileResult AstC1P.Ast) -> CompileResult AstC1P.Ast
+    go = \case
+      AstC0.SymbolF s -> Right $ AstC1P.Symbol s
+      AstC0.CompoundF xs -> do
+        xs' <- sequence xs
+        undefined
+      AstC0.EllipsesF x -> undefined
+      AstC0.VariableF i -> undefined
+
 
 compileC0toC1 :: AstC0.Ast -> CompileResult AstC1.Ast
 compileC0toC1 astC0 = do

@@ -1,4 +1,4 @@
-module AstC1
+module AstC1P
   ( Ast (..),
     AstF (..),
     Index,
@@ -6,6 +6,7 @@ module AstC1
   )
 where
 
+import AstC2ExprVar (Var)
 import Data.Functor.Foldable
   ( Base,
     Corecursive,
@@ -19,7 +20,7 @@ data Ast
   | Compound [Ast]
   | Copy Index
   | Loop
-      { index :: Index,
+      { var :: Var,
         start :: Int,
         end :: Int,
         body :: Ast
@@ -29,6 +30,7 @@ data Ast
 data IndexElement
   = ZeroPlus Int
   | LenMinus Int
+  | Var Var
   deriving (Show)
 
 type Index = [IndexElement]

@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
-
 module Stmt where
 
 import ConstantExpr (ConstantExpr)

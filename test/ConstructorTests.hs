@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module ConstructorTests (tests) where
 
 import qualified AstC0

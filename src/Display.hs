@@ -1,7 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeFamilies #-}
-
 module Display
   ( display0,
     display1,
@@ -12,15 +8,15 @@ module Display
   )
 where
 
-import Ast0 qualified
-import Ast1 qualified
-import AstC0 qualified
-import AstC1 qualified
+import qualified Ast0
+import qualified Ast1
+import qualified AstC0
+import qualified AstC1
 import ConstantExpr (ConstantExpr (Constant, Var))
 import Data.Functor.Foldable (cata)
 import Data.List (intercalate)
 import Expr (Expr (..))
-import Op qualified
+import qualified Op
 import Stmt (Stmt (..))
 import Var (Var)
 
@@ -97,13 +93,13 @@ displayIndexElementC1 :: AstC1.IndexElement -> String
 displayIndexElementC1 (AstC1.ZeroPlus i) = show i
 displayIndexElementC1 (AstC1.LenMinus i) = "(len-" ++ show i ++ ")"
 
-displayStmts :: Show a => [Stmt a] -> String
+displayStmts :: (Show a) => [Stmt a] -> String
 displayStmts = unlines . zipWith indent [0 ..] . map displayStmt
   where
     indent :: Int -> String -> String
     indent lineNum str = show lineNum ++ ":\t" ++ str
 
-displayStmt :: Show a => Stmt a -> String
+displayStmt :: (Show a) => Stmt a -> String
 displayStmt (Stmt.Assign l r) = displayVar l ++ " = " ++ displayExpr r
 displayStmt (Stmt.PushSymbolToDataStack s) = "data_stack.push(" ++ show s ++ ")"
 displayStmt (Stmt.PushIndexToIndexStack i) = "index_stack.push(" ++ displayConstantExpr i ++ ")"
@@ -114,9 +110,9 @@ displayStmt (Stmt.PopFromIndexStack count) = "index_stack.pop(" ++ show count ++
       _ -> "indices"
 displayStmt Stmt.PushIndexedTermToDataStack = "data_stack.push(input[index_stack])"
 displayStmt (Stmt.BuildCompoundTermFromDataStack c) =
-  "data_stack.push(new CompoundTerm(data_stack.pop(" 
-  ++ displayConstantExpr c 
-  ++ ")))"
+  "data_stack.push(new CompoundTerm(data_stack.pop("
+    ++ displayConstantExpr c
+    ++ ")))"
 displayStmt (Stmt.Jump l) = "jump to instruction " ++ show l
 displayStmt (Stmt.JumpWhenLessThan l w le) =
   "jump to instruction "
