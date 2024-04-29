@@ -66,10 +66,12 @@ library
         , AstC1P
         , AstC2
         , AstC2Assign
+        , AstC2ConstExpr
         , AstC2Expr
         , AstC2ExprBinOp
         , AstC2ExprVar
         , AstC2Jump
+        , AstC2Value
         , AstP0
         , Compile
         , ConstantExpr
@@ -78,12 +80,15 @@ library
         , Error
         , Expr
         , Interpret
+        , Interpret2
+        , Interpret2Memory
         , Lex
         , Lib
         , Op
         , Predicate
         , Read
         , Stmt
+        , Utils
         , Var
 
     -- Modules included in this library but not exported.
@@ -113,6 +118,7 @@ library
         , extra
         , parsec
         , text
+        , array
 
     -- Directories containing source files.
     hs-source-dirs:   src

@@ -13,6 +13,7 @@ module Compile
     compileRule,
     Variables,
     RuleDefinition (..),
+    compileRule2,
   )
 where
 
@@ -21,6 +22,9 @@ import qualified Ast1
 import qualified AstC0
 import qualified AstC1
 import qualified AstC1P
+import qualified AstC2
+import qualified AstC2ConstExpr
+import qualified AstC2Expr
 import AstP0 (indexP0ByC0)
 import qualified AstP0
 import ConstantExpr (ConstantExpr (..))
@@ -28,6 +32,7 @@ import Control.Comonad (Comonad (..))
 import Control.Comonad.Cofree (Cofree, ComonadCofree (unwrap))
 import qualified Control.Comonad.Cofree as CCC
 import Control.Comonad.Trans.Cofree (CofreeF (..))
+import Control.Monad (foldM)
 import Control.Monad.State.Strict
   ( State,
     gets,
@@ -41,6 +46,8 @@ import qualified Data.HashMap.Strict as H
 import Data.Hashable (Hashable)
 import Data.List (uncons)
 import Data.Maybe (catMaybes, fromJust, mapMaybe)
+import Debug.Trace (trace)
+import Display (displayC0)
 import Error (CompileError (..), CompileResult)
 import qualified Expr
 import GHC.Generics (Generic)
@@ -48,8 +55,6 @@ import qualified Op
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo))
 import Stmt (Stmt (..))
 import Var (Var)
-import Debug.Trace (trace)
-import Display (displayC0)
 
 type Variables = H.HashMap String AstC0.Index
 
@@ -103,6 +108,16 @@ data RuleDefinition = RuleDefinition
     _pattern :: !AstP0.Ast,
     _constructor :: !Ast0.Ast
   }
+
+compileRule2 :: RuleDefinition -> CompileResult ([IndexedPredicate], AstC2.Ast Int)
+compileRule2 rule@(RuleDefinition _ _ constructor) = do
+  vars <- ruleDefinitionVariableBindings rule
+  preds <- ruleDefinitionPredicates rule
+  program <- compile2 vars constructor
+  Right (preds, program)
+
+compile2 :: a
+compile2 = undefined
 
 compileRule :: RuleDefinition -> CompileResult ([IndexedPredicate], [Stmt Int])
 compileRule rule@(RuleDefinition _ _ constructor) = do
@@ -287,18 +302,66 @@ combineCompoundTermIndices xs =
         then Right (fst <$> uncons (filter (not . null) xs'))
         else Left Error.VarsNotCapturedUnderSameEllipsisInConstructor
 
-compileC0toC1P :: AstC0.Ast -> CompileResult AstC1P.Ast
-compileC0toC1P = cata go
-  where
-    go :: AstC0.AstF (CompileResult AstC1P.Ast) -> CompileResult AstC1P.Ast
-    go = \case
-      AstC0.SymbolF s -> Right $ AstC1P.Symbol s
-      AstC0.CompoundF xs -> do
-        xs' <- sequence xs
-        undefined
-      AstC0.EllipsesF x -> undefined
-      AstC0.VariableF i -> undefined
+type ListF' a t = ListF a t -> t
 
+compileC0toC1P :: AstC0.Ast -> CompileResult (AstC1P.Ast, H.HashMap Var AstC0.Index)
+compileC0toC1P ast = do
+  (ast, h, _) <- cata go ast 0
+  undefined
+  where
+    go :: AstC0.AstF' (Var -> CompileResult (AstC1P.Ast, H.HashMap AstC0.Index Var, Var))
+    go ast nextVar = case ast of
+      AstC0.SymbolF s -> Right (AstC1P.Symbol s, H.empty, nextVar)
+      AstC0.CompoundF xs ->
+        let f ::
+              ListF'
+                ( Var ->
+                  CompileResult (AstC1P.Ast, H.HashMap AstC0.Index Var, Var)
+                )
+                ( CompileResult
+                    ( [(AstC1P.Ast, H.HashMap AstC0.Index Var)],
+                      Var
+                    )
+                )
+            f Nil = Right ([], nextVar)
+            f (Cons x result) = do
+              (xs, var) <- result
+              (ast, h, var') <- x var
+              pure $ ((ast, h) : xs, var')
+            xs' = cata f xs
+         in do
+              (xs', nextVar') <- cata f xs
+              undefined
+      AstC0.EllipsesF x -> undefined
+      AstC0.VariableF x -> undefined
+
+compileC1PToC2 :: AstC1P.Ast -> AstC2.Ast NamedLabel
+compileC1PToC2 = histo go
+  where
+    go ::
+      AstC1P.AstF (Cofree AstC1P.AstF (AstC2.Ast NamedLabel)) ->
+      AstC2.Ast NamedLabel
+    go = \case
+      AstC1P.SymbolF s -> undefined -- [AstC2.Push $ AstC2ConstExpr.Symbol s]
+      AstC1P.CopyF i -> undefined -- cata convert i
+        where
+          convert :: ListF' AstC1P.IndexElement [AstC2.Stmt NamedLabel]
+          convert Nil = []
+          convert (Cons indexElement stmts) = case indexElement of
+            AstC1P.ZeroPlus zp -> undefined
+            AstC1P.LenMinus lm -> undefined
+            AstC1P.Var v -> undefined
+      AstC1P.CompoundF xs -> undefined
+      AstC1P.LoopF var src start end body -> undefined
+
+-- go nextVar = \case
+--   AstC0.SymbolF s -> Right (AstC1P.Symbol s, H.empty)
+--   AstC0.CompoundF xs -> do
+--     xs' <- sequence xs
+--     undefined
+--   AstC0.EllipsesF x -> undefined
+--   AstC0.VariableF i -> Right $ AstC1P.Copy $
+--     undefined
 
 compileC0toC1 :: AstC0.Ast -> CompileResult AstC1.Ast
 compileC0toC1 astC0 = do

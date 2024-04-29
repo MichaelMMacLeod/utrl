@@ -1,6 +1,7 @@
 module AstC0
   ( Ast (..),
     AstF (..),
+    AstF',
     Index,
     IndexElement (..),
     c1Tail,
@@ -81,6 +82,8 @@ data AstF r
   | VariableF Index
   | EllipsesF r
   deriving (Functor)
+
+type AstF' t = AstF t -> t
 
 type instance Base Ast = AstF
 

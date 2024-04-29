@@ -21,6 +21,7 @@ data Ast
   | Copy Index
   | Loop
       { var :: Var,
+        src :: Var,
         start :: Int,
         end :: Int,
         body :: Ast
@@ -40,7 +41,8 @@ data AstF r
   | CompoundF [r]
   | CopyF Index
   | LoopF
-      { indexF :: Index,
+      { varF :: Var,
+        srcF :: Var,
         startF :: Int,
         endF :: Int,
         bodyF :: r
@@ -53,10 +55,10 @@ instance Recursive Ast where
   project (Symbol s) = SymbolF s
   project (Compound xs) = CompoundF xs
   project (Copy i) = CopyF i
-  project (Loop i s e b) = LoopF i s e b
+  project (Loop i v s e b) = LoopF i v s e b
 
 instance Corecursive Ast where
   embed (SymbolF s) = Symbol s
   embed (CompoundF xs) = Compound xs
   embed (CopyF i) = Copy i
-  embed (LoopF i s e b) = Loop i s e b
+  embed (LoopF i v s e b) = Loop i v s e b

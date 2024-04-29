@@ -2,14 +2,13 @@ module AstC2 (Ast, Stmt (..)) where
 
 import AstC2Assign (Assign)
 import AstC2Jump (Jump)
-import Var (Var)
+import AstC2ConstExpr (ConstExpr)
 
-type Ast l = [Stmt l]
+type Ast label = [Stmt label]
 
-data Stmt l
+data Stmt label
   = Assign Assign
-  | Push Var
-  | Build Int
-  | Jump (Jump l)
-  | UnconditionalJump l
+  | Push ConstExpr
+  | Build ConstExpr
+  | Jump (Jump label)
   deriving (Show, Functor, Eq, Ord)

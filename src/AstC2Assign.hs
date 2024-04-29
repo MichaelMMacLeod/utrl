@@ -1,6 +1,6 @@
 module AstC2Assign (Assign (..)) where
 
-import Expr (Expr)
+import AstC2Expr (Expr)
 import Var (Var)
 
 data Assign = Assign

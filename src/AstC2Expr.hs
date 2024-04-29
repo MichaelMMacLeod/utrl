@@ -1,12 +1,10 @@
 module AstC2Expr (Expr (..)) where
 
-import AstC2ExprVar (Var)
-import Op (BinOp)
+import AstC2ConstExpr (ConstExpr)
+import AstC2ExprBinOp (BinOp)
 
 data Expr
-  = Var Var
-  | Constant Int
+  = ConstExpr ConstExpr
   | BinOp BinOp
-  | Length Var
-  | Input
+  | Length ConstExpr
   deriving (Show, Eq, Ord)

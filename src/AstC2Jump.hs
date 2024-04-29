@@ -1,9 +1,9 @@
 module AstC2Jump (Jump (..)) where
 
-import Var (Var)
+import AstC2Expr (Expr)
 
-data Jump a = Jump
-  { target :: a,
-    condition :: Var
+data Jump label = Jump
+  { target :: label,
+    condition :: Expr
   }
   deriving (Show, Eq, Ord, Functor)

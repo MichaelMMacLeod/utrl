@@ -7,25 +7,23 @@ import Ast0 (index0, replace0At)
 import qualified Ast0
 import ConstantExpr (ConstantExpr (..))
 import Control.Comonad.Cofree (Cofree ((:<)))
-import Control.Comonad.Env (ComonadTrans (lower), extract)
-import Control.Comonad.Trans.Cofree (CofreeF, ComonadCofree (unwrap), tailF)
+import Control.Comonad.Trans.Cofree (CofreeF, ComonadCofree (unwrap))
 import qualified Control.Comonad.Trans.Cofree as CCTC
 import Data.Foldable (find)
-import Data.Functor.Base (ListF)
-import Data.Functor.Foldable (Base, Corecursive (..), ListF (Cons, Nil), cata)
+import Data.Functor.Foldable (Corecursive (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
-import Data.List (unfoldr)
 import Data.Maybe (catMaybes, fromJust, listToMaybe)
 import Data.Text (Text)
-import Debug.Trace (trace)
 import Display (display0, displayStmt)
 import Environment (Environment (..), createEnvironment)
 import Error (CompileResult)
 import Expr (Expr (..))
+import Interpret2 (interpret2)
 import Op (BinOp (..))
 import Predicate (applyPredicates)
 import qualified Read
 import Stmt (Stmt (..))
+import Utils (iterateMaybe, setNth)
 import Var (Var)
 
 data Matcher = Matcher
@@ -67,7 +65,7 @@ transitionInEnvironment environment matcher =
    in case maybeNextNode of
         Just nextNode ->
           let constructor = snd $ labNode' $ context graph nextNode
-              nextAst = interpret (uncofree currentAst) constructor
+              nextAst = interpret2 constructor (uncofree currentAst)
               nextNodeNeighbors = lsuc graph nextNode
               newNode =
                 if null nextNodeNeighbors
@@ -133,19 +131,6 @@ displayMemory (Memory _ instructions currentInstruction dataStack indexStack var
         ++ "\n"
     else "Done!"
 
-setNth :: Int -> Int -> [Int] -> [Int]
-setNth i x xs = left ++ [x] ++ right
-  where
-    left = take i (xs ++ repeat 0)
-    right = drop (i + 1) xs
-
-iterateMaybe :: (b -> Maybe b) -> b -> [b]
-iterateMaybe f b = b : ana go b
-  where
-    go x = case f x of
-      Nothing -> Nil
-      Just x' -> Cons x' x'
-
 interpret :: Ast0.Ast -> [Stmt Int] -> Ast0.Ast
 interpret i stmts = head . _dataStack . last $ iterateMaybe transition initialState
   where
@@ -168,7 +153,7 @@ interpret i stmts = head . _dataStack . last $ iterateMaybe transition initialSt
         else Just $ case instructions !! currentInstruction of
           Assign l r ->
             m
-              { _variables = setNth l (evalExpr m r) variables,
+              { _variables = setNth l 0 (evalExpr m r) variables,
                 _currentInstruction = currentInstruction + 1
               }
           PushSymbolToDataStack s ->
