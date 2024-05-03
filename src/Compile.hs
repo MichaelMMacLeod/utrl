@@ -330,6 +330,7 @@ data C0ToC1Data = C0ToC1Data
     _nextUnusedVar :: !Var,
     _remainingAssignment :: Maybe (Var, AstC0.Index, Between)
   }
+  deriving (Show)
 
 compileC0ToC1P :: AstC0.Ast -> CompileResult (AstC1P.Ast, Var)
 compileC0ToC1P ast = do
@@ -396,7 +397,7 @@ traverseC0ToC1P a nextUnusedVar = case a of
                          in AstC1P.Assignment (nextUnusedVar + 1, c1, location) loopAst,
                   _nextUnusedVar = nextUnusedVar + 2,
                   _remainingAssignment =
-                    if null c0
+                    if null c0'
                       then Nothing
                       else Just $
                         case popBetweenTail c0' of

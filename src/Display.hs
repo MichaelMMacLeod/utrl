@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 module Display
   ( display0,
     display1,
@@ -12,13 +13,39 @@ import qualified Ast0
 import qualified Ast1
 import qualified AstC0
 import qualified AstC1
+import qualified AstC2
+import qualified AstC2Assign
 import ConstantExpr (ConstantExpr (Constant, Var))
-import Data.Functor.Foldable (cata)
+import Data.Functor.Foldable (ListF (..), cata)
 import Data.List (intercalate)
 import Expr (Expr (..))
 import qualified Op
 import Stmt (Stmt (..))
+import Utils (Cata)
 import Var (Var)
+import AstC2Expr as C2Expr
+
+displayC2 :: AstC2.Ast Int -> String
+displayC2 = addLineNumbers . cata go
+  where
+    addLineNumbers :: [String] -> String
+    addLineNumbers = unlines . zipWith prependLineNumber [0 ..]
+      where
+        prependLineNumber :: Int -> String -> String
+        prependLineNumber number str = show number ++ "\t\t" ++ str
+
+    go :: Cata [AstC2.Stmt Int] [String]
+    go = \case
+      Nil -> []
+      Cons stmt strs -> case stmt of
+        AstC2.Assign (AstC2Assign.Assign lhs rhs) ->
+          (displayVar lhs ++ " = " ++ displayC2Expr rhs) : strs
+        AstC2.Push ce -> _
+        AstC2.Build ce -> _
+        AstC2.Jump j -> _
+
+-- displayC2Expr :: C2Expr.Expr -> String
+-- displayC2Expr 
 
 display0 :: Ast0.Ast -> String
 display0 = cata $ \case

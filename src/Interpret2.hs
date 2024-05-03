@@ -34,7 +34,7 @@ interpret2 prog initialInput =
         }
 
     transition :: Memory -> Maybe Memory
-    transition m = case m of
+    transition m = trace (show m) $ case m of
       Memory
         { Memory.input = _input,
           Memory.program = program,
