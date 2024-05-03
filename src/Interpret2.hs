@@ -5,9 +5,8 @@ import qualified AstC2
 import qualified AstC2Assign
 import AstC2ConstExpr (ConstExpr)
 import qualified AstC2ConstExpr as ConstExpr
-import AstC2Expr (Expr)
+import AstC2Expr (Expr, BinOp_ (..))
 import qualified AstC2Expr as Expr
-import qualified AstC2ExprBinOp as Op
 import AstC2ExprVar (Var)
 import qualified AstC2Jump
 import AstC2Value (Value)
@@ -89,24 +88,24 @@ evalExpr :: Memory -> Expr -> Value
 evalExpr m = \case
   Expr.ConstExpr ce -> evalConstExpr m ce
   Expr.BinOp op ->
-    let lhs' = evalVar m $ Op.lhs op
-        rhs' = evalConstExpr m $ Op.rhs op
-     in case Op.op op of
-          Op.Add ->
+    let lhs' = evalExpr m $ AstC2Expr.lhs op
+        rhs' = evalExpr m $ AstC2Expr.rhs op
+     in case AstC2Expr.op op of
+          Expr.Add ->
             let lhsNat = Value.expectNat lhs'
                 rhsNat = Value.expectNat rhs'
              in Value.Nat $ lhsNat + rhsNat
-          Op.Sub ->
+          Expr.Sub ->
             let lhsNat = Value.expectNat lhs'
                 rhsNat = Value.expectNat rhs'
              in Value.Nat $ lhsNat - rhsNat
-          Op.ArrayAccess ->
+          Expr.ArrayAccess ->
             let lhsAst = Value.expectAst lhs'
                 rhsNat = Value.expectNat rhs'
              in case lhsAst of
                   Ast0.Symbol _ -> Value.mkTypeError "Compound" lhs'
                   Ast0.Compound xs -> Value.Ast $ xs !! rhsNat
-          Op.LessThan ->
+          Expr.LessThan ->
             let lhsNat = Value.expectNat lhs'
                 rhsNat = Value.expectNat rhs'
              in Value.Bool $ lhsNat < rhsNat

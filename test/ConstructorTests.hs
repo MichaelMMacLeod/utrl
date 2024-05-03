@@ -1,13 +1,15 @@
 module ConstructorTests (tests) where
 
 import qualified AstC0
+import qualified AstC1
+import AstC1P (AssignmentLocation (TopLevel))
+import qualified AstC1P
 import qualified AstC2
 import qualified AstC2Assign
 import AstC2ConstExpr (ConstExpr)
 import qualified AstC2ConstExpr as ConstExpr
 import AstC2Expr (Expr (ConstExpr))
 import qualified AstC2Expr as Expr
-import qualified AstC2ExprBinOp as BinOp
 import AstC2ExprVar (Var)
 import qualified AstC2Jump
 import Compile (Variables)
@@ -16,6 +18,7 @@ import qualified Data.HashMap.Strict as H
 import Data.Text (Text, unpack)
 import Debug.Trace (trace)
 import qualified Display
+import Error (CompileError (TooManyEllipsesInConstructor), CompileResult)
 import GHC.Arr (array, listArray)
 import qualified Interpret
 import Interpret2 (interpret2)
@@ -170,7 +173,40 @@ tests =
           build $ var 0 -- build outer (list (f x) ..), unknown size
         ]
         "(map f (list a b c 1 2 3))"
-        "(list (f a) (f b) (f c) (f 1) (f 2) (f 3))"
+        "(list (f a) (f b) (f c) (f 1) (f 2) (f 3))",
+      c0ToC1PTest
+        0
+        ( AstC0.Compound
+            [ AstC0.Symbol "list",
+              AstC0.Ellipses $
+                AstC0.Compound
+                  [ AstC0.Variable [AstC0.ZeroPlus 1],
+                    AstC0.Variable [AstC0.ZeroPlus 2, AstC0.Between 1 0]
+                  ]
+            ]
+        )
+        ( Right
+            ( AstC1P.Compound
+                [ AstC1P.Symbol "list",
+                  AstC1P.Assignments
+                    [(3, [AstC1.ZeroPlus 2], TopLevel)]
+                    ( AstC1P.Loop
+                        { AstC1P.var = 1,
+                          AstC1P.src = 3,
+                          AstC1P.start = 1,
+                          AstC1P.end = 0,
+                          AstC1P.body =
+                            AstC1P.Compound
+                              [ AstC1P.Assignments
+                                  [(0, [AstC1.ZeroPlus 1], TopLevel)]
+                                  (AstC1P.Copy 0),
+                                AstC1P.Copy 1
+                              ]
+                        }
+                    )
+                ]
+            )
+        )
     ]
 
 build :: ConstExpr -> AstC2.Stmt Int
@@ -186,13 +222,13 @@ len :: Var -> Expr
 len v = Expr.Length $ ConstExpr.Var v
 
 lessThan :: Var -> ConstExpr -> Expr
-lessThan v c = Expr.BinOp $ BinOp.BinOp BinOp.LessThan v c
+lessThan v c = Expr.BinOp $ Expr.BinOp_ Expr.LessThan (Expr.ConstExpr (var v)) (Expr.ConstExpr c)
 
 add :: Var -> ConstExpr -> Expr
-add v i = Expr.BinOp $ BinOp.BinOp BinOp.Add v i
+add v i = Expr.BinOp $ Expr.BinOp_ Expr.Add (Expr.ConstExpr (var v)) (Expr.ConstExpr i)
 
 arrayRef :: Var -> ConstExpr -> Expr
-arrayRef v c = Expr.BinOp $ BinOp.BinOp BinOp.ArrayAccess v c
+arrayRef v c = Expr.BinOp $ Expr.BinOp_ Expr.ArrayAccess (Expr.ConstExpr (var v)) (Expr.ConstExpr c)
 
 input :: ConstExpr
 input = ConstExpr.Input
@@ -214,6 +250,15 @@ assignE v e = AstC2.Assign $ AstC2Assign.Assign v e
 
 push :: ConstExpr -> AstC2.Stmt Int
 push = AstC2.Push
+
+c0ToC1PTest :: Int -> AstC0.Ast -> CompileResult AstC1P.Ast -> TestTree
+c0ToC1PTest n c0 expected =
+  let actual = Compile.compileC0ToC1P c0
+   in testCase ("c0ToC1PTest#" ++ show n) $
+        assertEqual
+          ""
+          expected
+          actual
 
 constructorTest2 :: Int -> [AstC2.Stmt Int] -> Text -> Text -> TestTree
 constructorTest2 n program input expected =

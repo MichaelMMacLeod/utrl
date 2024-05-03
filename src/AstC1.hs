@@ -29,7 +29,7 @@ data Ast
 data IndexElement
   = ZeroPlus Int
   | LenMinus Int
-  deriving (Show)
+  deriving (Show, Eq)
 
 type Index = [IndexElement]
 

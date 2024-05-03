@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Compile
   ( compile,
@@ -14,13 +15,17 @@ module Compile
     Variables,
     RuleDefinition (..),
     compileRule2,
+    compileC0ToC1P,
+    C0ToC1Data (..),
   )
 where
 
 import qualified Ast0
 import qualified Ast1
+import AstC0 (c0Head, c1Tail, popBetweenTail, popTrailingC1Index)
 import qualified AstC0
 import qualified AstC1
+import AstC1P (AssignmentLocation (..))
 import qualified AstC1P
 import qualified AstC2
 import qualified AstC2ConstExpr
@@ -40,7 +45,7 @@ import Control.Monad.State.Strict
     runState,
   )
 import Data.Either.Extra (maybeToEither)
-import Data.Functor.Foldable (ListF (..), Recursive (..), histo)
+import Data.Functor.Foldable (Base, ListF (..), Recursive (..), histo)
 import Data.HashMap.Strict ((!?))
 import qualified Data.HashMap.Strict as H
 import Data.Hashable (Hashable)
@@ -54,6 +59,7 @@ import GHC.Generics (Generic)
 import qualified Op
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo))
 import Stmt (Stmt (..))
+import Utils (Between (..))
 import Var (Var)
 
 type Variables = H.HashMap String AstC0.Index
@@ -242,7 +248,7 @@ ruleDefinitionVariableBindings (RuleDefinition vars pat _) =
 -- For example, in the following rule:
 --
 --   (def xs (flatten (list (list xs ..) ..)) -> (list xs .. ..))
---
+-- Data.HashMap
 -- the following conditions must hold if the rule is to match a given term:
 --
 -- - Index [] is a compound term of length == 2
@@ -304,55 +310,337 @@ combineCompoundTermIndices xs =
 
 type ListF' a t = ListF a t -> t
 
-compileC0toC1P :: AstC0.Ast -> CompileResult (AstC1P.Ast, H.HashMap Var AstC0.Index)
-compileC0toC1P ast = do
-  (ast, h, _) <- cata go ast 0
-  undefined
-  where
-    go :: AstC0.AstF' (Var -> CompileResult (AstC1P.Ast, H.HashMap AstC0.Index Var, Var))
-    go ast nextVar = case ast of
-      AstC0.SymbolF s -> Right (AstC1P.Symbol s, H.empty, nextVar)
-      AstC0.CompoundF xs ->
-        let f ::
-              ListF'
-                ( Var ->
-                  CompileResult (AstC1P.Ast, H.HashMap AstC0.Index Var, Var)
-                )
-                ( CompileResult
-                    ( [(AstC1P.Ast, H.HashMap AstC0.Index Var)],
-                      Var
-                    )
-                )
-            f Nil = Right ([], nextVar)
-            f (Cons x result) = do
-              (xs, var) <- result
-              (ast, h, var') <- x var
-              pure $ ((ast, h) : xs, var')
-            xs' = cata f xs
-         in do
-              (xs', nextVar') <- cata f xs
-              undefined
-      AstC0.EllipsesF x -> undefined
-      AstC0.VariableF x -> undefined
+compatibleWith :: AstC0.Index -> AstC0.Index -> Maybe AstC0.Index
+compatibleWith [] i2 = Just i2
+compatibleWith i1 [] = Just i1
+compatibleWith i1 i2 = if i1 == i2 then Just i1 else Nothing
 
-compileC1PToC2 :: AstC1P.Ast -> AstC2.Ast NamedLabel
-compileC1PToC2 = histo go
+data C0ToC1Data = C0ToC1Data
+  { _ast :: !AstC1P.Ast,
+    _nextUnusedVar :: !Var,
+    _remainingAssignment :: Maybe (Var, AstC0.Index, Between)
+    -- ,
+    -- _varsNeedingToplevelAssignment :: !(H.HashMap Var AstC1.Index)
+  }
+
+compileC0ToC1P :: AstC0.Ast -> CompileResult AstC1P.Ast
+compileC0ToC1P ast = _ast <$> cata traverseC0ToC1P ast firstUnusedVar
   where
-    go ::
-      AstC1P.AstF (Cofree AstC1P.AstF (AstC2.Ast NamedLabel)) ->
-      AstC2.Ast NamedLabel
-    go = \case
-      AstC1P.SymbolF s -> undefined -- [AstC2.Push $ AstC2ConstExpr.Symbol s]
-      AstC1P.CopyF i -> undefined -- cata convert i
+    firstUnusedVar :: Var
+    firstUnusedVar = 0
+
+traverseC0ToC1P :: AstC0.AstF' (Var -> CompileResult C0ToC1Data)
+traverseC0ToC1P a nextUnusedVar = case a of
+  AstC0.SymbolF s ->
+    Right $
+      C0ToC1Data
+        { _ast = AstC1P.Symbol s,
+          _nextUnusedVar = nextUnusedVar,
+          _remainingAssignment = Nothing
+        }
+  AstC0.VariableF i ->
+    let (c0, c1) = popTrailingC1Index i
+        copyAst = AstC1P.Copy nextUnusedVar
+     in Right $
+          C0ToC1Data
+            { _ast =
+                if null c1
+                  then copyAst
+                  else
+                    let location = if null c0 then TopLevel else NotTopLevel
+                     in AstC1P.Assignments [(nextUnusedVar, c1, location)] copyAst,
+              _nextUnusedVar = nextUnusedVar + 1,
+              _remainingAssignment =
+                if null c0
+                  then Nothing
+                  else Just $
+                    case popBetweenTail c0 of
+                      (c0', Just (zeroPlus, lenMinus)) ->
+                        (nextUnusedVar, c0', Between zeroPlus lenMinus)
+                      _ -> error "unreachable"
+            }
+  AstC0.EllipsesF x -> do
+    C0ToC1Data ast nextUnusedVar remainingAssignment <- x nextUnusedVar
+    case remainingAssignment of
+      Nothing -> Left TooManyEllipsesInConstructor
+      Just (var, c0, Between zeroPlus lenMinus) ->
+        let (c0', c1) = popTrailingC1Index c0
+            loopAst =
+              AstC1P.Loop
+                { AstC1P.var = var,
+                  AstC1P.src = nextUnusedVar + 1,
+                  AstC1P.start = zeroPlus,
+                  AstC1P.end = lenMinus,
+                  AstC1P.body = ast
+                }
+         in Right $
+              C0ToC1Data
+                { _ast =
+                    if null c1
+                      then loopAst
+                      else
+                        let location = if null c0' then TopLevel else NotTopLevel
+                         in AstC1P.Assignments [(nextUnusedVar + 1, c1, location)] loopAst,
+                  _nextUnusedVar = nextUnusedVar + 2,
+                  _remainingAssignment =
+                    if null c0
+                      then Nothing
+                      else Just $
+                        case popBetweenTail c0' of
+                          (c0', Just (zeroPlus, lenMinus)) ->
+                            (nextUnusedVar + 1, c0', Between zeroPlus lenMinus)
+                          _ -> error "unreachable"
+                }
+  AstC0.CompoundF xs -> cata mergeXS xs nextUnusedVar
+    where
+      mergeXS :: ListF' (Var -> CompileResult C0ToC1Data) (Var -> CompileResult C0ToC1Data)
+      mergeXS Nil nextUnusedVar =
+        Right $
+          C0ToC1Data
+            { _ast = AstC1P.Compound [],
+              _nextUnusedVar = nextUnusedVar,
+              _remainingAssignment = Nothing
+            }
+      mergeXS (Cons x xs) nextUnusedVar = do
+        C0ToC1Data astX nextUnusedVar remainingAssignmentX <- x nextUnusedVar
+        C0ToC1Data ast nextUnusedVar remainingAssignment <- xs nextUnusedVar
+        remainingAssignment <- compatibleRemainingAssignment remainingAssignmentX remainingAssignment
+        let compoundInternals =
+              case ast of
+                AstC1P.Compound compoundInternals -> compoundInternals
+                _ -> error "unreachable"
+        let ast = AstC1P.Compound $ astX : compoundInternals
+        pure $
+          C0ToC1Data
+            { _ast = ast,
+              _nextUnusedVar = nextUnusedVar,
+              _remainingAssignment = remainingAssignment
+            }
         where
-          convert :: ListF' AstC1P.IndexElement [AstC2.Stmt NamedLabel]
-          convert Nil = []
-          convert (Cons indexElement stmts) = case indexElement of
-            AstC1P.ZeroPlus zp -> undefined
-            AstC1P.LenMinus lm -> undefined
-            AstC1P.Var v -> undefined
-      AstC1P.CompoundF xs -> undefined
-      AstC1P.LoopF var src start end body -> undefined
+          compatibleRemainingAssignment ::
+            Maybe (Var, AstC0.Index, Between) ->
+            Maybe (Var, AstC0.Index, Between) ->
+            CompileResult (Maybe (Var, AstC0.Index, Between))
+          compatibleRemainingAssignment Nothing Nothing = Right Nothing
+          compatibleRemainingAssignment (Just t) Nothing = Right $ Just t
+          compatibleRemainingAssignment Nothing (Just t) = Right $ Just t
+          compatibleRemainingAssignment (Just t) (Just u) =
+            if t == u
+              then Right $ Just u
+              else Left VarsNotCapturedUnderSameEllipsisInConstructor
+
+-- C0ToC1Data
+--             { _ast = _,
+--               _nextUnusedVar = _,
+--               _remainingAssignment = _
+--             }
+
+-- traverseC0ToC1P a nextUnusedVar = case a of
+--   AstC0.SymbolF s ->
+--     Right $
+--       C0ToC1Data
+--         { _ast = AstC1P.Symbol s,
+--           _nextUnusedVar = nextUnusedVar,
+--           _remainingAssignment = Nothing,
+--           _varsNeedingToplevelAssignment = H.empty
+--         }
+--   AstC0.VariableF i ->
+--     let (c0, c1) = popTrailingC1Index i
+--         copyAst = AstC1P.Copy nextUnusedVar
+--         needsTopLevelAssignment = null c0
+--         needsMidLevelAssignment = not (null c0) && not (null c1)
+--      in Right $
+--           C0ToC1Data
+--             { _ast =
+--                 if needsMidLevelAssignment
+--                   then AstC1P.Assignments [(nextUnusedVar, c1)] copyAst
+--                   else copyAst,
+--               _nextUnusedVar = nextUnusedVar + 1,
+--               _remainingAssignment =
+--                 if needsTopLevelAssignment
+--                   then Nothing
+--                   else Just (nextUnusedVar, c0),
+--               _varsNeedingToplevelAssignment =
+--                 if needsTopLevelAssignment
+--                   then H.singleton nextUnusedVar c1
+--                   else H.empty
+--             }
+--   AstC0.EllipsesF x -> do
+--     C0ToC1Data
+--       { _ast = ast,
+--         _nextUnusedVar = nextUnusedVar',
+--         _remainingAssignment = maybeRemainingAssignment,
+--         _varsNeedingToplevelAssignment = varsNeedingToplevelAssignment
+--       } <-
+--       x nextUnusedVar
+--     case maybeRemainingAssignment of
+--       Nothing -> Left TooManyEllipsesInConstructor
+--       Just (remainingVar, remainingIndex) ->
+--         case popBetweenTail remainingIndex of
+--           (_c0, Nothing) -> error "unreachable"
+--           (c0, Just (zeroPlus, lenMinus)) ->
+--             let (c0', c1) = popTrailingC1Index c0
+--                 srcVar = nextUnusedVar' + 1
+--                 needsTopLevelAssignment = null c0'
+--                 needsMidLevelAssignment = not (null c0') && not (null c1)
+--                 loopAst =
+--                   AstC1P.Loop
+--                     { AstC1P.var = remainingVar,
+--                       AstC1P.src = srcVar,
+--                       AstC1P.start = zeroPlus,
+--                       AstC1P.end = lenMinus,
+--                       AstC1P.body = ast
+--                     }
+--              in Right $
+--                   C0ToC1Data
+--                     { _ast =
+--                         if needsMidLevelAssignment
+--                           then AstC1P.Assignments [(srcVar, c1)] loopAst
+--                           else loopAst,
+--                       _nextUnusedVar = srcVar + 1,
+--                       _remainingAssignment =
+--                         if needsTopLevelAssignment
+--                           then Nothing
+--                           else Just (srcVar, c0'),
+--                       _varsNeedingToplevelAssignment =
+--                         if needsTopLevelAssignment
+--                           then H.insert srcVar c1 varsNeedingToplevelAssignment
+--                           else varsNeedingToplevelAssignment
+--                     }
+--   AstC0.CompoundF xs -> cata mergeXS xs nextUnusedVar
+--     where
+--       -- compatibleRemainingAssignment :: a
+--       -- compatibleRemainingAssignment = _
+--       mergeXS :: ListF' (Var -> CompileResult C0ToC1Data) (Var -> CompileResult C0ToC1Data)
+--       mergeXS Nil nextUnusedVar' =
+--         Right $
+--           C0ToC1Data
+--             { _ast = AstC1P.Compound [],
+--               _nextUnusedVar = nextUnusedVar',
+--               _remainingAssignment = Nothing,
+--               _varsNeedingToplevelAssignment = H.empty
+--             }
+--       mergeXS (Cons x results) nextUnusedVar' = do
+--         C0ToC1Data
+--           { _ast = ast,
+--             _nextUnusedVar = nextUnusedVar'',
+--             _remainingAssignment = maybeRemainingAssignment,
+--             _varsNeedingToplevelAssignment = varsNeedingToplevelAssignment
+--           } <-
+--           results nextUnusedVar'
+--         C0ToC1Data
+--           { _ast = xAst,
+--             _nextUnusedVar = xNextUnusedVar''',
+--             _remainingAssignment = xMaybeRemainingAssignment,
+--             _varsNeedingToplevelAssignment = xVarsNeedingToplevelAssignment
+--           } <-
+--           x nextUnusedVar''
+--         pure $
+--           case (xMaybeRemainingAssignment, maybeRemainingAssignment) of
+--             (Nothing, Nothing) ->
+--               C0ToC1Data
+--                 { _ast = case ast of
+--                     AstC1P.Compound asts -> AstC1P.Compound $ xAst : asts
+--                     _ -> error "unreachable",
+--                   _nextUnusedVar = xNextUnusedVar''',
+--                   _remainingAssignment = Nothing,
+--                   _varsNeedingToplevelAssignment =
+--                     H.union
+--                       varsNeedingToplevelAssignment
+--                       xVarsNeedingToplevelAssignment
+--                 }
+--             (Just (xVar, xIndex), Just (rVar, rIndex)) -> _
+--             _ -> _
+
+-- C0ToC1Data
+--   { _ast = case ast of
+--       AstC1P.Compound asts -> AstC1P.Compound $ xAstWithAssignment : asts
+--         where
+--           xAstWithAssignment :: AstC1P.Ast
+--           xAstWithAssignment = AstC1P.Assignments [()]
+--       _ -> error "unreachable",
+--     _nextUnusedVar = _,
+--     _remainingAssignment = _,
+--     _varsNeedingToplevelAssignment = _
+--   }
+
+-- let combineXS :: _
+--     combineXS = _
+--  in _
+
+-- compileC0ToC1P ast = do
+--   (a, _, _, topLevelVars) <- cata go ast 0
+--   let combined = H.foldrWithKey combineFunc a topLevelVars
+--   pure $ trace (show combined) combined
+--   where
+--     combineFunc :: Var -> AstC1.Index -> AstC1P.Ast -> AstC1P.Ast
+--     combineFunc v i = AstC1P.Descend v (AstC1P.TopLevel i)
+--     go ::
+--       AstC0.AstF'
+--         ( Var ->
+--           CompileResult (AstC1P.Ast, Var, AstC0.Index, H.HashMap Var AstC1.Index)
+--         )
+--     go a nextVar = case a of
+--       AstC0.SymbolF s -> Right (AstC1P.Symbol s, nextVar, [], H.empty)
+--       AstC0.CompoundF xs -> do
+--         (xs', nextVar', i, h) <- cata combine xs nextVar
+--         pure (AstC1P.Compound xs', nextVar', i, h)
+--         where
+--           combine ::
+--             ListF'
+--               (Var -> CompileResult (AstC1P.Ast, Var, AstC0.Index, H.HashMap Var AstC1.Index))
+--               (Var -> CompileResult ([AstC1P.Ast], Var, AstC0.Index, H.HashMap Var AstC1.Index))
+--           combine = \case
+--             Nil -> \var -> Right ([], var, [], H.empty)
+--             Cons x r -> \var -> do
+--               (r', nextVar', i, h) <- r var
+--               (x', nextVar'', i', h') <- x nextVar'
+--               case i `compatibleWith` i' of
+--                 Nothing ->
+--                   Left VarsNotCapturedUnderSameEllipsisInConstructor
+--                 Just compatibleIndex ->
+--                   Right (x' : r', nextVar'', compatibleIndex, H.union h h')
+--       AstC0.EllipsesF x -> do
+--         (a', nextVar', i, h) <- x nextVar
+--         let (c0, maybeBetween) = AstC0.popBetweenTail i
+--         case maybeBetween of
+--           Nothing -> Left TooManyEllipsesInConstructor
+--           Just (zp, lm) ->
+--             let (c0', c1) = AstC0.popTrailingC1Index c0
+--                 loop =
+--                   AstC1P.Loop
+--                     { AstC1P.var = nextVar,
+--                       AstC1P.src = nextVar',
+--                       AstC1P.start = zp,
+--                       AstC1P.end = lm,
+--                       AstC1P.body = a'
+--                     }
+--                 result
+--                   | null c1 = (loop, nextVar' + 1, c0', h)
+--                   -- | null c0' = (loop, nextVar' + 1, c0', H.insert h ())
+--                   | otherwise = AstC1P.Descend nextVar' c1 loop
+--              in Right (result, nextVar' + 1, c0')
+--       AstC0.VariableF i -> do
+--         let (c0, c1) = AstC0.popTrailingC1Index i
+--             copy = AstC1P.Copy nextVar
+--             result =
+--               if null c1
+--                 then copy
+--                 else AstC1P.Descend nextVar c1 copy
+--         pure (result, nextVar + 1, c0)
+
+-- compileC1PtoC2 :: AstC1P.Ast -> AstC2.Ast NamedLabel
+-- compileC1PtoC2 ast = histo go ast
+--   where
+--     go ::
+--       AstC1P.AstF (Cofree AstC1P.AstF (AstC2.Ast NamedLabel, IntSet)) ->
+--       (AstC2.Ast NamedLabel, IntSet)
+--     go = \case
+--       AstC1P.SymbolF s -> ([AstC2.Push $ AstC2ConstExpr.Symbol s], [])
+--       AstC1P.CopyF v -> ([AstC2.Push $ AstC2ConstExpr.Var v], [])
+--       AstC1P.CompoundF xs -> undefined
+--       AstC1P.DescendF v i x -> undefined
+--       AstC1P.LoopF var src start end body -> undefined
 
 -- go nextVar = \case
 --   AstC0.SymbolF s -> Right (AstC1P.Symbol s, H.empty)

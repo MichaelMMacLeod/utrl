@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module AstC0
   ( Ast (..),
     AstF (..),
@@ -32,6 +34,9 @@ data IndexElement
   deriving (Eq, Show, Ord)
 
 type Index = [IndexElement]
+
+-- classifyC0 :: Index -> C0Classification
+-- classifyC0 = undefined
 
 c1Tail :: Index -> AstC1.Index
 c1Tail = reverse . go . reverse
