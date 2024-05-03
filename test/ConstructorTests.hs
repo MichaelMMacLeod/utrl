@@ -22,6 +22,7 @@ import Error (CompileError (TooManyEllipsesInConstructor), CompileResult)
 import GHC.Arr (array, listArray)
 import qualified Interpret
 import Interpret2 (interpret2)
+import qualified Interpret2 as Interpret
 import qualified Read
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertEqual, assertFailure, testCase)
@@ -188,8 +189,8 @@ tests =
         ( Right
             ( AstC1P.Compound
                 [ AstC1P.Symbol "list",
-                  AstC1P.Assignments
-                    [(3, [AstC1.ZeroPlus 2], TopLevel)]
+                  AstC1P.Assignment
+                    (3, [AstC1.ZeroPlus 2], TopLevel)
                     ( AstC1P.Loop
                         { AstC1P.var = 1,
                           AstC1P.src = 3,
@@ -197,8 +198,8 @@ tests =
                           AstC1P.end = 0,
                           AstC1P.body =
                             AstC1P.Compound
-                              [ AstC1P.Assignments
-                                  [(0, [AstC1.ZeroPlus 1], TopLevel)]
+                              [ AstC1P.Assignment
+                                  (0, [AstC1.ZeroPlus 1], TopLevel)
                                   (AstC1P.Copy 0),
                                 AstC1P.Copy 1
                               ]
@@ -258,7 +259,7 @@ c0ToC1PTest n c0 expected =
         assertEqual
           ""
           expected
-          actual
+          (fst <$> actual)
 
 constructorTest2 :: Int -> [AstC2.Stmt Int] -> Text -> Text -> TestTree
 constructorTest2 n program input expected =
@@ -280,10 +281,10 @@ constructorTest vars constructor input expectedOutput = do
     Right inputAst' -> do
       let stmts = do
             constructorAst <- head <$> Read.read constructor
-            Compile.compile vars constructorAst
+            Compile.compileC2 vars constructorAst
       case stmts of
         Left e -> assertFailure ("constructor compile error " ++ show e)
         Right stmts' ->
-          let result = Interpret.interpret inputAst' stmts'
+          let result = Interpret.interpret2 stmts' inputAst'
               str = Display.display0 result
            in assertEqual "interpreted output test" expectedOutput str

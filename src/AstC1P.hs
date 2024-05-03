@@ -21,7 +21,7 @@ data AssignmentLocation = TopLevel | NotTopLevel
 data Ast
   = Symbol String
   | Compound [Ast]
-  | Assignments [(Var, AstC1.Index, AssignmentLocation)] Ast
+  | Assignment (Var, AstC1.Index, AssignmentLocation) Ast
   | Copy Var
   | Loop
       { var :: Var,
@@ -35,7 +35,7 @@ data Ast
 data AstF r
   = SymbolF String
   | CompoundF [r]
-  | AssignmentsF [(Var, AstC1.Index, AssignmentLocation)] r
+  | AssignmentF (Var, AstC1.Index, AssignmentLocation) r
   | CopyF Var
   | LoopF
       { varF :: Var,
@@ -51,13 +51,13 @@ type instance Base Ast = AstF
 instance Recursive Ast where
   project (Symbol s) = SymbolF s
   project (Compound xs) = CompoundF xs
-  project (Assignments as x) = AssignmentsF as x
+  project (Assignment as x) = AssignmentF as x
   project (Copy i) = CopyF i
   project (Loop i v s e b) = LoopF i v s e b
 
 instance Corecursive Ast where
   embed (SymbolF s) = Symbol s
   embed (CompoundF xs) = Compound xs
-  embed (AssignmentsF as x) = Assignments as x
+  embed (AssignmentF as x) = Assignment as x
   embed (CopyF i) = Copy i
   embed (LoopF i v s e b) = Loop i v s e b

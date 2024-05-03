@@ -1,7 +1,12 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 {-# HLINT ignore "Use tuple-section" #-}
-module Interpret (interpret, displayMemory, runProgram) where
+module Interpret
+  ( -- interpret,
+    displayMemory,
+    runProgram,
+  )
+where
 
 import Ast0 (index0, replace0At)
 import qualified Ast0
@@ -131,70 +136,70 @@ displayMemory (Memory _ instructions currentInstruction dataStack indexStack var
         ++ "\n"
     else "Done!"
 
-interpret :: Ast0.Ast -> [Stmt Int] -> Ast0.Ast
-interpret i stmts = head . _dataStack . last $ iterateMaybe transition initialState
-  where
-    initialState :: Memory
-    initialState =
-      Memory
-        { _input = i,
-          _instructions = stmts,
-          _currentInstruction = 0,
-          _dataStack = [],
-          _indexStack = [],
-          _variables = []
-        }
+-- interpret :: Ast0.Ast -> [Stmt Int] -> Ast0.Ast
+-- interpret i stmts = head . _dataStack . last $ iterateMaybe transition initialState
+--   where
+--     initialState :: Memory
+--     initialState =
+--       Memory
+--         { _input = i,
+--           _instructions = stmts,
+--           _currentInstruction = 0,
+--           _dataStack = [],
+--           _indexStack = [],
+--           _variables = []
+--         }
 
-    transition :: Memory -> Maybe Memory
-    transition m@(Memory input instructions currentInstruction dataStack indexStack variables) =
-      -- trace (displayMemory m) $
-      if currentInstruction == length instructions
-        then Nothing
-        else Just $ case instructions !! currentInstruction of
-          Assign l r ->
-            m
-              { _variables = setNth l 0 (evalExpr m r) variables,
-                _currentInstruction = currentInstruction + 1
-              }
-          PushSymbolToDataStack s ->
-            m
-              { _dataStack = Ast0.Symbol s : dataStack,
-                _currentInstruction = currentInstruction + 1
-              }
-          PushIndexToIndexStack ce ->
-            m
-              { _indexStack = indexStack ++ [evalConstantExpr m ce],
-                _currentInstruction = currentInstruction + 1
-              }
-          PopFromIndexStack c ->
-            m
-              { _indexStack = take (length indexStack - c) indexStack,
-                _currentInstruction = currentInstruction + 1
-              }
-          PushIndexedTermToDataStack ->
-            m
-              { _dataStack = fromJust (termAtIndex indexStack input) : dataStack,
-                _currentInstruction = currentInstruction + 1
-              }
-          BuildCompoundTermFromDataStack termCount ->
-            let termCount' = evalConstantExpr m termCount
-                newTerm = Ast0.Compound . reverse $ take termCount' dataStack
-             in if termCount' > length dataStack
-                  then error "internal bug"
-                  else
-                    m
-                      { _dataStack = newTerm : drop termCount' dataStack,
-                        _currentInstruction = currentInstruction + 1
-                      }
-          Jump l -> m {_currentInstruction = l}
-          JumpWhenLessThan l w le ->
-            let when_var' = evalConstantExpr m (ConstantExpr.Var w)
-                le_var' = evalConstantExpr m (ConstantExpr.Var le)
-                n =
-                  if when_var' < le_var'
-                    then l
-                    else currentInstruction + 1
-             in m {_currentInstruction = n}
+--     transition :: Memory -> Maybe Memory
+--     transition m@(Memory input instructions currentInstruction dataStack indexStack variables) =
+--       -- trace (displayMemory m) $
+--       if currentInstruction == length instructions
+--         then Nothing
+--         else Just $ case instructions !! currentInstruction of
+--           Assign l r ->
+--             m
+--               { _variables = setNth l 0 (evalExpr m r) variables,
+--                 _currentInstruction = currentInstruction + 1
+--               }
+--           PushSymbolToDataStack s ->
+--             m
+--               { _dataStack = Ast0.Symbol s : dataStack,
+--                 _currentInstruction = currentInstruction + 1
+--               }
+--           PushIndexToIndexStack ce ->
+--             m
+--               { _indexStack = indexStack ++ [evalConstantExpr m ce],
+--                 _currentInstruction = currentInstruction + 1
+--               }
+--           PopFromIndexStack c ->
+--             m
+--               { _indexStack = take (length indexStack - c) indexStack,
+--                 _currentInstruction = currentInstruction + 1
+--               }
+--           PushIndexedTermToDataStack ->
+--             m
+--               { _dataStack = fromJust (termAtIndex indexStack input) : dataStack,
+--                 _currentInstruction = currentInstruction + 1
+--               }
+--           BuildCompoundTermFromDataStack termCount ->
+--             let termCount' = evalConstantExpr m termCount
+--                 newTerm = Ast0.Compound . reverse $ take termCount' dataStack
+--              in if termCount' > length dataStack
+--                   then error "internal bug"
+--                   else
+--                     m
+--                       { _dataStack = newTerm : drop termCount' dataStack,
+--                         _currentInstruction = currentInstruction + 1
+--                       }
+--           Jump l -> m {_currentInstruction = l}
+--           JumpWhenLessThan l w le ->
+--             let when_var' = evalConstantExpr m (ConstantExpr.Var w)
+--                 le_var' = evalConstantExpr m (ConstantExpr.Var le)
+--                 n =
+--                   if when_var' < le_var'
+--                     then l
+--                     else currentInstruction + 1
+--              in m {_currentInstruction = n}
 
 termAtIndex :: [Int] -> Ast0.Ast -> Maybe Ast0.Ast
 termAtIndex [] ast = Just ast

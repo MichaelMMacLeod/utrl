@@ -5,13 +5,23 @@ module Utils
     iterateMaybe,
     setNth,
     classifyC0,
+    Cata,
+    Para,
+    Histo,
   )
 where
 
 import qualified AstC0
 import qualified AstC1
+import Control.Comonad.Cofree (Cofree)
 import Data.Functor.Base (ListF (..))
-import Data.Functor.Foldable (Corecursive (..))
+import Data.Functor.Foldable (Base, Corecursive (..))
+
+type Cata t a = Base t a -> a
+
+type Para t a = Base t (t, a) -> a
+
+type Histo t a = Base t (Cofree (Base t) a) -> a
 
 iterateMaybe :: (b -> Maybe b) -> b -> [b]
 iterateMaybe f b = b : ana go b
