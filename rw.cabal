@@ -64,7 +64,6 @@ library
         , AstC0
         , AstC1
         , AstC1P
-        , AstC1Q
         , AstC2
         , AstC2Assign
         , AstC2ConstExpr
