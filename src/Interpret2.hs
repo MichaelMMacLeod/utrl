@@ -3,7 +3,7 @@ module Interpret2 (interpret2) where
 import qualified Ast0
 import qualified AstC2
 import qualified AstC2Assign
-import AstC2Expr (BinOp_ (..), Expr)
+import AstC2Expr (Expr)
 import qualified AstC2Expr as Expr
 import AstC2ExprVar (Var)
 import qualified AstC2Jump
@@ -11,7 +11,6 @@ import AstC2Value (Value)
 import qualified AstC2Value as Value
 import Data.List.Extra ((!?))
 import Debug.Trace (trace)
-import qualified Display
 import Interpret2Memory (Memory (Memory))
 import qualified Interpret2Memory as Memory
 import Utils (iterateMaybe, setNth)
@@ -81,10 +80,10 @@ evalExpr m = \case
   Expr.Nat n -> Value.Nat n
   Expr.Symbol s -> Value.Ast $ Ast0.Symbol s
   Expr.Input -> Value.Ast $ Memory.input m
-  Expr.BinOp op ->
-    let lhs' = evalExpr m $ AstC2Expr.lhs op
-        rhs' = evalExpr m $ AstC2Expr.rhs op
-     in case AstC2Expr.op op of
+  Expr.BinOp op lhs rhs ->
+    let lhs' = evalExpr m lhs
+        rhs' = evalExpr m rhs
+     in case op of
           Expr.Add ->
             let lhsNat = Value.expectNat lhs'
                 rhsNat = Value.expectNat rhs'

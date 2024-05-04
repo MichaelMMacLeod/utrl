@@ -78,7 +78,6 @@ library
         , Interpret2
         , Interpret2Memory
         , Lib
-        , Op
         , Predicate
         , Read
         , Utils

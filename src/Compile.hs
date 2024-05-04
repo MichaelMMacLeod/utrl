@@ -24,7 +24,6 @@ where
 
 import qualified Ast0
 import qualified Ast1
-import Utils (popBetweenTail, popTrailingC1Index)
 import qualified AstC0
 import AstC1P (AssignmentLocation (..))
 import qualified AstC1P
@@ -54,7 +53,7 @@ import Data.Maybe (fromJust)
 import Error (CompileError (..), CompileResult)
 import GHC.Generics (Generic)
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo))
-import Utils (Between (..), Cata, Histo, Para)
+import Utils (Between (..), Cata, Histo, Para, popBetweenTail, popTrailingC1Index)
 import Var (Var)
 
 type Variables = H.HashMap String AstC0.Index
@@ -436,17 +435,13 @@ indexAssignStmts var loc = addAssignmentToInputWhenToplevel . cata go
                       AstC1P.ZeroPlus zeroPlus -> C2Expr.Nat zeroPlus
                       AstC1P.LenMinus lenMinus ->
                         C2Expr.BinOp
-                          C2Expr.BinOp_
-                            { C2Expr.op = C2Expr.ArrayAccess,
-                              C2Expr.lhs = C2Expr.Var var,
-                              C2Expr.rhs =
-                                C2Expr.BinOp
-                                  C2Expr.BinOp_
-                                    { C2Expr.op = C2Expr.Sub,
-                                      C2Expr.lhs = C2Expr.Length $ C2Expr.Var var,
-                                      C2Expr.rhs = C2Expr.Nat lenMinus
-                                    }
-                            }
+                          C2Expr.ArrayAccess
+                          (C2Expr.Var var)
+                          ( C2Expr.BinOp
+                              C2Expr.Sub
+                              (C2Expr.Length $ C2Expr.Var var)
+                              (C2Expr.Nat lenMinus)
+                          )
                 }
     addAssignmentToInputWhenToplevel :: AstC2.Ast NamedLabel -> AstC2.Ast NamedLabel
     addAssignmentToInputWhenToplevel stmts = case loc of
@@ -530,11 +525,9 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                   { AstC2Assign.lhs = loopEndVar,
                     AstC2Assign.rhs =
                       C2Expr.BinOp
-                        C2Expr.BinOp_
-                          { C2Expr.op = C2Expr.Sub,
-                            C2Expr.lhs = C2Expr.Length $ C2Expr.Var src,
-                            C2Expr.rhs = C2Expr.Nat end
-                          }
+                        C2Expr.Sub
+                        (C2Expr.Length $ C2Expr.Var src)
+                        (C2Expr.Nat end)
                   }
             jumpBot =
               AstC2.Jump
@@ -548,11 +541,9 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                   { AstC2Assign.lhs = var,
                     AstC2Assign.rhs =
                       C2Expr.BinOp
-                        C2Expr.BinOp_
-                          { C2Expr.op = C2Expr.ArrayAccess,
-                            C2Expr.lhs = C2Expr.Var src,
-                            C2Expr.rhs = C2Expr.Var loopCounterVar
-                          }
+                        C2Expr.ArrayAccess
+                        (C2Expr.Var src)
+                        (C2Expr.Var loopCounterVar)
                   }
             incremeentLoopCountVar =
               AstC2.Assign
@@ -560,11 +551,9 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                   { AstC2Assign.lhs = loopCounterVar,
                     AstC2Assign.rhs =
                       C2Expr.BinOp
-                        C2Expr.BinOp_
-                          { C2Expr.op = C2Expr.Add,
-                            C2Expr.lhs = C2Expr.Var loopCounterVar,
-                            C2Expr.rhs = C2Expr.Nat 1
-                          }
+                        C2Expr.Add
+                        (C2Expr.Var loopCounterVar)
+                        (C2Expr.Nat 1)
                   }
             incremenetLengthCountVar =
               AstC2.Assign
@@ -572,11 +561,9 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                   { AstC2Assign.lhs = lengthCountVar,
                     AstC2Assign.rhs =
                       C2Expr.BinOp
-                        C2Expr.BinOp_
-                          { C2Expr.op = C2Expr.Add,
-                            C2Expr.lhs = C2Expr.Var lengthCountVar,
-                            C2Expr.rhs = C2Expr.Nat 1
-                          }
+                        C2Expr.Add
+                        (C2Expr.Var lengthCountVar)
+                        (C2Expr.Nat 1)
                   }
             jumpTop =
               AstC2.Jump

@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module Display
   ( display0,
     display1,
@@ -11,14 +12,15 @@ import qualified Ast1
 import qualified AstC0
 import qualified AstC2
 import qualified AstC2Assign
+import AstC2Expr (Expr)
+import qualified AstC2Expr as Expr
+import qualified AstC2Jump
 import Data.Functor.Foldable (ListF (..), cata)
 import Data.List (intercalate)
-import qualified Op
 import Utils (Cata)
 import Var (Var)
-import AstC2Expr as C2Expr
 
-displayC2 :: AstC2.Ast Int -> String
+displayC2 :: (Show a) => AstC2.Ast a -> String
 displayC2 = addLineNumbers . cata go
   where
     addLineNumbers :: [String] -> String
@@ -27,18 +29,39 @@ displayC2 = addLineNumbers . cata go
         prependLineNumber :: Int -> String -> String
         prependLineNumber number str = show number ++ "\t\t" ++ str
 
-    go :: Cata [AstC2.Stmt Int] [String]
+    go :: (Show a) => Cata [AstC2.Stmt a] [String]
     go = \case
       Nil -> []
-      Cons stmt strs -> case stmt of
-        AstC2.Assign (AstC2Assign.Assign lhs rhs) ->
-          (displayVar lhs ++ " = " ++ displayC2Expr rhs) : strs
-        AstC2.Push ce -> _
-        AstC2.Build ce -> _
-        AstC2.Jump j -> _
+      Cons stmt strs -> stmt' : strs
+        where
+          stmt' :: String
+          stmt' = case stmt of
+            AstC2.Assign (AstC2Assign.Assign lhs rhs) ->
+              "$" ++ show lhs ++ " = " ++ displayExpr rhs
+            AstC2.Push e ->
+              "push " ++ displayExpr e
+            AstC2.Build e ->
+              "build " ++ displayExpr e
+            AstC2.Jump (AstC2Jump.Jump target condition) ->
+              "jump " ++ show target ++ " if " ++ displayExpr condition
 
-displayC2Expr :: C2Expr.Expr -> String
-displayC2Expr = _
+displayExpr :: Expr -> String
+displayExpr = cata go
+  where
+    go :: Cata Expr String
+    go = \case
+      Expr.BoolF b -> show b
+      Expr.VarF v -> "$" ++ show v
+      Expr.NatF n -> show n
+      Expr.SymbolF s -> show s
+      Expr.InputF -> "input"
+      Expr.LengthF l -> l ++ ".length"
+      Expr.BinOpF op lhs rhs ->
+        case op of
+          Expr.Add -> lhs ++ " + " ++ rhs
+          Expr.Sub -> lhs ++ " - " ++ rhs
+          Expr.LessThan -> lhs ++ "<" ++ rhs
+          Expr.ArrayAccess -> lhs ++ "[" ++ rhs ++ "]"
 
 display0 :: Ast0.Ast -> String
 display0 = cata $ \case
@@ -77,9 +100,3 @@ displayIndexElementC0 :: AstC0.IndexElement -> String
 displayIndexElementC0 (AstC0.ZeroPlus i) = show i
 displayIndexElementC0 (AstC0.LenMinus i) = "(len-" ++ show i ++ ")"
 displayIndexElementC0 (AstC0.Between zeroPlusC0 lenMinusC0) = show zeroPlusC0 ++ ".." ++ show lenMinusC0
-
-displayVar :: Var -> String
-displayVar v = "var #" ++ show v
-
-displayConstant :: Int -> String
-displayConstant = show
