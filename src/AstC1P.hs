@@ -2,10 +2,11 @@ module AstC1P
   ( Ast (..),
     AstF (..),
     AssignmentLocation (..),
+    Index,
+    IndexElement (..),
   )
 where
 
-import qualified AstC1
 import AstC2ExprVar (Var)
 import Data.Functor.Foldable
   ( Base,
@@ -21,7 +22,7 @@ data AssignmentLocation = TopLevel | NotTopLevel
 data Ast
   = Symbol String
   | Compound [Ast]
-  | Assignment (Var, AstC1.Index, AssignmentLocation) Ast
+  | Assignment (Var, Index, AssignmentLocation) Ast
   | Copy Var
   | Loop
       { var :: Var,
@@ -32,10 +33,17 @@ data Ast
       }
   deriving (Show, Eq)
 
+data IndexElement
+  = ZeroPlus Int
+  | LenMinus Int
+  deriving (Show, Eq)
+
+type Index = [IndexElement]
+
 data AstF r
   = SymbolF String
   | CompoundF [r]
-  | AssignmentF (Var, AstC1.Index, AssignmentLocation) r
+  | AssignmentF (Var, Index, AssignmentLocation) r
   | CopyF Var
   | LoopF
       { varF :: Var,

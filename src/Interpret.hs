@@ -1,35 +1,26 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
-{-# HLINT ignore "Use tuple-section" #-}
 module Interpret
-  ( -- interpret,
-    displayMemory,
-    runProgram,
+  ( runProgram,
   )
 where
 
 import Ast0 (index0, replace0At)
 import qualified Ast0
-import ConstantExpr (ConstantExpr (..))
 import Control.Comonad.Cofree (Cofree ((:<)))
 import Control.Comonad.Trans.Cofree (CofreeF, ComonadCofree (unwrap))
 import qualified Control.Comonad.Trans.Cofree as CCTC
 import Data.Foldable (find)
 import Data.Functor.Foldable (Corecursive (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
-import Data.Maybe (catMaybes, fromJust, listToMaybe)
+import Data.Maybe (catMaybes, listToMaybe)
 import Data.Text (Text)
-import Display (display0, displayStmt)
 import Environment (Environment (..), createEnvironment)
 import Error (CompileResult)
-import Expr (Expr (..))
 import Interpret2 (interpret2)
-import Op (BinOp (..))
 import Predicate (applyPredicates)
 import qualified Read
-import Stmt (Stmt (..))
-import Utils (iterateMaybe, setNth)
-import Var (Var)
+import Utils (iterateMaybe)
 
 data Matcher = Matcher
   { _node :: !Node,
@@ -109,32 +100,32 @@ transitionInEnvironment environment matcher =
 -- Just
 -- \$ Matcher {_nodes = nextNode, _ast = nextAst}
 
-data Memory = Memory
-  { _input :: !Ast0.Ast,
-    _instructions :: ![Stmt Int],
-    _currentInstruction :: !Int,
-    _dataStack :: ![Ast0.Ast],
-    _indexStack :: ![Int],
-    _variables :: ![Int]
-  }
-  deriving (Show)
+-- data Memory = Memory
+--   { _input :: !Ast0.Ast,
+--     _instructions :: ![Stmt Int],
+--     _currentInstruction :: !Int,
+--     _dataStack :: ![Ast0.Ast],
+--     _indexStack :: ![Int],
+--     _variables :: ![Int]
+--   }
+--   deriving (Show)
 
-displayMemory :: Memory -> String
-displayMemory (Memory _ instructions currentInstruction dataStack indexStack variables) =
-  if currentInstruction < length instructions
-    then
-      displayStmt (instructions !! currentInstruction)
-        ++ "\n"
-        ++ "Vars:\t"
-        ++ show variables
-        ++ "\n"
-        ++ "Index:\t"
-        ++ show indexStack
-        ++ "\n"
-        ++ "Data:\t"
-        ++ show (map display0 dataStack)
-        ++ "\n"
-    else "Done!"
+-- displayMemory :: Memory -> String
+-- displayMemory (Memory _ instructions currentInstruction dataStack indexStack variables) =
+--   if currentInstruction < length instructions
+--     then
+--       displayStmt (instructions !! currentInstruction)
+--         ++ "\n"
+--         ++ "Vars:\t"
+--         ++ show variables
+--         ++ "\n"
+--         ++ "Index:\t"
+--         ++ show indexStack
+--         ++ "\n"
+--         ++ "Data:\t"
+--         ++ show (map display0 dataStack)
+--         ++ "\n"
+--     else "Done!"
 
 -- interpret :: Ast0.Ast -> [Stmt Int] -> Ast0.Ast
 -- interpret i stmts = head . _dataStack . last $ iterateMaybe transition initialState
@@ -214,23 +205,23 @@ termAtIndex _ _ = Nothing
 -- tr :: (Show a) => a -> a
 -- tr x = trace (show x) x
 
-evalVar :: Memory -> Var -> Int
-evalVar (Memory {_variables = vars}) v = vars !! v
+-- evalVar :: Memory -> Var -> Int
+-- evalVar (Memory {_variables = vars}) v = vars !! v
 
-evalConstantExpr :: Memory -> ConstantExpr -> Int
-evalConstantExpr m (ConstantExpr.Var v) = evalVar m v
-evalConstantExpr _ (ConstantExpr.Constant c) = c
+-- evalConstantExpr :: Memory -> ConstantExpr -> Int
+-- evalConstantExpr m (ConstantExpr.Var v) = evalVar m v
+-- evalConstantExpr _ (ConstantExpr.Constant c) = c
 
-evalExpr :: Memory -> Expr -> Int
-evalExpr m (Expr.Var v) = evalVar m v
-evalExpr _ (Expr.Constant c) = c
-evalExpr m (BinOp o l r) =
-  let rhs' = evalConstantExpr m r
-      lhs' = evalVar m l
-   in case o of
-        Add -> lhs' + rhs'
-        Sub -> lhs' - rhs'
-evalExpr (Memory {_input = i, _indexStack = index}) Length =
-  case fromJust $ termAtIndex index i of
-    Ast0.Symbol _ -> error "can't take length of symbol"
-    Ast0.Compound cs -> length cs
+-- evalExpr :: Memory -> Expr -> Int
+-- evalExpr m (Expr.Var v) = evalVar m v
+-- evalExpr _ (Expr.Constant c) = c
+-- evalExpr m (BinOp o l r) =
+--   let rhs' = evalConstantExpr m r
+--       lhs' = evalVar m l
+--    in case o of
+--         Add -> lhs' + rhs'
+--         Sub -> lhs' - rhs'
+-- evalExpr (Memory {_input = i, _indexStack = index}) Length =
+--   case fromJust $ termAtIndex index i of
+--     Ast0.Symbol _ -> error "can't take length of symbol"
+--     Ast0.Compound cs -> length cs

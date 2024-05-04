@@ -7,7 +7,7 @@ module Predicate
 where
 
 import qualified Ast0
-import AstC0 (getAtC0Index)
+import Utils (getAtC0Index)
 import qualified AstC0
 
 data Predicate

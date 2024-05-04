@@ -4,7 +4,6 @@ import Ast0 (Ast (..), replace0At)
 import AstC0
   ( Index,
     IndexElement (Between, LenMinus, ZeroPlus),
-    getAtC0Index,
   )
 import qualified AstP0
 import Compile (compile0to1, compile0toRuleDefinition, compile1toP0, ruleDefinitionPredicates, ruleDefinitionVariableBindings)
@@ -23,6 +22,7 @@ import Predicate
 import qualified Read
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertBool, assertEqual, testCase)
+import Utils (getAtC0Index)
 
 tests :: TestTree
 tests =
@@ -225,7 +225,7 @@ tests =
         \(def t e (if true t e) -> t)\
         \(def t e (if false t e) -> e)\
         \(def v b x\
-        \  (apply (v -> b) x)\ 
+        \  (apply (v -> b) x)\
         \  ->\
         \  (replace (Var v) for x in b))\
         \(def x y z\

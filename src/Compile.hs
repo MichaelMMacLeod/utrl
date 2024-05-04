@@ -3,8 +3,7 @@
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Compile
-  ( 
-    -- compile,
+  ( -- compile,
     compileC2,
     compile0toRuleDefinition,
     ruleDefinitionPredicates,
@@ -25,49 +24,36 @@ where
 
 import qualified Ast0
 import qualified Ast1
-import AstC0 (c0Head, c1Tail, popBetweenTail, popTrailingC1Index)
+import Utils (popBetweenTail, popTrailingC1Index)
 import qualified AstC0
-import qualified AstC1
 import AstC1P (AssignmentLocation (..))
 import qualified AstC1P
 import qualified AstC2
 import qualified AstC2Assign
-import qualified AstC2ConstExpr
-import qualified AstC2ConstExpr as ConstExpr
 import qualified AstC2Expr
 import qualified AstC2Expr as C2Expr
 import qualified AstC2Jump
 import AstP0 (indexP0ByC0)
 import qualified AstP0
-import ConstantExpr (ConstantExpr (..))
 import Control.Comonad (Comonad (..))
-import Control.Comonad.Cofree (Cofree, ComonadCofree (unwrap))
+import Control.Comonad.Cofree (Cofree)
 import qualified Control.Comonad.Cofree as CCC
 import Control.Comonad.Trans.Cofree (CofreeF (..))
-import Control.Monad (foldM)
 import Control.Monad.State.Strict
-  ( MonadState (..),
-    State,
+  ( State,
     evalState,
     gets,
     modify,
-    runState,
   )
 import Data.Either.Extra (maybeToEither)
-import Data.Functor.Foldable (Base, ListF (..), Recursive (..), histo)
+import Data.Functor.Foldable (ListF (..), Recursive (..), histo)
 import Data.HashMap.Strict ((!?))
 import qualified Data.HashMap.Strict as H
 import Data.Hashable (Hashable)
-import Data.List (uncons)
-import Data.Maybe (catMaybes, fromJust, mapMaybe)
-import Debug.Trace (trace)
-import Display (displayC0)
+import Data.Maybe (fromJust)
 import Error (CompileError (..), CompileResult)
-import qualified Expr
 import GHC.Generics (Generic)
-import qualified Op
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo))
-import Stmt (Stmt (..))
 import Utils (Between (..), Cata, Histo, Para)
 import Var (Var)
 
@@ -81,15 +67,6 @@ compileC2 vars ast = do
   let namedC2Stmts = compileC1PToC2 nextUnusedVar astC1P
       offsetC2Stmts = resolveC2NamedLabels namedC2Stmts
   pure offsetC2Stmts
-
--- compile :: Variables -> Ast0.Ast -> CompileResult [Stmt Int]
--- compile vars ast = do
---   let ast1 = compile0to1 ast
---   let astc0 = compile1toC0 vars ast1
---   astc1 <- compileC0toC1 astc0
---   let stmtsWithNamedLabels = compileC1toStmts astc1
---   let stmtsWithOffsetLabels = compileLabels stmtsWithNamedLabels
---   return stmtsWithOffsetLabels
 
 -- Finds the first element in a list that satisfies a predicate,
 -- returning the elements before it, itself, and the elements that
@@ -139,13 +116,6 @@ compileRule2 rule@(RuleDefinition _ _ constructor) = do
   preds <- ruleDefinitionPredicates rule
   program <- compileC2 vars constructor
   Right (preds, program)
-
--- compileRule :: RuleDefinition -> CompileResult ([IndexedPredicate], [Stmt Int])
--- compileRule rule@(RuleDefinition _ _ constructor) = do
---   vars <- ruleDefinitionVariableBindings rule
---   preds <- ruleDefinitionPredicates rule
---   stmts <- compile vars constructor
---   Right (preds, stmts)
 
 compile0toRuleDefinition :: Ast0.Ast -> CompileResult RuleDefinition
 compile0toRuleDefinition (Ast0.Symbol _) = Left InvalidRuleDefinition
@@ -310,21 +280,6 @@ compile1toC0 vars = cata $ \case
   Ast1.CompoundF xs -> AstC0.Compound xs
   Ast1.EllipsesF x -> AstC0.Ellipses x
 
--- allEqualOrEmpty :: (Eq a) => [[a]] -> Bool
--- allEqualOrEmpty = go . filter (not . null)
---   where
---     go [] = True
---     go (x : xs) = all (== x) xs
-
--- combineCompoundTermIndices :: [Maybe AstC0.Index] -> CompileResult (Maybe AstC0.Index)
--- combineCompoundTermIndices xs =
---   let xs' = catMaybes xs
---    in if allEqualOrEmpty xs'
---         then Right (fst <$> uncons (filter (not . null) xs'))
---         else Left Error.VarsNotCapturedUnderSameEllipsisInConstructor
-
--- type ListF' a t = ListF a t -> t
-
 data C0ToC1Data = C0ToC1Data
   { _ast :: !AstC1P.Ast,
     _nextUnusedVar :: !Var,
@@ -464,10 +419,10 @@ newVar = do
   modify incC2Var
   pure var
 
-indexAssignStmts :: Var -> AssignmentLocation -> AstC1.Index -> AstC2.Ast NamedLabel
+indexAssignStmts :: Var -> AssignmentLocation -> AstC1P.Index -> AstC2.Ast NamedLabel
 indexAssignStmts var loc = addAssignmentToInputWhenToplevel . cata go
   where
-    go :: Cata AstC1.Index (AstC2.Ast NamedLabel)
+    go :: Cata AstC1P.Index (AstC2.Ast NamedLabel)
     go = \case
       Nil -> []
       Cons i stmts -> assignment : stmts
@@ -478,19 +433,18 @@ indexAssignStmts var loc = addAssignmentToInputWhenToplevel . cata go
                 { AstC2Assign.lhs = var,
                   AstC2Assign.rhs =
                     case i of
-                      AstC1.ZeroPlus zeroPlus ->
-                        C2Expr.ConstExpr $ ConstExpr.Nat zeroPlus
-                      AstC1.LenMinus lenMinus ->
+                      AstC1P.ZeroPlus zeroPlus -> C2Expr.Nat zeroPlus
+                      AstC1P.LenMinus lenMinus ->
                         C2Expr.BinOp
                           C2Expr.BinOp_
                             { C2Expr.op = C2Expr.ArrayAccess,
-                              C2Expr.lhs = C2Expr.ConstExpr $ ConstExpr.Var var,
+                              C2Expr.lhs = C2Expr.Var var,
                               C2Expr.rhs =
                                 C2Expr.BinOp
                                   C2Expr.BinOp_
                                     { C2Expr.op = C2Expr.Sub,
-                                      C2Expr.lhs = C2Expr.Length $ ConstExpr.Var var,
-                                      C2Expr.rhs = C2Expr.ConstExpr $ ConstExpr.Nat lenMinus
+                                      C2Expr.lhs = C2Expr.Length $ C2Expr.Var var,
+                                      C2Expr.rhs = C2Expr.Nat lenMinus
                                     }
                             }
                 }
@@ -503,7 +457,7 @@ indexAssignStmts var loc = addAssignmentToInputWhenToplevel . cata go
             AstC2.Assign
               AstC2Assign.Assign
                 { AstC2Assign.lhs = var,
-                  AstC2Assign.rhs = C2Expr.ConstExpr ConstExpr.Input
+                  AstC2Assign.rhs = C2Expr.Input
                 }
 
 compileC1PToC2 :: Var -> AstC1P.Ast -> AstC2.Ast NamedLabel
@@ -524,7 +478,7 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
     go :: Para AstC1P.Ast (State C1ToC2InputData (AstC2.Ast NamedLabel))
     go = \case
       AstC1P.SymbolF s -> do
-        pure [AstC2.Push $ ConstExpr.Symbol s]
+        pure [AstC2.Push $ C2Expr.Symbol s]
       AstC1P.CompoundF inputXsPairs -> do
         iterationCountVar <- newVar
         modify newCompoundTermLengthCounter
@@ -536,17 +490,17 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                 AstC2Assign.Assign
                   { AstC2Assign.lhs = iterationCountVar,
                     AstC2Assign.rhs =
-                      C2Expr.ConstExpr $ ConstExpr.Nat numNonLoopInputs
+                      C2Expr.Nat numNonLoopInputs
                   }
             buildCompoundTerm =
-              AstC2.Build $ ConstExpr.Var iterationCountVar
+              AstC2.Build $ C2Expr.Var iterationCountVar
         pure $ initIterationCountVar : xs ++ [buildCompoundTerm]
       AstC1P.AssignmentF (var, index, loc) inputXPair -> do
         x <- snd inputXPair
         let assignmentStmts = indexAssignStmts var loc index
         pure $ assignmentStmts ++ x
       AstC1P.CopyF v -> do
-        pure [AstC2.Push $ ConstExpr.Var v]
+        pure [AstC2.Push $ C2Expr.Var v]
       AstC1P.LoopF var src start end inputXPair -> do
         --        #0 = start              ; #0 is 'loopCounterVar'
         --        #1 = #src.length - end  ; #1 is 'loopEndVar'
@@ -568,7 +522,7 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
               AstC2.Assign
                 AstC2Assign.Assign
                   { AstC2Assign.lhs = loopCounterVar,
-                    AstC2Assign.rhs = C2Expr.ConstExpr $ ConstExpr.Nat start
+                    AstC2Assign.rhs = C2Expr.Nat start
                   }
             assignLoopEndVar =
               AstC2.Assign
@@ -578,15 +532,15 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                       C2Expr.BinOp
                         C2Expr.BinOp_
                           { C2Expr.op = C2Expr.Sub,
-                            C2Expr.lhs = C2Expr.Length $ ConstExpr.Var src,
-                            C2Expr.rhs = C2Expr.ConstExpr $ ConstExpr.Nat end
+                            C2Expr.lhs = C2Expr.Length $ C2Expr.Var src,
+                            C2Expr.rhs = C2Expr.Nat end
                           }
                   }
             jumpBot =
               AstC2.Jump
                 AstC2Jump.Jump
                   { AstC2Jump.target = BotOfLoop loopLabel,
-                    AstC2Jump.condition = AstC2Expr.ConstExpr $ ConstExpr.Bool True
+                    AstC2Jump.condition = AstC2Expr.Bool True
                   }
             assignVarToSrc =
               AstC2.Assign
@@ -596,8 +550,8 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                       C2Expr.BinOp
                         C2Expr.BinOp_
                           { C2Expr.op = C2Expr.ArrayAccess,
-                            C2Expr.lhs = C2Expr.ConstExpr $ ConstExpr.Var src,
-                            C2Expr.rhs = C2Expr.ConstExpr $ ConstExpr.Var loopCounterVar
+                            C2Expr.lhs = C2Expr.Var src,
+                            C2Expr.rhs = C2Expr.Var loopCounterVar
                           }
                   }
             incremeentLoopCountVar =
@@ -608,8 +562,8 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                       C2Expr.BinOp
                         C2Expr.BinOp_
                           { C2Expr.op = C2Expr.Add,
-                            C2Expr.lhs = C2Expr.ConstExpr $ ConstExpr.Var loopCounterVar,
-                            C2Expr.rhs = C2Expr.ConstExpr $ ConstExpr.Nat 1
+                            C2Expr.lhs = C2Expr.Var loopCounterVar,
+                            C2Expr.rhs = C2Expr.Nat 1
                           }
                   }
             incremenetLengthCountVar =
@@ -620,15 +574,15 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                       C2Expr.BinOp
                         C2Expr.BinOp_
                           { C2Expr.op = C2Expr.Add,
-                            C2Expr.lhs = C2Expr.ConstExpr $ ConstExpr.Var lengthCountVar,
-                            C2Expr.rhs = C2Expr.ConstExpr $ ConstExpr.Nat 1
+                            C2Expr.lhs = C2Expr.Var lengthCountVar,
+                            C2Expr.rhs = C2Expr.Nat 1
                           }
                   }
             jumpTop =
               AstC2.Jump
                 AstC2Jump.Jump
                   { AstC2Jump.target = TopOfLoop loopLabel,
-                    AstC2Jump.condition = AstC2Expr.ConstExpr $ ConstExpr.Bool True
+                    AstC2Jump.condition = AstC2Expr.Bool True
                   }
         pure $
           [ assignLoopCountVar,
@@ -642,200 +596,9 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                  jumpTop
                ]
 
--- compileC0toC1 :: AstC0.Ast -> CompileResult AstC1.Ast
--- compileC0toC1 astC0 = do
---   (astC1, index) <- cata go $ trace (displayC0 astC0) astC0
---   case index of
---     Nothing -> Right astC1
---     Just [] -> Right astC1
---     Just _ -> Left Error.TooFewEllipsesInConstructor
---   where
---     go :: AstC0.AstF (CompileResult (AstC1.Ast, Maybe AstC0.Index)) -> CompileResult (AstC1.Ast, Maybe AstC0.Index)
---     go (AstC0.SymbolF s) = Right (AstC1.Symbol s, Nothing)
---     go (AstC0.CompoundF xs) = do
---       xs' <- sequence xs
---       index <- combineCompoundTermIndices (map snd xs')
---       return (AstC1.Compound $ map fst xs', index)
---     go (AstC0.VariableF i) =
---       let (c0Part, c1Part) = AstC0.popTrailingC1Index i
---        in Right (AstC1.Copy c1Part, Just c0Part)
---     go (AstC0.EllipsesF term) = trace (show $ show <$> term) $ do
---       (astC1, indexC0) <- term
---       case indexC0 of
---         Nothing ->
---           case astC1 of
---             AstC1.Symbol _ ->
---               Left Error.EllipsisAppliedToSymbolInConstructor
---             _other -> error "unreachable, possibly incorrect var bindings"
---         Just indexC0' ->
---           case AstC0.popBetweenTail (trace (show indexC0') indexC0') of
---             (indexC0'', Just (zeroPlus, lenMinus)) ->
---               let (fstC0, sndC1) = AstC0.popTrailingC1Index indexC0''
---                   loopC1 =
---                     AstC1.Loop
---                       { AstC1.index = sndC1,
---                         AstC1.start = zeroPlus,
---                         AstC1.end = lenMinus,
---                         AstC1.body = astC1
---                       }
---                in Right (loopC1, Just fstC0)
---             ([], Nothing) -> undefined
---             (_, Nothing) -> Left Error.TooManyEllipsesInConstructor
-
--- newUniqueVar :: State C1ToStmtsState Var
--- newUniqueVar = do
---   var <- gets currentVar
---   modify incVar
---   return var
-
--- pushIndexToStackStmts :: AstC1.Index -> State C1ToStmtsState [Stmt a]
--- pushIndexToStackStmts = cata $ \case
---   Nil -> return []
---   Cons (AstC1.ZeroPlus zp) stmts -> do
---     stmts' <- stmts
---     return $ Stmt.PushIndexToIndexStack (Constant zp) : stmts'
---   Cons (AstC1.LenMinus lm) stmts -> do
---     stmts' <- stmts
---     var <- newUniqueVar
---     let assign = Stmt.Assign {lhs = var, rhs = Expr.Length}
---     let sub =
---           Stmt.Assign
---             { lhs = var,
---               rhs =
---                 Expr.BinOp
---                   { Expr.op = Op.Sub,
---                     Expr.lhs = var,
---                     Expr.rhs = ConstantExpr.Constant lm
---                   }
---             }
---     let push = Stmt.PushIndexToIndexStack $ ConstantExpr.Var var
---     return $ [assign, sub, push] ++ stmts'
-
--- popFromIndexStackStmt :: AstC1.Index -> Stmt a
--- popFromIndexStackStmt =
---   Stmt.PopFromIndexStack . length
-
--- data C1ToStmtsState = C1ToStmtsState
---   { currentVar :: !Var,
---     iterationCountVar :: !(Maybe Var)
---   }
-
--- incVar :: C1ToStmtsState -> C1ToStmtsState
--- incVar state = state {currentVar = currentVar state + 1}
-
--- setIterationCountVar :: C1ToStmtsState -> C1ToStmtsState
--- setIterationCountVar state = state {currentVar = currentVar state + 1, iterationCountVar = Just $ currentVar state}
-
--- initialC1ToStmtsState :: C1ToStmtsState
--- initialC1ToStmtsState = C1ToStmtsState {currentVar = 0, iterationCountVar = Nothing}
-
 data NamedLabel = TopOfLoop !Int | BotOfLoop !Int deriving (Eq, Generic)
 
 instance Hashable NamedLabel
-
--- compileC1toStmts :: AstC1.Ast -> [Stmt NamedLabel]
--- compileC1toStmts = fst . flip runState initialC1ToStmtsState . histo go
---   where
---     shouldIncrementIterationCount :: Cofree AstC1.AstF (State C1ToStmtsState [Stmt NamedLabel]) -> Bool
---     shouldIncrementIterationCount (_ CCC.:< (AstC1.LoopF {})) = False
---     shouldIncrementIterationCount _ = True
-
---     isLoopF :: AstC1.AstF a -> Bool
---     isLoopF (AstC1.LoopF {}) = True
---     isLoopF _ = False
-
---     go :: AstC1.AstF (Cofree AstC1.AstF (State C1ToStmtsState [Stmt NamedLabel])) -> State C1ToStmtsState [Stmt NamedLabel]
---     go = \case
---       AstC1.SymbolF s -> return [PushSymbolToDataStack s]
---       AstC1.CompoundF xs -> do
---         let g = map extract xs :: [State C1ToStmtsState [Stmt NamedLabel]]
---             orig = map unwrap xs
---             numLoopyBodies = length $ filter isLoopF orig
---             numNonLoopyBodies = length orig - numLoopyBodies
---         modify setIterationCountVar
---         count <- gets iterationCountVar
---         xs' <- sequence g
---         case count of
---           Nothing -> error "no iteration counter"
---           Just count_var ->
---             return $
---               Stmt.Assign {lhs = count_var, rhs = Expr.Constant numNonLoopyBodies}
---                 : concat xs'
---                 ++ [BuildCompoundTermFromDataStack {term_count = ConstantExpr.Var count_var}]
---       AstC1.CopyF i -> do
---         pushStackStmts <- pushIndexToStackStmts i
---         return $ pushStackStmts ++ [Stmt.PushIndexedTermToDataStack, popFromIndexStackStmt i]
---       AstC1.LoopF index start end body -> do
---         loopVar <- newUniqueVar
---         lengthVar <- newUniqueVar
---         endVar <- newUniqueVar
---         loopLabel <- newUniqueVar
-
---         pushStackStmts <- pushIndexToStackStmts index
-
---         count <- gets iterationCountVar
-
---         case count of
---           Nothing -> error "uncreachable: no iteration counter"
---           Just count_var -> do
---             let inc_stmt =
---                   ( [ Stmt.Assign
---                         { lhs = count_var,
---                           rhs =
---                             Expr.BinOp
---                               { Expr.op = Op.Add,
---                                 Expr.lhs = count_var,
---                                 Expr.rhs = ConstantExpr.Constant 1
---                               }
---                         }
---                       | shouldIncrementIterationCount body
---                     ]
---                   ) ::
---                     [Stmt NamedLabel]
---             let pushLoopVar = Stmt.PushIndexToIndexStack (ConstantExpr.Var loopVar)
---             let popLoopVar = Stmt.PopFromIndexStack 1
-
---             body' <- extract body
-
---             let body'' = pushLoopVar : body' ++ [popLoopVar]
-
---             let prologue =
---                   [Stmt.Assign {lhs = loopVar, rhs = Expr.Constant start}]
---                     ++ pushStackStmts
---                     ++ [ Stmt.Assign {lhs = lengthVar, rhs = Expr.Length},
---                          Stmt.Assign {lhs = endVar, rhs = Expr.Constant end},
---                          Stmt.Assign
---                            { lhs = endVar,
---                              rhs =
---                                Expr.BinOp
---                                  { Expr.op = Op.Sub,
---                                    Expr.lhs = lengthVar,
---                                    Expr.rhs = ConstantExpr.Var endVar
---                                  }
---                            },
---                          Stmt.Jump $ TopOfLoop loopLabel
---                        ]
---             let epilogue =
---                   [ Stmt.Assign
---                       { lhs = loopVar,
---                         rhs =
---                           Expr.BinOp
---                             { Expr.op = Op.Add,
---                               Expr.lhs = loopVar,
---                               Expr.rhs = ConstantExpr.Constant 1
---                             }
---                       }
---                   ]
---                     ++ inc_stmt
---                     ++ [ Stmt.JumpWhenLessThan
---                            { label = BotOfLoop loopLabel,
---                              when_var = loopVar,
---                              le_var = endVar
---                            },
---                          popFromIndexStackStmt index
---                        ]
---             let result = prologue ++ body'' ++ epilogue
---             return result
 
 resolveC2NamedLabels :: AstC2.Ast NamedLabel -> AstC2.Ast Int
 resolveC2NamedLabels ast = replaceNamesWithOffsets namedLabelOffsets ast
@@ -852,7 +615,7 @@ resolveC2NamedLabels ast = replaceNamesWithOffsets namedLabelOffsets ast
           Cons (offset, stmt) labelOffsetPairs -> case stmt of
             -- Jump statements are the only ones which contain labels,
             -- so they are the only ones we care about here.
-            AstC2.Jump (AstC2Jump.Jump label condition) ->
+            AstC2.Jump (AstC2Jump.Jump label _condition) ->
               (label, offset) : labelOffsetPairs
             _stmtNotContainingLabels -> labelOffsetPairs
 
@@ -883,26 +646,3 @@ resolveC2NamedLabels ast = replaceNamesWithOffsets namedLabelOffsets ast
                 -- line number of the 'jump BOT' satement.
                 TopOfLoop name -> 1 + fromJust (ht !? BotOfLoop name)
                 BotOfLoop name -> fromJust $ ht !? TopOfLoop name
-
--- compileLabels :: [Stmt NamedLabel] -> [Stmt Int]
--- compileLabels xs = go (calculateInstructionNumbers (zip [0 ..] xs)) xs
---   where
---     calculateInstructionNumbers :: [(Int, Stmt NamedLabel)] -> H.HashMap NamedLabel Int
---     calculateInstructionNumbers =
---       H.fromList
---         . mapMaybe
---           ( \case
---               (offset, Jump l) -> Just (l, offset)
---               (offset, JumpWhenLessThan l _ _) -> Just (l, offset)
---               (_, _) -> Nothing
---           )
---     go :: H.HashMap NamedLabel Int -> [Stmt NamedLabel] -> [Stmt Int]
---     go ht = cata $ \case
---       Nil -> []
---       Cons stmt others -> stmt' : others
---         where
---           stmt' = fmap namedInstructionNumber stmt
-
---           namedInstructionNumber :: NamedLabel -> Int
---           namedInstructionNumber (TopOfLoop l) = fromJust $ ht !? BotOfLoop l
---           namedInstructionNumber (BotOfLoop l) = 1 + fromJust (ht !? TopOfLoop l)

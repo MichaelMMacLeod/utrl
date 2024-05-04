@@ -3,9 +3,7 @@ module Interpret2 (interpret2) where
 import qualified Ast0
 import qualified AstC2
 import qualified AstC2Assign
-import AstC2ConstExpr (ConstExpr)
-import qualified AstC2ConstExpr as ConstExpr
-import AstC2Expr (Expr, BinOp_ (..))
+import AstC2Expr (BinOp_ (..), Expr)
 import qualified AstC2Expr as Expr
 import AstC2ExprVar (Var)
 import qualified AstC2Jump
@@ -50,14 +48,14 @@ interpret2 prog initialInput =
                   Memory.instruction = instruction + 1
                 }
             AstC2.Push expr ->
-              let expr' = evalConstExpr m expr
+              let expr' = evalExpr m expr
                   astExpr = Value.expectAst expr'
                in m
                     { Memory.dataStack = astExpr : dataStack,
                       Memory.instruction = instruction + 1
                     }
             AstC2.Build termCount ->
-              let termCount' = evalConstExpr m termCount
+              let termCount' = evalExpr m termCount
                   termCountNat = Value.expectNat termCount'
                   newTerm = Ast0.Compound . reverse $ take termCountNat dataStack
                in m
@@ -76,17 +74,13 @@ interpret2 prog initialInput =
 evalVar :: Memory -> Var -> Value
 evalVar m v = Memory.variables m !! v
 
-evalConstExpr :: Memory -> ConstExpr -> Value
-evalConstExpr m = \case
-  ConstExpr.Bool b -> Value.Bool b
-  ConstExpr.Var v -> evalVar m v
-  ConstExpr.Nat n -> Value.Nat n
-  ConstExpr.Symbol s -> Value.Ast $ Ast0.Symbol s
-  ConstExpr.Input -> Value.Ast $ Memory.input m
-
 evalExpr :: Memory -> Expr -> Value
 evalExpr m = \case
-  Expr.ConstExpr ce -> evalConstExpr m ce
+  Expr.Bool b -> Value.Bool b
+  Expr.Var v -> evalVar m v
+  Expr.Nat n -> Value.Nat n
+  Expr.Symbol s -> Value.Ast $ Ast0.Symbol s
+  Expr.Input -> Value.Ast $ Memory.input m
   Expr.BinOp op ->
     let lhs' = evalExpr m $ AstC2Expr.lhs op
         rhs' = evalExpr m $ AstC2Expr.rhs op
@@ -110,7 +104,7 @@ evalExpr m = \case
                 rhsNat = Value.expectNat rhs'
              in Value.Bool $ lhsNat < rhsNat
   Expr.Length e ->
-    let e' = evalConstExpr m e
+    let e' = evalExpr m e
         eAst = Value.expectAst e'
      in case eAst of
           Ast0.Symbol _ -> Value.mkTypeError "Compound" e'

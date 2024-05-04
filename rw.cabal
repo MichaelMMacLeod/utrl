@@ -62,31 +62,25 @@ library
           Ast0
         , Ast1
         , AstC0
-        , AstC1
         , AstC1P
         , AstC2
         , AstC2Assign
-        , AstC2ConstExpr
         , AstC2Expr
         , AstC2ExprVar
         , AstC2Jump
         , AstC2Value
         , AstP0
         , Compile
-        , ConstantExpr
         , Display
         , Environment
         , Error
-        , Expr
         , Interpret
         , Interpret2
         , Interpret2Memory
-        , Lex
         , Lib
         , Op
         , Predicate
         , Read
-        , Stmt
         , Utils
         , Var
 

@@ -4,15 +4,20 @@ module Utils
   ( Between (..),
     iterateMaybe,
     setNth,
-    classifyC0,
     Cata,
     Para,
     Histo,
+    c1Tail,
+    c0Head,
+    popTrailingC1Index,
+    popBetweenTail,
+    getAtC0Index,
   )
 where
 
+import qualified Ast0
 import qualified AstC0
-import qualified AstC1
+import qualified AstC1P
 import Control.Comonad.Cofree (Cofree)
 import Data.Functor.Base (ListF (..))
 import Data.Functor.Foldable (Base, Corecursive (..))
@@ -36,36 +41,65 @@ setNth i defaultValue x xs = left ++ [x] ++ right
     left = take i (xs ++ repeat defaultValue)
     right = drop (i + 1) xs
 
-classifyC0 ::
-  AstC0.Index ->
-  Either
-    AstC1.Index
-    ( AstC0.Index,
-      Between,
-      AstC1.Index
-    )
-classifyC0 i =
-  let (c0, c1) = AstC0.popTrailingC1Index i
-   in if null c0
-        then Left c1
-        else case AstC0.popBetweenTail c0 of
-          (c0, Just (zeroPlus, lenMinus)) ->
-            Right (c0, Between zeroPlus lenMinus, c1)
-          (_, Nothing) -> error "unreachable"
+-- classifyC0 ::
+--   AstC0.Index ->
+--   Either
+--     AstC1P.Index
+--     ( AstC0.Index,
+--       Between,
+--       AstC1P.Index
+--     )
+-- classifyC0 i =
+--   let (c0, c1) = AstC0.popTrailingC1Index i
+--    in if null c0
+--         then Left c1
+--         else case AstC0.popBetweenTail c0 of
+--           (c0, Just (zeroPlus, lenMinus)) ->
+--             Right (c0, Between zeroPlus lenMinus, c1)
+--           (_, Nothing) -> error "unreachable"
 
 data Between = Between !Int !Int
   deriving (Show, Eq)
 
--- data C0Classification
---   = ClassC1 AstC1.Index
---   | ClassC0C1 AstC0.Index Between AstC1.Index
+c1Tail :: AstC0.Index -> AstC1P.Index
+c1Tail = reverse . go . reverse
+  where
+    go :: AstC0.Index -> AstC1P.Index
+    go ((AstC0.ZeroPlus i) : xs) = AstC1P.ZeroPlus i : go xs
+    go ((AstC0.LenMinus i) : xs) = AstC1P.LenMinus i : go xs
+    go _ = []
 
--- data Index2Element = ZeroPlus Int | LenMinus Int
+c0Head :: AstC0.Index -> AstC0.Index
+c0Head = reverse . go . reverse
+  where
+    go :: AstC0.Index -> AstC0.Index
+    go xs@(AstC0.Between {} : _) = xs
+    go (_ : xs) = go xs
+    go [] = []
 
--- newtype Index2 = Index2 [Index2Element]
+popTrailingC1Index :: AstC0.Index -> (AstC0.Index, AstC1P.Index)
+popTrailingC1Index c0 = (c0Head c0, c1Tail c0)
 
--- data Index3 = Index3 Index2 Between
+popBetweenTail :: AstC0.Index -> (AstC0.Index, Maybe (Int, Int))
+popBetweenTail = go . reverse
+  where
+    go (AstC0.Between zp lm : others) = (reverse others, Just (zp, lm))
+    go others = (others, Nothing)
 
--- data Index4
---   = Index4Really2 [Index2Element]
---   | Index4Really3Or2 [Index3]
+getAtC0Index :: AstC0.Index -> Ast0.Ast -> [Ast0.Ast]
+getAtC0Index [] ast = [ast]
+getAtC0Index _ (Ast0.Symbol _) = []
+getAtC0Index (AstC0.ZeroPlus zp : i) (Ast0.Compound xs) =
+  if zp < length xs
+    then getAtC0Index i (xs !! zp)
+    else []
+getAtC0Index (AstC0.LenMinus lm : i) (Ast0.Compound xs) =
+  let zp = length xs - lm
+   in if zp > 0
+        then getAtC0Index i (xs !! zp)
+        else []
+getAtC0Index (AstC0.Between zp lm : i) (Ast0.Compound xs) =
+  let zpEnd = length xs - lm
+   in if zp < length xs && zpEnd > 0
+        then concatMap (getAtC0Index i) (drop zp (take zpEnd xs))
+        else []

@@ -6,16 +6,9 @@ module AstC0
     AstF',
     Index,
     IndexElement (..),
-    c1Tail,
-    c0Head,
-    popTrailingC1Index,
-    popBetweenTail,
-    getAtC0Index,
   )
 where
 
-import qualified Ast0
-import qualified AstC1
 import Data.Functor.Foldable (Base, Corecursive (..), Recursive (..))
 
 data Ast
@@ -34,52 +27,6 @@ data IndexElement
   deriving (Eq, Show, Ord)
 
 type Index = [IndexElement]
-
--- classifyC0 :: Index -> C0Classification
--- classifyC0 = undefined
-
-c1Tail :: Index -> AstC1.Index
-c1Tail = reverse . go . reverse
-  where
-    go :: Index -> AstC1.Index
-    go ((AstC0.ZeroPlus i) : xs) = AstC1.ZeroPlus i : go xs
-    go ((AstC0.LenMinus i) : xs) = AstC1.LenMinus i : go xs
-    go _ = []
-
-c0Head :: Index -> Index
-c0Head = reverse . go . reverse
-  where
-    go :: Index -> Index
-    go xs@(AstC0.Between {} : _) = xs
-    go (_ : xs) = go xs
-    go [] = []
-
-popTrailingC1Index :: Index -> (Index, AstC1.Index)
-popTrailingC1Index c0 = (c0Head c0, c1Tail c0)
-
-popBetweenTail :: Index -> (Index, Maybe (Int, Int))
-popBetweenTail = go . reverse
-  where
-    go (AstC0.Between zp lm : others) = (reverse others, Just (zp, lm))
-    go others = (others, Nothing)
-
-getAtC0Index :: Index -> Ast0.Ast -> [Ast0.Ast]
-getAtC0Index [] ast = [ast]
-getAtC0Index _ (Ast0.Symbol _) = []
-getAtC0Index (ZeroPlus zp : i) (Ast0.Compound xs) =
-  if zp < length xs
-    then getAtC0Index i (xs !! zp)
-    else []
-getAtC0Index (LenMinus lm : i) (Ast0.Compound xs) =
-  let zp = length xs - lm
-   in if zp > 0
-        then getAtC0Index i (xs !! zp)
-        else []
-getAtC0Index (Between zp lm : i) (Ast0.Compound xs) =
-  let zpEnd = length xs - lm
-   in if zp < length xs && zpEnd > 0
-        then concatMap (getAtC0Index i) (drop zp (take zpEnd xs))
-        else []
 
 data AstF r
   = SymbolF String
