@@ -239,24 +239,13 @@ tests =
         \         (replace x for y in z)))\
         \"
         "(apply (0 -> (Var 0)) 123)"
-        (Right "123")
-        --     ,
-        -- testCase "createEnvironment0" $
-        --   assertEqual
-        --     ""
-        --     ( Right $
-        --         Environment
-        --           (mkGraph
-        --             [
-        --               (0, [])
-        --             ]
-        --             [])
-        --           0
-        --     )
-        --     ( createEnvironment
-        --         "(def n m (add n (succ m)) -> (succ (add n m)))\
-        --         \(def n (add n 0) -> n)"
-        --     )
+        (Right "123"),
+      runProgramTest
+        14
+        "(def x (flatten (list (list x ..) ..)) -> (list x .. ..))\
+        \"
+        "(flatten (list (list 1 2 3 4 5 6) (list a b c) (list) (list d)))"
+        (Right "(list 1 2 3 4 5 6 a b c d)")
     ]
 
 runProgramTest :: Int -> Text -> Text -> CompileResult Text -> TestTree
