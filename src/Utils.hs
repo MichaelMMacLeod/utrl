@@ -35,10 +35,10 @@ iterateMaybe f b = b : ana go b
       Nothing -> Nil
       Just x' -> Cons x' x'
 
-setNth :: Int -> a -> a -> [a] -> [a]
+setNth :: Int -> (Int -> a) -> a -> [a] -> [a]
 setNth i defaultValue x xs = left ++ [x] ++ right
   where
-    left = take i (xs ++ repeat defaultValue)
+    left = take i (xs ++ map defaultValue [0..])
     right = drop (i + 1) xs
 
 -- classifyC0 ::

@@ -11,10 +11,10 @@ import AstC2Value (Value)
 import qualified AstC2Value as Value
 import Data.List.Extra ((!?))
 import Debug.Trace (trace)
+import qualified Display
 import Interpret2Memory (Memory (Memory))
 import qualified Interpret2Memory as Memory
 import Utils (iterateMaybe, setNth)
-import qualified Display
 
 interpret2 :: AstC2.Ast Int -> Ast0.Ast -> Ast0.Ast
 interpret2 prog initialInput =
@@ -32,19 +32,24 @@ interpret2 prog initialInput =
         }
 
     transition :: Memory -> Maybe Memory
-    transition m = trace (Display.displayC2 $ Memory.program m) $ case m of
+    transition m = case m of
       Memory
         { Memory.input = _input,
           Memory.program = program,
           Memory.instruction = instruction,
           Memory.dataStack = dataStack,
           Memory.variables = variables
-        } -> do
+        } -> trace (Display.displayC2 program) $ do
           i <- program !? instruction
           pure $ case i of
             AstC2.Assign (AstC2Assign.Assign lhs rhs) ->
               m
-                { Memory.variables = setNth lhs undefined (evalExpr m rhs) variables,
+                { Memory.variables = 
+                    setNth 
+                    lhs 
+                    (\var -> error $ "$" ++ show var ++ " is undefined") 
+                    (evalExpr m rhs) 
+                    variables,
                   Memory.instruction = instruction + 1
                 }
             AstC2.Push expr ->

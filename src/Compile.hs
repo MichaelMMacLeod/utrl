@@ -345,7 +345,10 @@ traverseC0ToC1P a nextUnusedVar = case a of
               C0ToC1Data
                 { _ast =
                     if null c1
-                      then loopAst
+                      then
+                        if null c0'
+                          then AstC1P.Assignment (nextUnusedVar + 1, c1, TopLevel) loopAst
+                          else loopAst
                       else
                         let location = if null c0' then TopLevel else NotTopLevel
                          in AstC1P.Assignment (nextUnusedVar + 1, c1, location) loopAst,

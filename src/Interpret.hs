@@ -21,6 +21,8 @@ import Interpret2 (interpret2)
 import Predicate (applyPredicates)
 import qualified Read
 import Utils (iterateMaybe)
+import Debug.Trace (trace)
+import qualified Display
 
 data Matcher = Matcher
   { _node :: !Node,
