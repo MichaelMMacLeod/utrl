@@ -407,10 +407,14 @@ incC2Var d =
   let v = _c2iNextUnusedVar d
    in d {_c2iNextUnusedVar = v + 1}
 
-newCompoundTermLengthCounter :: C1ToC2InputData -> C1ToC2InputData
-newCompoundTermLengthCounter d =
-  let v = _c2iNextUnusedVar d
-   in d {_c2iNextUnusedVar = v + 1, _c2iCompoundTermLengthCounter = Just v}
+setLengthCountVar :: Var -> C1ToC2InputData -> C1ToC2InputData
+setLengthCountVar v d = d {_c2iCompoundTermLengthCounter = Just v}
+
+newLengthCountVar :: State C1ToC2InputData Var
+newLengthCountVar = do
+  var <- newVar
+  modify $ setLengthCountVar var
+  pure var
 
 newVar :: State C1ToC2InputData Var
 newVar = do
@@ -431,17 +435,18 @@ indexAssignStmts var loc = addAssignmentToInputWhenToplevel . cata go
               AstC2Assign.Assign
                 { AstC2Assign.lhs = var,
                   AstC2Assign.rhs =
-                    case i of
-                      AstC1P.ZeroPlus zeroPlus -> C2Expr.Nat zeroPlus
-                      AstC1P.LenMinus lenMinus ->
-                        C2Expr.BinOp
-                          C2Expr.ArrayAccess
-                          (C2Expr.Var var)
-                          ( C2Expr.BinOp
+                    C2Expr.BinOp
+                      C2Expr.ArrayAccess
+                      (C2Expr.Var var)
+                      ( case i of
+                          AstC1P.ZeroPlus zeroPlus ->
+                            C2Expr.Nat zeroPlus
+                          AstC1P.LenMinus lenMinus ->
+                            C2Expr.BinOp
                               C2Expr.Sub
                               (C2Expr.Length $ C2Expr.Var var)
                               (C2Expr.Nat lenMinus)
-                          )
+                      )
                 }
     addAssignmentToInputWhenToplevel :: AstC2.Ast NamedLabel -> AstC2.Ast NamedLabel
     addAssignmentToInputWhenToplevel stmts = case loc of
@@ -475,21 +480,20 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
       AstC1P.SymbolF s -> do
         pure [AstC2.Push $ C2Expr.Symbol s]
       AstC1P.CompoundF inputXsPairs -> do
-        iterationCountVar <- newVar
-        modify newCompoundTermLengthCounter
+        lengthCountVar <- newLengthCountVar
         xs <- concat <$> mapM snd inputXsPairs
         let inputs = map fst inputXsPairs
             numNonLoopInputs = length . filter isC1PNonLoopVariant $ inputs
-            initIterationCountVar =
+            initLengthCountVar =
               AstC2.Assign $
                 AstC2Assign.Assign
-                  { AstC2Assign.lhs = iterationCountVar,
+                  { AstC2Assign.lhs = lengthCountVar,
                     AstC2Assign.rhs =
                       C2Expr.Nat numNonLoopInputs
                   }
             buildCompoundTerm =
-              AstC2.Build $ C2Expr.Var iterationCountVar
-        pure $ initIterationCountVar : xs ++ [buildCompoundTerm]
+              AstC2.Build $ C2Expr.Var lengthCountVar
+        pure $ initLengthCountVar : xs ++ [buildCompoundTerm]
       AstC1P.AssignmentF (var, index, loc) inputXPair -> do
         x <- snd inputXPair
         let assignmentStmts = indexAssignStmts var loc index
@@ -569,7 +573,11 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
               AstC2.Jump
                 AstC2Jump.Jump
                   { AstC2Jump.target = TopOfLoop loopLabel,
-                    AstC2Jump.condition = AstC2Expr.Bool True
+                    AstC2Jump.condition =
+                      C2Expr.BinOp
+                        C2Expr.LessThan
+                        (C2Expr.Var loopCounterVar)
+                        (C2Expr.Var loopEndVar)
                   }
         pure $
           [ assignLoopCountVar,

@@ -220,13 +220,13 @@ len :: Var -> Expr
 len v = Expr.Length $ Expr.Var v
 
 lessThan :: Var -> Expr -> Expr
-lessThan v c = Expr.BinOp $ Expr.BinOp_ Expr.LessThan (var v) c
+lessThan v = Expr.BinOp Expr.LessThan (var v)
 
 add :: Var -> Expr -> Expr
-add v i = Expr.BinOp $ Expr.BinOp_ Expr.Add (var v) i
+add v = Expr.BinOp Expr.Add (var v)
 
 arrayRef :: Var -> Expr -> Expr
-arrayRef v c = Expr.BinOp $ Expr.BinOp_ Expr.ArrayAccess (var v) c
+arrayRef v = Expr.BinOp Expr.ArrayAccess (var v)
 
 input :: Expr
 input = Expr.Input

@@ -14,6 +14,7 @@ import Debug.Trace (trace)
 import Interpret2Memory (Memory (Memory))
 import qualified Interpret2Memory as Memory
 import Utils (iterateMaybe, setNth)
+import qualified Display
 
 interpret2 :: AstC2.Ast Int -> Ast0.Ast -> Ast0.Ast
 interpret2 prog initialInput =
@@ -31,7 +32,7 @@ interpret2 prog initialInput =
         }
 
     transition :: Memory -> Maybe Memory
-    transition m = trace (show m) $ case m of
+    transition m = trace (Display.displayC2 $ Memory.program m) $ case m of
       Memory
         { Memory.input = _input,
           Memory.program = program,

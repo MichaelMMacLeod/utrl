@@ -4,6 +4,8 @@ module Display
   ( display0,
     display1,
     displayC0,
+    displayC2,
+    displayExpr,
   )
 where
 
@@ -18,7 +20,6 @@ import qualified AstC2Jump
 import Data.Functor.Foldable (ListF (..), cata)
 import Data.List (intercalate)
 import Utils (Cata)
-import Var (Var)
 
 displayC2 :: (Show a) => AstC2.Ast a -> String
 displayC2 = addLineNumbers . cata go
@@ -27,7 +28,7 @@ displayC2 = addLineNumbers . cata go
     addLineNumbers = unlines . zipWith prependLineNumber [0 ..]
       where
         prependLineNumber :: Int -> String -> String
-        prependLineNumber number str = show number ++ "\t\t" ++ str
+        prependLineNumber number str = show number ++ "\t" ++ str
 
     go :: (Show a) => Cata [AstC2.Stmt a] [String]
     go = \case
@@ -60,7 +61,7 @@ displayExpr = cata go
         case op of
           Expr.Add -> lhs ++ " + " ++ rhs
           Expr.Sub -> lhs ++ " - " ++ rhs
-          Expr.LessThan -> lhs ++ "<" ++ rhs
+          Expr.LessThan -> lhs ++ " < " ++ rhs
           Expr.ArrayAccess -> lhs ++ "[" ++ rhs ++ "]"
 
 display0 :: Ast0.Ast -> String
