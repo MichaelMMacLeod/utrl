@@ -43,7 +43,9 @@ import Control.Monad.State.Strict
     evalState,
     gets,
     modify,
+    withState,
   )
+import qualified Data.Bifunctor
 import Data.Either.Extra (maybeToEither)
 import Data.Functor.Foldable (ListF (..), Recursive (..), histo)
 import Data.HashMap.Strict ((!?))
@@ -476,8 +478,13 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
         pure [AstC2.Push $ C2Expr.Symbol s]
       AstC1P.CompoundF inputXsPairs -> do
         lengthCountVar <- newLengthCountVar
-        xs <- concat <$> mapM snd inputXsPairs
-        let inputs = map fst inputXsPairs
+        let resetLengthCountVarInX ::
+              (AstC1P.Ast, State C1ToC2InputData [AstC2.Stmt NamedLabel]) ->
+              (AstC1P.Ast, State C1ToC2InputData [AstC2.Stmt NamedLabel])
+            resetLengthCountVarInX = Data.Bifunctor.second $ withState $ setLengthCountVar lengthCountVar
+        let inputXsPairs' = map resetLengthCountVarInX inputXsPairs
+        xs <- concat <$> mapM snd inputXsPairs'
+        let inputs = map fst inputXsPairs'
             numNonLoopInputs = length . filter isC1PNonLoopVariant $ inputs
             initLengthCountVar =
               AstC2.Assign $
