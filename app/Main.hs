@@ -2,8 +2,11 @@ module Main (main) where
 
 import Config (Config (Config))
 import qualified Config
+import Control.Monad (liftM)
+import Control.Monad.Extra (when)
 import qualified Data.Text.IO as Text
 import Display (display0)
+import Environment (createEnvironment, dumpEnvironmentStmts)
 import Error (CompileError)
 import qualified Error as CompileResult
 import Interpret (runProgram)
@@ -17,6 +20,7 @@ import Options.Applicative
     long,
     progDesc,
     strOption,
+    switch,
     (<**>),
   )
 import Options.Applicative.Types (ParserInfo)
@@ -29,7 +33,7 @@ opts =
   info
     (parseConfig <**> helper)
     ( fullDesc
-        <> progDesc "TTRE (text tree rewriting engine) is a simple term-rewriting programming language"
+        <> progDesc "Simple text tree rewriting engine language"
     )
 
 parseConfig :: Parser Config
@@ -42,6 +46,10 @@ parseConfig =
     <*> strOption
       ( long "input"
           <> help "Program input"
+      )
+    <*> switch
+      ( long "dump-stmts"
+          <> help "output assembly statements for debugging"
       )
 
 handleCompileError :: CompileError -> IO ()
@@ -70,7 +78,13 @@ runConfig :: Config -> IO ()
 runConfig c = do
   rules <- Text.readFile $ Config.rules c
   input <- Text.readFile $ Config.input c
+  when (Config.dumpStmts c) $
+    do
+      let e = createEnvironment rules
+      case e of
+        Left _ -> pure ()
+        Right t -> putStrLn $ dumpEnvironmentStmts t
   case runProgram rules input of
     Left c -> handleCompileError c
     Right output -> do
-      putStrLn $ display0 output
+      putStrLn $ unlines $ map display0 output

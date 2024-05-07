@@ -7,14 +7,14 @@ module Compile
     compileC2,
     compile0toRuleDefinition,
     ruleDefinitionPredicates,
-    ruleDefinitionVariableBindings,
+    -- ruleDefinitionVariableBindings,
     compile0to1,
     compile1toP0,
     compile1toC0,
     -- compileC0toC1,
     -- compileC1toStmts,
     -- compileRule,
-    Variables,
+    VariableBindings,
     RuleDefinition (..),
     compileRule2,
     compileC0ToC1P,
@@ -56,9 +56,9 @@ import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreater
 import Utils (Between (..), Cata, Histo, Para, popBetweenTail, popTrailingC1Index)
 import Var (Var)
 
-type Variables = H.HashMap String AstC0.Index
+type VariableBindings = H.HashMap String AstC0.Index
 
-compileC2 :: Variables -> Ast0.Ast -> CompileResult (AstC2.Ast Int)
+compileC2 :: VariableBindings -> Ast0.Ast -> CompileResult (AstC2.Ast Int)
 compileC2 vars ast = do
   let ast1 = compile0to1 ast
       astC0 = compile1toC0 vars ast1
@@ -79,39 +79,65 @@ splitBeforeAndAfter p = go []
     go _ [] = Nothing
 
 compile1toP0 :: Ast1.Ast -> CompileResult AstP0.Ast
-compile1toP0 = histo go
+compile1toP0 = para go
   where
-    go :: Histo Ast1.Ast (CompileResult AstP0.Ast)
+    go :: Para Ast1.Ast (CompileResult AstP0.Ast)
     go = \case
       Ast1.SymbolF s -> Right $ AstP0.Symbol s
-      Ast1.CompoundF xs ->
-        let wasEllipses :: Cofree Ast1.AstF a -> Bool
-            wasEllipses (_ CCC.:< Ast1.EllipsesF _) = True
-            wasEllipses _ = False
-            xsSplit = splitBeforeAndAfter wasEllipses xs
-         in case xsSplit of
-              Nothing -> do
-                xs' <- mapM extract xs
-                Right $ AstP0.CompoundWithoutEllipses xs'
-              Just (b, e, a) ->
-                if any wasEllipses a
-                  then Left MoreThanOneEllipsisInSingleCompoundTermOfPattern
-                  else do
-                    b' <- mapM extract b
-                    e' <- extract e
-                    a' <- mapM extract a
-                    Right $ AstP0.CompoundWithEllipses b' e' a'
+      Ast1.CompoundF inputXsPairs ->
+        let input :: [Ast1.Ast]
+            input = map fst inputXsPairs
+            xs :: [CompileResult AstP0.Ast]
+            xs = map snd inputXsPairs
+            wasEllipses :: (Ast1.Ast, AstP0.Ast) -> Bool
+            wasEllipses = \case
+              (Ast1.Ellipses _, _) -> True
+              _ -> False
+         in do
+              inputXsPairs <- zip input <$> sequence xs
+              let inputXsPairsSplit = splitBeforeAndAfter wasEllipses inputXsPairs
+              case inputXsPairsSplit of
+                Nothing ->
+                  Right $ AstP0.CompoundWithoutEllipses $ map snd inputXsPairs
+                Just (b, e, a) ->
+                  if any wasEllipses a
+                    then Left MoreThanOneEllipsisInSingleCompoundTermOfPattern
+                    else Right $ AstP0.CompoundWithEllipses (map snd b) (snd e) (map snd a)
       Ast1.EllipsesF x -> extract x
 
 data RuleDefinition = RuleDefinition
-  { _variables :: ![String],
+  { _variables :: !VariableBindings,
     _pattern :: !AstP0.Ast,
     _constructor :: !Ast0.Ast
   }
 
+isDollarSignVar :: String -> Bool
+isDollarSignVar ('$' : _) = True
+isDollarSignVar _ = False
+
+p0VariableBindings :: AstP0.Ast -> CompileResult VariableBindings
+p0VariableBindings = cata go . indexP0ByC0
+  where
+    go :: Cata (Cofree AstP0.AstF AstC0.Index) (CompileResult VariableBindings)
+    go (index :< ast) = case ast of
+      AstP0.SymbolF s ->
+        Right $
+          if isDollarSignVar s
+            then H.singleton s index
+            else H.empty
+      AstP0.CompoundWithoutEllipsesF xs -> do
+        xs' <- sequence xs
+        let combined = unionNonIntersectingHashMaps xs'
+        maybeToEither VariableUsedMoreThanOnceInPattern combined
+      AstP0.CompoundWithEllipsesF b e a -> do
+        b' <- sequence b
+        e' <- e
+        a' <- sequence a
+        let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
+        maybeToEither VariableUsedMoreThanOnceInPattern combined
+
 compileRule2 :: RuleDefinition -> CompileResult ([IndexedPredicate], AstC2.Ast Int)
-compileRule2 rule@(RuleDefinition _ _ constructor) = do
-  vars <- ruleDefinitionVariableBindings rule
+compileRule2 rule@(RuleDefinition vars pattern constructor) = do
   preds <- ruleDefinitionPredicates rule
   program <- compileC2 vars constructor
   Right (preds, program)
@@ -119,62 +145,28 @@ compileRule2 rule@(RuleDefinition _ _ constructor) = do
 compile0toRuleDefinition :: Ast0.Ast -> CompileResult RuleDefinition
 compile0toRuleDefinition (Ast0.Symbol _) = Left InvalidRuleDefinition
 compile0toRuleDefinition (Ast0.Compound xs) =
-  -- rules must have at least 4 subterms:
-  --  1   2 3  4
-  -- (def a -> b)
-  --
-  -- they can have as many variables as necessary before the pattern 'a':
-  -- (def var1 var2 var3 a -> b)
-  if length xs < 4
+  -- rules must have exactly 3 subterms:
+  --  1   2 3
+  -- (def a b)
+  if length xs /= 3
     then Left InvalidRuleDefinition
     else
-      let (<&&>) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
-          (<&&>) f g x = f x && g x
-
-          isValidRuleSyntax :: [Ast0.Ast] -> Bool
-          isValidRuleSyntax =
-            startsWithDefSymbol
-              <&&> hasArrowBetweenPatternAndConstructor
-              <&&> allVariablesAreSymbols
-
-          startsWithDefSymbol :: [Ast0.Ast] -> Bool
+      let startsWithDefSymbol :: [Ast0.Ast] -> Bool
           startsWithDefSymbol (Ast0.Symbol "def" : _) = True
           startsWithDefSymbol _ = False
 
-          hasArrowBetweenPatternAndConstructor :: [Ast0.Ast] -> Bool
-          hasArrowBetweenPatternAndConstructor ast =
-            let arrow = ast !! (length ast - 2)
-             in arrow == Ast0.Symbol "->"
-
-          allVariablesAreSymbols :: [Ast0.Ast] -> Bool
-          allVariablesAreSymbols ast =
-            let isSymbol :: Ast0.Ast -> Bool
-                isSymbol (Ast0.Symbol _) = True
-                isSymbol _ = False
-             in all isSymbol $ ruleDefinitionVariables ast
-
-          ruleDefinitionVariables :: [Ast0.Ast] -> [Ast0.Ast]
-          ruleDefinitionVariables ast =
-            let astWithoutPredicateAndArrowAndConstructor = take (length ast - 3) ast
-                astWithoutDefSymbol = drop 1 astWithoutPredicateAndArrowAndConstructor
-             in astWithoutDefSymbol
-
           ruleDefinitionPattern :: [Ast0.Ast] -> Ast0.Ast
-          ruleDefinitionPattern ast = ast !! (length ast - 3)
+          ruleDefinitionPattern ast = ast !! 1
 
           ruleDefinitionConstructor :: [Ast0.Ast] -> Ast0.Ast
-          ruleDefinitionConstructor ast = ast !! (length ast - 1)
-       in if isValidRuleSyntax xs
+          ruleDefinitionConstructor ast = ast !! 2
+       in if startsWithDefSymbol xs
             then
-              let symbolToString :: Ast0.Ast -> String
-                  symbolToString (Ast0.Symbol s) = s
-                  symbolToString _ = error "not a symbol"
-
-                  vars = map symbolToString $ ruleDefinitionVariables xs
-                  pat = compile0to1 $ ruleDefinitionPattern xs
-                  constr = ruleDefinitionConstructor xs
+              let pat = compile0to1 $ xs !! 1
+                  constr = xs !! 2
                in do
                     pat' <- compile1toP0 pat
+                    vars <- p0VariableBindings pat'
                     Right $ RuleDefinition vars pat' constr
             else Left InvalidRuleDefinition
 
@@ -199,32 +191,32 @@ unionNonIntersectingHashMaps hs =
 -- the variable 'x' is located at index [2], and the variable 'y' is
 -- located at index [5, 2]. Returns a compile error instead if any variable
 -- occurs more than once in the pattern.
-ruleDefinitionVariableBindings :: RuleDefinition -> CompileResult Variables
-ruleDefinitionVariableBindings (RuleDefinition vars pat _) =
-  cata go (indexP0ByC0 pat)
-  where
-    go ::
-      CofreeF
-        AstP0.AstF
-        AstC0.Index
-        (CompileResult Variables) ->
-      CompileResult Variables
-    go (index :< ast) = case ast of
-      AstP0.SymbolF s ->
-        Right $
-          if s `elem` vars
-            then H.singleton s index
-            else H.empty
-      AstP0.CompoundWithoutEllipsesF xs -> do
-        xs' <- sequence xs
-        let combined = unionNonIntersectingHashMaps xs'
-        maybeToEither VariableUsedMoreThanOnceInPattern combined
-      AstP0.CompoundWithEllipsesF b e a -> do
-        b' <- sequence b
-        e' <- e
-        a' <- sequence a
-        let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
-        maybeToEither VariableUsedMoreThanOnceInPattern combined
+-- ruleDefinitionVariableBindings :: RuleDefinition -> CompileResult Variables
+-- ruleDefinitionVariableBindings (RuleDefinition pat _constructor) =
+--   cata go (indexP0ByC0 pat)
+--   where
+--     go ::
+--       CofreeF
+--         AstP0.AstF
+--         AstC0.Index
+--         (CompileResult Variables) ->
+--       CompileResult Variables
+--     go (index :< ast) = case ast of
+--       AstP0.SymbolF s ->
+--         Right $
+--           if s `elem` vars
+--             then H.singleton s index
+--             else H.empty
+--       AstP0.CompoundWithoutEllipsesF xs -> do
+--         xs' <- sequence xs
+--         let combined = unionNonIntersectingHashMaps xs'
+--         maybeToEither VariableUsedMoreThanOnceInPattern combined
+--       AstP0.CompoundWithEllipsesF b e a -> do
+--         b' <- sequence b
+--         e' <- e
+--         a' <- sequence a
+--         let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
+--         maybeToEither VariableUsedMoreThanOnceInPattern combined
 
 -- Returns a list of conditions that must hold for a given rule's pattern to
 -- match a term.
@@ -242,14 +234,13 @@ ruleDefinitionVariableBindings (RuleDefinition vars pat _) =
 -- - Indices [1,1..length] are compound terms of length >= 1
 -- - Indices [1,1..length,0] == "list"
 ruleDefinitionPredicates :: RuleDefinition -> CompileResult [IndexedPredicate]
-ruleDefinitionPredicates (RuleDefinition vars pat _) = cata go (indexP0ByC0 pat)
+ruleDefinitionPredicates (RuleDefinition vars pat _constructor) = cata go (indexP0ByC0 pat)
   where
     go ::
-      CofreeF AstP0.AstF AstC0.Index (CompileResult [IndexedPredicate]) ->
-      CompileResult [IndexedPredicate]
+      Cata (Cofree AstP0.AstF AstC0.Index) (CompileResult [IndexedPredicate])
     go (index :< ast) = case ast of
       AstP0.SymbolF s ->
-        Right [IndexedPredicate (SymbolEqualTo s) index | s `notElem` vars]
+        Right [IndexedPredicate (SymbolEqualTo s) index | not $ H.member s vars]
       AstP0.CompoundWithoutEllipsesF xs -> do
         xs' <- concat <$> sequence xs
         let p = IndexedPredicate (LengthEqualTo (length xs)) index
@@ -271,7 +262,7 @@ compile0to1 = cata $ \case
       go (y : ys) = y : go ys
       go [] = []
 
-compile1toC0 :: Variables -> Ast1.Ast -> AstC0.Ast
+compile1toC0 :: VariableBindings -> Ast1.Ast -> AstC0.Ast
 compile1toC0 vars = cata $ \case
   Ast1.SymbolF s -> case H.lookup s vars of
     Nothing -> AstC0.Symbol s
@@ -292,7 +283,7 @@ compileC0ToC1P ast = do
   case _remainingAssignment d of
     Just _ -> Left TooFewEllipsesInConstructor
     Nothing ->
-      Right $ (_ast d, _nextUnusedVar d)
+      Right (_ast d, _nextUnusedVar d)
   where
     firstUnusedVar :: Var
     firstUnusedVar = 0
@@ -474,6 +465,7 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
         }
     isC1PNonLoopVariant :: AstC1P.Ast -> Bool
     isC1PNonLoopVariant (AstC1P.Loop {}) = False
+    isC1PNonLoopVariant (AstC1P.Assignment _ x) = isC1PNonLoopVariant x
     isC1PNonLoopVariant _ = True
 
     -- We use 'para' instead of 'cata' because in the 'CompoundF' case, we

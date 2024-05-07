@@ -39,42 +39,44 @@ interpret2 prog initialInput =
           Memory.instruction = instruction,
           Memory.dataStack = dataStack,
           Memory.variables = variables
-        } -> trace (Display.displayC2 program) $ do
-          i <- program !? instruction
-          pure $ case i of
-            AstC2.Assign (AstC2Assign.Assign lhs rhs) ->
-              m
-                { Memory.variables = 
-                    setNth 
-                    lhs 
-                    (\var -> error $ "$" ++ show var ++ " is undefined") 
-                    (evalExpr m rhs) 
-                    variables,
-                  Memory.instruction = instruction + 1
-                }
-            AstC2.Push expr ->
-              let expr' = evalExpr m expr
-                  astExpr = Value.expectAst expr'
-               in m
-                    { Memory.dataStack = astExpr : dataStack,
-                      Memory.instruction = instruction + 1
-                    }
-            AstC2.Build termCount ->
-              let termCount' = evalExpr m termCount
-                  termCountNat = Value.expectNat termCount'
-                  newTerm = Ast0.Compound . reverse $ take termCountNat dataStack
-               in m
-                    { Memory.dataStack = newTerm : drop termCountNat dataStack,
-                      Memory.instruction = instruction + 1
-                    }
-            AstC2.Jump (AstC2Jump.Jump target condition) ->
-              let condition' = evalExpr m condition
-                  conditionBool = Value.expectBool condition'
-                  nextInstruction =
-                    if conditionBool
-                      then target
-                      else instruction + 1
-               in m {Memory.instruction = nextInstruction}
+        } ->
+          trace (Display.displayC2 program) $
+          do
+            i <- program !? instruction
+            pure $ case i of
+              AstC2.Assign (AstC2Assign.Assign lhs rhs) ->
+                m
+                  { Memory.variables =
+                      setNth
+                        lhs
+                        (\var -> error $ "$" ++ show var ++ " is undefined")
+                        (evalExpr m rhs)
+                        variables,
+                    Memory.instruction = instruction + 1
+                  }
+              AstC2.Push expr ->
+                let expr' = evalExpr m expr
+                    astExpr = Value.expectAst expr'
+                 in m
+                      { Memory.dataStack = astExpr : dataStack,
+                        Memory.instruction = instruction + 1
+                      }
+              AstC2.Build termCount ->
+                let termCount' = evalExpr m termCount
+                    termCountNat = Value.expectNat termCount'
+                    newTerm = Ast0.Compound . reverse $ take termCountNat dataStack
+                 in m
+                      { Memory.dataStack = newTerm : drop termCountNat dataStack,
+                        Memory.instruction = instruction + 1
+                      }
+              AstC2.Jump (AstC2Jump.Jump target condition) ->
+                let condition' = evalExpr m condition
+                    conditionBool = Value.expectBool condition'
+                    nextInstruction =
+                      if conditionBool
+                        then target
+                        else instruction + 1
+                 in m {Memory.instruction = nextInstruction}
 
 evalVar :: Memory -> Var -> Value
 evalVar m v = Memory.variables m !! v

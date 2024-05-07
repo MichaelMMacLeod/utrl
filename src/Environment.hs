@@ -1,13 +1,15 @@
-module Environment (createEnvironment, Environment (..)) where
+module Environment (createEnvironment, Environment (..), dumpEnvironmentStmts) where
 
 import qualified AstC2
 import Compile
   ( compile0toRuleDefinition,
     compileRule2,
   )
-import Data.Graph.Inductive (Graph (mkGraph), Node)
+import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)
+import Data.List (intercalate)
 import Data.Text (Text)
+import qualified Display
 import Error (CompileResult)
 import Predicate (IndexedPredicate)
 import qualified Read
@@ -28,3 +30,6 @@ createEnvironment text = do
   let ledges = zipWith (\i p -> (start, i, p)) [(start + 1) ..] (map fst rules')
   let gr = mkGraph lnodes ledges
   Right $ Environment gr start
+
+dumpEnvironmentStmts :: Environment -> String
+dumpEnvironmentStmts = intercalate "\n\n" . map (Display.displayC2 . snd) . labNodes . _graph

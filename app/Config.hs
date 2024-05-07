@@ -2,5 +2,6 @@ module Config (Config (..)) where
 
 data Config = Config
   { rules :: !FilePath,
-    input :: !FilePath
+    input :: !FilePath,
+    dumpStmts :: Bool
   }

@@ -15,25 +15,26 @@ import Data.Functor.Foldable (Corecursive (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.Maybe (catMaybes, listToMaybe)
 import Data.Text (Text)
+import Debug.Trace (trace)
+import qualified Display
 import Environment (Environment (..), createEnvironment)
 import Error (CompileResult)
 import Interpret2 (interpret2)
 import Predicate (applyPredicates)
 import qualified Read
 import Utils (iterateMaybe)
-import Debug.Trace (trace)
-import qualified Display
 
 data Matcher = Matcher
   { _node :: !Node,
     _ast :: !(Cofree Ast0.AstF [Int])
   }
 
-runProgram :: Text -> Text -> CompileResult Ast0.Ast
+runProgram :: Text -> Text -> CompileResult [Ast0.Ast]
 runProgram rules input = do
   environment <- createEnvironment rules
-  ast <- index0 . head <$> Read.read input
-  pure $ uncofree $ interpretInEnvironment environment ast
+  asts <- Read.read input
+  let results = map (uncofree . interpretInEnvironment environment . index0) asts
+  pure results
 
 interpretInEnvironment :: Environment -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
 interpretInEnvironment e input =

@@ -6,7 +6,7 @@ import AstC0
     IndexElement (Between, LenMinus, ZeroPlus),
   )
 import qualified AstP0
-import Compile (compile0to1, compile0toRuleDefinition, compile1toP0, ruleDefinitionPredicates, ruleDefinitionVariableBindings)
+import Compile (RuleDefinition (_variables), compile0to1, compile0toRuleDefinition, compile1toP0, ruleDefinitionPredicates)
 import Data.Either.Extra (fromRight')
 import Data.Graph.Inductive (Graph (mkGraph))
 import qualified Data.HashMap.Strict as H
@@ -66,47 +66,47 @@ tests =
       compile1ToP0Test 2 "(a .. b c d .. e)" (Left MoreThanOneEllipsisInSingleCompoundTermOfPattern),
       testCase "ruleDefinitionVariableBindings0" $
         ruleDefinitionVariableBindingsTest
-          "(def a a -> 0)"
-          (Right [("a", [])]),
+          "(def $a 0)"
+          (Right [("$a", [])]),
       testCase "ruleDefinitionVariableBindings1" $
         ruleDefinitionVariableBindingsTest
-          "(def a (a) -> 0)"
-          (Right [("a", [ZeroPlus 0])]),
+          "(def ($a) 0)"
+          (Right [("$a", [ZeroPlus 0])]),
       testCase "ruleDefinitionVariableBindings2" $
         ruleDefinitionVariableBindingsTest
-          "(def a b (a b) -> 0)"
+          "(def ($a $b) 0)"
           ( Right
-              [ ("a", [ZeroPlus 0]),
-                ("b", [ZeroPlus 1])
+              [ ("$a", [ZeroPlus 0]),
+                ("$b", [ZeroPlus 1])
               ]
           ),
       testCase "ruleDefinitionVariableBindings3" $
         ruleDefinitionVariableBindingsTest
-          "(def a b (a .. b) -> 0)"
+          "(def ($a .. $b) 0)"
           ( Right
-              [ ("a", [Between 0 1]),
-                ("b", [LenMinus 1])
+              [ ("$a", [Between 0 1]),
+                ("$b", [LenMinus 1])
               ]
           ),
       testCase "ruleDefinitionVariableBindings4" $
         ruleDefinitionVariableBindingsTest
-          "(def a b ((0 a .. b 1 2 3) ..) -> 0)"
+          "(def ((0 $a .. $b 1 2 3) ..) 0)"
           ( Right
-              [ ("a", [Between 0 0, Between 1 4]),
-                ("b", [Between 0 0, LenMinus 4])
+              [ ("$a", [Between 0 0, Between 1 4]),
+                ("$b", [Between 0 0, LenMinus 4])
               ]
           ),
       testCase "ruleDefinitionVariableBindings5" $
         ruleDefinitionVariableBindingsTest
-          "(def a (a a) -> 0)"
+          "(def ($a $a) 0)"
           (Left VariableUsedMoreThanOnceInPattern),
       testCase "ruleDefinitionVariableBindings6" $
         ruleDefinitionVariableBindingsTest
-          "(def a (a .. ((((((a)))) ..) ..)) -> 0)"
+          "(def ($a .. (((((($a)))) ..) ..)) 0)"
           (Left VariableUsedMoreThanOnceInPattern),
       testCase "ruleDefinitionPredicates0" $
         ruleDefinitionPredicatesTest
-          "(def xs (flatten (list (list xs ..) ..)) -> (list xs .. ..))"
+          "(def (flatten (list (list $xs ..) ..)) (list $xs .. ..))"
           ( Right
               [ IndexedPredicate (LengthEqualTo 2) [],
                 IndexedPredicate (SymbolEqualTo "flatten") [ZeroPlus 0],
@@ -130,122 +130,103 @@ tests =
       replaceAtTest 2 "()" [1, 2, 3, 4, 5] "x" "()",
       runProgramTest
         0
-        "(def x -> y)"
+        "(def x y)"
         "x"
         (Right "y"),
       runProgramTest
         1
-        "(def a -> A)\
-        \(def b -> B)"
+        "(def a A)\
+        \(def b B)"
         "a"
         (Right "A"),
       runProgramTest
         2
-        "(def a -> A)\
-        \(def b -> B)"
+        "(def a A)\
+        \(def b B)"
         "b"
         (Right "B"),
       runProgramTest
         3
-        "(def x y (x y) -> y)"
+        "(def ($x $y) $y)"
         "(a (b (c (d (e (f (g h)))))))"
         (Right "h"),
       runProgramTest
         4
-        "(def x (x) -> x)"
+        "(def ($x) $x)"
         "((0))"
         (Right "0"),
       runProgramTest
         5
-        "(def x (x) -> x)"
+        "(def ($x) $x)"
         "(0)"
         (Right "0"),
       runProgramTest
         6
-        "(def n (add n 0) -> n)\
-        \(def n m (add n (succ m)) -> (succ (add n m)))"
+        "(def (add $n 0) $n)\
+        \(def (add $n (succ $m)) (succ (add $n $m)))"
         "(add 0 (succ 0))"
         (Right "(succ 0)"),
       runProgramTest
         7
-        "(def n (1 (2 n)) -> n)"
+        "(def (1 (2 $n)) $n)"
         "(1 (2 3))"
         (Right "3"),
       runProgramTest
         8
-        "(def n (1 (2 (3 n))) -> n)"
+        "(def (1 (2 (3 $n))) $n)"
         "(1 (2 (3 4)))"
         (Right "4"),
       runProgramTest
         9
-        "(def (A B) -> C)\
-        \(def b -> B)"
+        "(def (A B) C)\
+        \(def b B)"
         "(A b)"
         (Right "C"),
       runProgramTest
         10
-        "(def (A B) -> B)\
-        \(def b -> B)"
+        "(def (A B) B)\
+        \(def b B)"
         "(A (A b))"
         (Right "B"),
       runProgramTest
         11
-        "(def n (add n 0) -> n)\
-        \(def n m (add n (succ m)) -> (succ (add n m)))"
+        "(def (add $n 0) $n)\
+        \(def (add $n (succ $m)) (succ (add $n $m)))"
         "(add 0 (succ (succ 0)))"
         (Right "(succ (succ 0))"),
       runProgramTest
         12
-        "(def 1 -> (S 0))\
-        \(def 2 -> (S 1))\
-        \(def 3 -> (S 2))\
-        \(def 4 -> (S 3))\
-        \(def 5 -> (S 4))\
-        \(def 6 -> (S 5))\
-        \(def 7 -> (S 6))\
-        \(def 8 -> (S 7))\
-        \(def n   (+ n    0)  ->       n)\
-        \(def n m (+ n (S m)) -> (+ (S n) m))\
-        \(def   (fib       0)   ->    0)\
-        \(def   (fib    (S 0))  -> (S 0))\
-        \(def n (fib (S (S n))) -> (+ (fib    n)\
-        \                             (fib (S n))))\
-        \(def     (equal    0     0)  -> true)\
-        \(def m   (equal (S m)    0)  -> false)\
-        \(def n   (equal    0  (S n)) -> false)\
-        \(def m n (equal (S m) (S n)) -> (equal m n))"
+        "(def 1 (S 0))\
+        \(def 2 (S 1))\
+        \(def 3 (S 2))\
+        \(def 4 (S 3))\
+        \(def 5 (S 4))\
+        \(def 6 (S 5))\
+        \(def 7 (S 6))\
+        \(def 8 (S 7))\
+        \(def (+ $n 0) $n)\
+        \(def (+ $n (S $m)) (+ (S $n) $m))\
+        \(def (fib 0) 0)\
+        \(def (fib (S 0)) (S 0))\
+        \(def (fib (S (S $n))) (+ (fib $n) (fib (S $n))))\
+        \(def (equal 0 0) true)\
+        \(def (equal (S $m) 0) false)\
+        \(def (equal 0 (S $n)) false)\
+        \(def (equal (S $m) (S $n)) (equal $m $n))"
         "(equal (fib 6) 8)"
         (Right "true"),
       runProgramTest
-        13
-        "(def     (equal    0     0)  -> true)\
-        \(def m   (equal (S m)    0)  -> false)\
-        \(def n   (equal    0  (S n)) -> false)\
-        \(def m n (equal (S m) (S n)) -> (equal m n))\
-        \(def t e (if true t e) -> t)\
-        \(def t e (if false t e) -> e)\
-        \(def v b x\
-        \  (apply (v -> b) x)\
-        \  ->\
-        \  (replace (Var v) for x in b))\
-        \(def x y z\
-        \  (replace (Var x) for y in (Var z))\
-        \  ->\
-        \  (if (equal x z) y (Var z)))\
-        \(def x y f z\
-        \  (replace x for y in (apply f z))\
-        \  ->\
-        \  (apply (replace x for y in f)\
-        \         (replace x for y in z)))\
-        \"
-        "(apply (0 -> (Var 0)) 123)"
-        (Right "123"),
-      runProgramTest
         14
-        "(def x (flatten (list (list x ..) ..)) -> (list x .. ..))\
-        \"
+        "(def (flatten (list (list $x ..) ..))\
+        \  (list $x .. ..))"
         "(flatten (list (list 1 2 3 4 5 6) (list a b c) (list) (list d)))"
-        (Right "(list 1 2 3 4 5 6 a b c d)")
+        (Right "(list 1 2 3 4 5 6 a b c d)"),
+      runProgramTest
+        15
+        "(def (read ($c ..) 0 $x ..)\
+        \     (read (0 $c ..) $x ..))"
+        "(read () 0 0 0 0 0)"
+        (Right "(read (0 0 0 0 0))")
     ]
 
 runProgramTest :: Int -> Text -> Text -> CompileResult Text -> TestTree
@@ -254,7 +235,7 @@ runProgramTest number rules input expected =
     assertEqual
       ""
       (head . Read.read' <$> expected)
-      (runProgram rules input)
+      (head <$> runProgram rules input)
 
 replaceAtTest :: Int -> Text -> [Int] -> Text -> Text -> TestTree
 replaceAtTest number ast index replacement expected =
@@ -307,12 +288,7 @@ ruleDefinitionVariableBindingsTest input expected =
   assertEqual
     ""
     (fmap H.fromList expected)
-    ( ruleDefinitionVariableBindings $
-        fromRight' $
-          compile0toRuleDefinition $
-            head $
-              Read.read' input
-    )
+    (_variables <$> compile0toRuleDefinition (head $ Read.read' input))
 
 ruleDefinitionPredicatesTest :: Text -> CompileResult [IndexedPredicate] -> Assertion
 ruleDefinitionPredicatesTest input expected =

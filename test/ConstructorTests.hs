@@ -9,7 +9,7 @@ import AstC2Expr (Expr)
 import qualified AstC2Expr as Expr
 import AstC2ExprVar (Var)
 import qualified AstC2Jump
-import Compile (Variables)
+import Compile (VariableBindings)
 import qualified Compile
 import qualified Data.HashMap.Strict as H
 import Data.Text (Text, unpack)
@@ -267,7 +267,7 @@ constructorTest2 n program input expected =
           expectedAst
           actualAst
 
-constructorTest :: Variables -> Text -> Text -> String -> Assertion
+constructorTest :: VariableBindings -> Text -> Text -> String -> Assertion
 constructorTest vars constructor input expectedOutput = do
   let inputAst = head <$> Read.read input
   case inputAst of
