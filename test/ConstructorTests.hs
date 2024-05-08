@@ -12,14 +12,10 @@ import qualified AstC2Jump
 import Compile (VariableBindings)
 import qualified Compile
 import qualified Data.HashMap.Strict as H
-import Data.Text (Text, unpack)
-import Debug.Trace (trace)
+import Data.Text (Text)
 import qualified Display
-import Error (CompileError (TooManyEllipsesInConstructor), CompileResult)
-import GHC.Arr (array, listArray)
-import qualified Interpret
-import Interpret2 (interpret2)
-import qualified Interpret2 as Interpret
+import Error (CompileResult)
+import Interpret (interpret)
 import qualified Read
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertEqual, assertFailure, testCase)
@@ -259,7 +255,7 @@ constructorTest2 :: Int -> [AstC2.Stmt Int] -> Text -> Text -> TestTree
 constructorTest2 n program input expected =
   let inputAst = head $ Read.read' input
       expectedAst = head $ Read.read' expected
-      actualAst = interpret2 program inputAst
+      actualAst = Interpret.interpret program inputAst
    in -- trace (Display.display0 actualAst) $
       testCase ("constructorTest2#" ++ show n) $
         assertEqual
@@ -275,10 +271,10 @@ constructorTest vars constructor input expectedOutput = do
     Right inputAst' -> do
       let stmts = do
             constructorAst <- head <$> Read.read constructor
-            Compile.compileC2 vars constructorAst
+            Compile.compile vars constructorAst
       case stmts of
         Left e -> assertFailure ("constructor compile error " ++ show e)
         Right stmts' ->
-          let result = Interpret.interpret2 stmts' inputAst'
+          let result = Interpret.interpret stmts' inputAst'
               str = Display.display0 result
            in assertEqual "interpreted output test" expectedOutput str

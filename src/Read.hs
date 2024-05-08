@@ -1,12 +1,11 @@
 module Read (parseRW, Read.read, read') where
 
 import qualified Ast0
-import Control.Comonad.Identity (Identity)
 import Data.Char (isSpace)
 import Data.Either.Extra (fromRight', mapLeft)
 import Data.Text (Text)
 import Error (CompileError (..), CompileResult)
-import Text.Parsec (ParseError, Parsec, ParsecT, between, choice, eof, many, many1, satisfy, sepBy, skipMany, skipMany1, space, spaces, (<?>))
+import Text.Parsec (ParseError, Parsec, between, choice, eof, many, many1, satisfy, skipMany, space)
 import Text.Parsec.Char (char)
 import Text.ParserCombinators.Parsec (parse)
 

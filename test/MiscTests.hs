@@ -6,12 +6,16 @@ import AstC0
     IndexElement (Between, LenMinus, ZeroPlus),
   )
 import qualified AstP0
-import Compile (RuleDefinition (_variables), compile0to1, compile0toRuleDefinition, compile1toP0, ruleDefinitionPredicates)
+import Compile
+  ( RuleDefinition (_variables),
+    compile0to1,
+    compile0toRuleDefinition,
+    compile1toP0,
+    ruleDefinitionPredicates,
+  )
 import Data.Either.Extra (fromRight')
-import Data.Graph.Inductive (Graph (mkGraph))
 import qualified Data.HashMap.Strict as H
 import Data.Text (Text)
-import Environment (Environment (Environment), createEnvironment)
 import Error (CompileError (..), CompileResult)
 import Interpret (runProgram)
 import Predicate
@@ -115,15 +119,6 @@ tests =
                 IndexedPredicate (LengthGreaterThanOrEqualTo 1) [ZeroPlus 1, Between 1 0],
                 IndexedPredicate (SymbolEqualTo "list") [ZeroPlus 1, Between 1 0, ZeroPlus 0]
               ]
-          ),
-      testCase ("replace0At#" ++ show 0) $
-        assertEqual
-          ""
-          (head $ Read.read' "(0 1 2 THREE 4 5)")
-          ( replace0At
-              (head $ Read.read' "(0 1 2 3 4 5)")
-              [3]
-              (head $ Read.read' "THREE")
           ),
       replaceAtTest 0 "(0 1 2 3 4 5)" [3] "THREE" "(0 1 2 THREE 4 5)",
       replaceAtTest 1 "(0 (10 11))" [1, 0] "ten" "(0 (ten 11))",

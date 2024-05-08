@@ -3,17 +3,12 @@
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Compile
-  ( -- compile,
-    compileC2,
+  ( compile,
     compile0toRuleDefinition,
     ruleDefinitionPredicates,
-    -- ruleDefinitionVariableBindings,
     compile0to1,
     compile1toP0,
     compile1toC0,
-    -- compileC0toC1,
-    -- compileC1toStmts,
-    -- compileRule,
     VariableBindings,
     RuleDefinition (..),
     compileRule2,
@@ -36,7 +31,6 @@ import AstP0 (indexP0ByC0)
 import qualified AstP0
 import Control.Comonad (Comonad (..))
 import Control.Comonad.Cofree (Cofree)
-import qualified Control.Comonad.Cofree as CCC
 import Control.Comonad.Trans.Cofree (CofreeF (..))
 import Control.Monad.State.Strict
   ( State,
@@ -47,7 +41,7 @@ import Control.Monad.State.Strict
   )
 import qualified Data.Bifunctor
 import Data.Either.Extra (maybeToEither)
-import Data.Functor.Foldable (ListF (..), Recursive (..), histo)
+import Data.Functor.Foldable (ListF (..), Recursive (..))
 import Data.HashMap.Strict ((!?))
 import qualified Data.HashMap.Strict as H
 import Data.Hashable (Hashable)
@@ -55,13 +49,13 @@ import Data.Maybe (fromJust)
 import Error (CompileError (..), CompileResult)
 import GHC.Generics (Generic)
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo))
-import Utils (Between (..), Cata, Histo, Para, popBetweenTail, popTrailingC1Index)
+import Utils (Between (..), Cata, Para, popBetweenTail, popTrailingC1Index)
 import Var (Var)
 
 type VariableBindings = H.HashMap String AstC0.Index
 
-compileC2 :: VariableBindings -> Ast0.Ast -> CompileResult (AstC2.Ast Int)
-compileC2 vars ast = do
+compile :: VariableBindings -> Ast0.Ast -> CompileResult (AstC2.Ast Int)
+compile vars ast = do
   let ast1 = compile0to1 ast
       astC0 = compile1toC0 vars ast1
   (astC1P, nextUnusedVar) <- compileC0ToC1P astC0
@@ -139,9 +133,9 @@ p0VariableBindings = cata go . indexP0ByC0
         maybeToEither VariableUsedMoreThanOnceInPattern combined
 
 compileRule2 :: RuleDefinition -> CompileResult ([IndexedPredicate], AstC2.Ast Int)
-compileRule2 rule@(RuleDefinition vars pattern constructor) = do
+compileRule2 rule@(RuleDefinition vars _pattern constructor) = do
   preds <- ruleDefinitionPredicates rule
-  program <- compileC2 vars constructor
+  program <- compile vars constructor
   Right (preds, program)
 
 compile0toRuleDefinition :: Ast0.Ast -> CompileResult RuleDefinition
@@ -156,12 +150,6 @@ compile0toRuleDefinition (Ast0.Compound xs) =
       let startsWithDefSymbol :: [Ast0.Ast] -> Bool
           startsWithDefSymbol (Ast0.Symbol "def" : _) = True
           startsWithDefSymbol _ = False
-
-          ruleDefinitionPattern :: [Ast0.Ast] -> Ast0.Ast
-          ruleDefinitionPattern ast = ast !! 1
-
-          ruleDefinitionConstructor :: [Ast0.Ast] -> Ast0.Ast
-          ruleDefinitionConstructor ast = ast !! 2
        in if startsWithDefSymbol xs
             then
               let pat = compile0to1 $ xs !! 1
@@ -182,43 +170,6 @@ unionNonIntersectingHashMaps hs =
    in if keyCountBeforeUnion == keyCountAfterUnion
         then Just union
         else Nothing
-
--- Returns a hashmap of variable names to their locations in the pattern
--- of the given rule definition.
---
--- For example, in the following rule:
---
---  (def x y (0 1 x 3 4 (50 51 y)) -> result)
---
--- the variable 'x' is located at index [2], and the variable 'y' is
--- located at index [5, 2]. Returns a compile error instead if any variable
--- occurs more than once in the pattern.
--- ruleDefinitionVariableBindings :: RuleDefinition -> CompileResult Variables
--- ruleDefinitionVariableBindings (RuleDefinition pat _constructor) =
---   cata go (indexP0ByC0 pat)
---   where
---     go ::
---       CofreeF
---         AstP0.AstF
---         AstC0.Index
---         (CompileResult Variables) ->
---       CompileResult Variables
---     go (index :< ast) = case ast of
---       AstP0.SymbolF s ->
---         Right $
---           if s `elem` vars
---             then H.singleton s index
---             else H.empty
---       AstP0.CompoundWithoutEllipsesF xs -> do
---         xs' <- sequence xs
---         let combined = unionNonIntersectingHashMaps xs'
---         maybeToEither VariableUsedMoreThanOnceInPattern combined
---       AstP0.CompoundWithEllipsesF b e a -> do
---         b' <- sequence b
---         e' <- e
---         a' <- sequence a
---         let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
---         maybeToEither VariableUsedMoreThanOnceInPattern combined
 
 -- Returns a list of conditions that must hold for a given rule's pattern to
 -- match a term.

@@ -1,4 +1,4 @@
-module Interpret2Memory (Memory (..)) where
+module InterpretMemory (Memory (..)) where
 
 import qualified Ast0
 import qualified AstC2
