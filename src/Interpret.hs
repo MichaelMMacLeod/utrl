@@ -29,7 +29,7 @@ import InterpretMemory (Memory (Memory))
 import qualified InterpretMemory as Memory
 import Predicate (applyPredicates)
 import qualified Read
-import Utils (iterateMaybe, setNth)
+import Utils (Cata, iterateMaybe, setNth)
 
 data Matcher = Matcher
   { _node :: !Node,
@@ -152,41 +152,40 @@ interpret prog initialInput =
                         else instruction + 1
                  in m {Memory.instruction = nextInstruction}
 
-evalVar :: Memory -> Var -> Value
-evalVar m v = Memory.variables m !! v
-
 evalExpr :: Memory -> Expr -> Value
-evalExpr m = \case
-  Expr.Bool b -> Value.Bool b
-  Expr.Var v -> evalVar m v
-  Expr.Nat n -> Value.Nat n
-  Expr.Symbol s -> Value.Ast $ Ast0.Symbol s
-  Expr.Input -> Value.Ast $ Memory.input m
-  Expr.BinOp op lhs rhs ->
-    let lhs' = evalExpr m lhs
-        rhs' = evalExpr m rhs
-     in case op of
+evalExpr m = cata go
+  where
+    go :: Cata Expr Value
+    go = \case
+      Expr.BoolF b -> Value.Bool b
+      Expr.VarF v -> evalVar m v
+      Expr.NatF n -> Value.Nat n
+      Expr.SymbolF s -> Value.Ast $ Ast0.Symbol s
+      Expr.InputF -> Value.Ast $ Memory.input m
+      Expr.BinOpF op lhs rhs ->
+        case op of
           Expr.Add ->
-            let lhsNat = Value.expectNat lhs'
-                rhsNat = Value.expectNat rhs'
+            let lhsNat = Value.expectNat lhs
+                rhsNat = Value.expectNat rhs
              in Value.Nat $ lhsNat + rhsNat
           Expr.Sub ->
-            let lhsNat = Value.expectNat lhs'
-                rhsNat = Value.expectNat rhs'
+            let lhsNat = Value.expectNat lhs
+                rhsNat = Value.expectNat rhs
              in Value.Nat $ lhsNat - rhsNat
           Expr.ArrayAccess ->
-            let lhsAst = Value.expectAst lhs'
-                rhsNat = Value.expectNat rhs'
+            let lhsAst = Value.expectAst lhs
+                rhsNat = Value.expectNat rhs
              in case lhsAst of
-                  Ast0.Symbol _ -> Value.mkTypeError "Compound" lhs'
+                  Ast0.Symbol _ -> Value.mkTypeError "Compound" lhs
                   Ast0.Compound xs -> Value.Ast $ xs !! rhsNat
           Expr.LessThan ->
-            let lhsNat = Value.expectNat lhs'
-                rhsNat = Value.expectNat rhs'
+            let lhsNat = Value.expectNat lhs
+                rhsNat = Value.expectNat rhs
              in Value.Bool $ lhsNat < rhsNat
-  Expr.Length e ->
-    let e' = evalExpr m e
-        eAst = Value.expectAst e'
-     in case eAst of
-          Ast0.Symbol _ -> Value.mkTypeError "Compound" e'
+      Expr.LengthF e ->
+        case Value.expectAst e of
+          Ast0.Symbol _ -> Value.mkTypeError "Compound" e
           Ast0.Compound xs -> Value.Nat $ length xs
+
+evalVar :: Memory -> Var -> Value
+evalVar m v = Memory.variables m !! v
