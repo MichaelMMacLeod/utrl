@@ -99,6 +99,7 @@ library
     build-depends:
           base
         , recursion-schemes
+        , containers
         , unordered-containers
         , mtl
         , free

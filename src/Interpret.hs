@@ -23,6 +23,7 @@ import Data.Foldable (find)
 import Data.Functor.Foldable (Corecursive (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.List.Extra ((!?))
+import Data.Sequence (Seq (..), fromList, singleton)
 import Data.Text (Text)
 import Debug.Trace (trace)
 import qualified Display
@@ -58,26 +59,18 @@ uncofree = cata go
     go :: CofreeF Ast0.AstF [Int] Ast0.Ast -> Ast0.Ast
     go (_ CCTC.:< ast) = embed ast
 
-pushAllBack :: [a] -> [a] -> [a]
-pushAllBack = (++)
-
-popFront :: [a] -> Maybe (a, [a])
-popFront = \case
-  [] -> Nothing
-  a : as -> Just (a, as)
-
 transition :: Environment -> Cofree Ast0.AstF [Int] -> Maybe (Cofree Ast0.AstF [Int])
-transition environment ast = go [Matcher (_start environment) ast]
+transition environment ast = go $ singleton $ Matcher (_start environment) ast
   where
-    go :: [Matcher] -> Maybe (Cofree Ast0.AstF [Int])
+    go :: Seq Matcher -> Maybe (Cofree Ast0.AstF [Int])
     go matcherQueue =
       -- trace (show $ map ((\x@(i :< _) -> (i, Display.display0 $ uncofree x)) . _ast) matcherQueue) $
-      case popFront matcherQueue of
-        Nothing -> Nothing
-        Just (matcher, matcherQueue) ->
+      case matcherQueue of
+        Empty -> Nothing
+        matcher :<| matcherQueue ->
           case transitionInEnvironment environment matcher of
             Left subtermMatchers ->
-              go $ pushAllBack matcherQueue subtermMatchers
+              go $ matcherQueue <> subtermMatchers
             Right matcher ->
               case _ast matcher of
                 index :< replacementAst ->
@@ -90,7 +83,7 @@ transition environment ast = go [Matcher (_start environment) ast]
 -- ast in the input matcher. Otherwise, if no rule applies to the ast. returns a list
 -- of matchers holding subterms of the ast so they may be later tried in a breadth-first
 -- search order.
-transitionInEnvironment :: Environment -> Matcher -> Either [Matcher] Matcher
+transitionInEnvironment :: Environment -> Matcher -> Either (Seq Matcher) Matcher
 transitionInEnvironment environment matcher =
   let currentNode = _node matcher
       currentAst = _ast matcher
@@ -109,7 +102,7 @@ transitionInEnvironment environment matcher =
                   then _start environment
                   else nextNode
            in Right $ Matcher newNode (index0WithBase currentIndex nextAst)
-        Nothing -> Left $ case unwrap currentAst of
+        Nothing -> Left $ fromList $ case unwrap currentAst of
           Ast0.SymbolF _ -> []
           Ast0.CompoundF xs ->
             flip map xs $ \x ->
