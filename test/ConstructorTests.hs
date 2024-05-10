@@ -1,8 +1,8 @@
 module ConstructorTests (tests) where
 
 import qualified AstC0
-import AstC1P (AssignmentLocation (TopLevel))
-import qualified AstC1P
+import AstC1 (AssignmentLocation (TopLevel))
+import qualified AstC1
 import qualified AstC2
 import qualified AstC2Assign
 import AstC2Expr (Expr)
@@ -180,21 +180,21 @@ tests =
             ]
         )
         ( Right
-            ( AstC1P.Compound
-                [ AstC1P.Symbol "list",
-                  AstC1P.Assignment
-                    (3, [AstC1P.ZeroPlus 2], TopLevel)
-                    ( AstC1P.Loop
-                        { AstC1P.var = 1,
-                          AstC1P.src = 3,
-                          AstC1P.start = 1,
-                          AstC1P.end = 0,
-                          AstC1P.body =
-                            AstC1P.Compound
-                              [ AstC1P.Assignment
-                                  (0, [AstC1P.ZeroPlus 1], TopLevel)
-                                  (AstC1P.Copy 0),
-                                AstC1P.Copy 1
+            ( AstC1.Compound
+                [ AstC1.Symbol "list",
+                  AstC1.Assignment
+                    (3, [AstC1.ZeroPlus 2], TopLevel)
+                    ( AstC1.Loop
+                        { AstC1.var = 1,
+                          AstC1.src = 3,
+                          AstC1.start = 1,
+                          AstC1.end = 0,
+                          AstC1.body =
+                            AstC1.Compound
+                              [ AstC1.Assignment
+                                  (0, [AstC1.ZeroPlus 1], TopLevel)
+                                  (AstC1.Copy 0),
+                                AstC1.Copy 1
                               ]
                         }
                     )
@@ -242,7 +242,7 @@ assign v e = AstC2.Assign $ AstC2Assign.Assign v e
 push :: Expr -> AstC2.Stmt Int
 push = AstC2.Push
 
-c0ToC1PTest :: Int -> AstC0.Ast -> CompileResult AstC1P.Ast -> TestTree
+c0ToC1PTest :: Int -> AstC0.Ast -> CompileResult AstC1.Ast -> TestTree
 c0ToC1PTest n c0 expected =
   let actual = Compile.compileC0ToC1P c0
    in testCase ("c0ToC1PTest#" ++ show n) $

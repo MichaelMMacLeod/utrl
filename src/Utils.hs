@@ -17,7 +17,7 @@ where
 
 import qualified Ast0
 import qualified AstC0
-import qualified AstC1P
+import qualified AstC1
 import Control.Comonad.Cofree (Cofree)
 import Data.Functor.Base (ListF (..))
 import Data.Functor.Foldable (Base, Corecursive (..))
@@ -44,10 +44,10 @@ setNth i defaultValue x xs = left ++ [x] ++ right
 -- classifyC0 ::
 --   AstC0.Index ->
 --   Either
---     AstC1P.Index
+--     AstC1.Index
 --     ( AstC0.Index,
 --       Between,
---       AstC1P.Index
+--       AstC1.Index
 --     )
 -- classifyC0 i =
 --   let (c0, c1) = AstC0.popTrailingC1Index i
@@ -61,12 +61,12 @@ setNth i defaultValue x xs = left ++ [x] ++ right
 data Between = Between !Int !Int
   deriving (Show, Eq)
 
-c1Tail :: AstC0.Index -> AstC1P.Index
+c1Tail :: AstC0.Index -> AstC1.Index
 c1Tail = reverse . go . reverse
   where
-    go :: AstC0.Index -> AstC1P.Index
-    go ((AstC0.ZeroPlus i) : xs) = AstC1P.ZeroPlus i : go xs
-    go ((AstC0.LenMinus i) : xs) = AstC1P.LenMinus i : go xs
+    go :: AstC0.Index -> AstC1.Index
+    go ((AstC0.ZeroPlus i) : xs) = AstC1.ZeroPlus i : go xs
+    go ((AstC0.LenMinus i) : xs) = AstC1.LenMinus i : go xs
     go _ = []
 
 c0Head :: AstC0.Index -> AstC0.Index
@@ -77,7 +77,7 @@ c0Head = reverse . go . reverse
     go (_ : xs) = go xs
     go [] = []
 
-popTrailingC1Index :: AstC0.Index -> (AstC0.Index, AstC1P.Index)
+popTrailingC1Index :: AstC0.Index -> (AstC0.Index, AstC1.Index)
 popTrailingC1Index c0 = (c0Head c0, c1Tail c0)
 
 popBetweenTail :: AstC0.Index -> (AstC0.Index, Maybe (Int, Int))

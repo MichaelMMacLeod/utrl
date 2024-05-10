@@ -1,4 +1,4 @@
-module AstC1P
+module AstC1
   ( Ast (..),
     AstF (..),
     AssignmentLocation (..),

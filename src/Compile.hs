@@ -20,8 +20,8 @@ where
 import qualified Ast0
 import qualified Ast1
 import qualified AstC0
-import AstC1P (AssignmentLocation (..))
-import qualified AstC1P
+import AstC1 (AssignmentLocation (..))
+import qualified AstC1
 import qualified AstC2
 import qualified AstC2Assign
 import qualified AstC2Expr
@@ -224,13 +224,13 @@ compile1toC0 vars = cata $ \case
   Ast1.EllipsesF x -> AstC0.Ellipses x
 
 data C0ToC1Data = C0ToC1Data
-  { _ast :: !AstC1P.Ast,
+  { _ast :: !AstC1.Ast,
     _nextUnusedVar :: !Var,
     _remainingAssignment :: Maybe (Var, AstC0.Index, Between)
   }
   deriving (Show)
 
-compileC0ToC1P :: AstC0.Ast -> CompileResult (AstC1P.Ast, Var)
+compileC0ToC1P :: AstC0.Ast -> CompileResult (AstC1.Ast, Var)
 compileC0ToC1P ast = do
   d <- cata traverseC0ToC1P ast firstUnusedVar
   case _remainingAssignment d of
@@ -246,13 +246,13 @@ traverseC0ToC1P a nextUnusedVar = case a of
   AstC0.SymbolF s ->
     Right $
       C0ToC1Data
-        { _ast = AstC1P.Symbol s,
+        { _ast = AstC1.Symbol s,
           _nextUnusedVar = nextUnusedVar,
           _remainingAssignment = Nothing
         }
   AstC0.VariableF i ->
     let (c0, c1) = popTrailingC1Index i
-        copyAst = AstC1P.Copy nextUnusedVar
+        copyAst = AstC1.Copy nextUnusedVar
      in Right $
           C0ToC1Data
             { _ast =
@@ -260,7 +260,7 @@ traverseC0ToC1P a nextUnusedVar = case a of
                   then copyAst
                   else
                     let location = if null c0 then TopLevel else NotTopLevel
-                     in AstC1P.Assignment (nextUnusedVar, c1, location) copyAst,
+                     in AstC1.Assignment (nextUnusedVar, c1, location) copyAst,
               _nextUnusedVar = nextUnusedVar + 1,
               _remainingAssignment =
                 if null c0
@@ -278,12 +278,12 @@ traverseC0ToC1P a nextUnusedVar = case a of
       Just (var, c0, Between zeroPlus lenMinus) ->
         let (c0', c1) = popTrailingC1Index c0
             loopAst =
-              AstC1P.Loop
-                { AstC1P.var = var,
-                  AstC1P.src = nextUnusedVar + 1,
-                  AstC1P.start = zeroPlus,
-                  AstC1P.end = lenMinus,
-                  AstC1P.body = ast
+              AstC1.Loop
+                { AstC1.var = var,
+                  AstC1.src = nextUnusedVar + 1,
+                  AstC1.start = zeroPlus,
+                  AstC1.end = lenMinus,
+                  AstC1.body = ast
                 }
          in Right $
               C0ToC1Data
@@ -291,11 +291,11 @@ traverseC0ToC1P a nextUnusedVar = case a of
                     if null c1
                       then
                         if null c0'
-                          then AstC1P.Assignment (nextUnusedVar + 1, c1, TopLevel) loopAst
+                          then AstC1.Assignment (nextUnusedVar + 1, c1, TopLevel) loopAst
                           else loopAst
                       else
                         let location = if null c0' then TopLevel else NotTopLevel
-                         in AstC1P.Assignment (nextUnusedVar + 1, c1, location) loopAst,
+                         in AstC1.Assignment (nextUnusedVar + 1, c1, location) loopAst,
                   _nextUnusedVar = nextUnusedVar + 2,
                   _remainingAssignment =
                     if null c0'
@@ -312,7 +312,7 @@ traverseC0ToC1P a nextUnusedVar = case a of
       mergeXS Nil nextUnusedVar =
         Right $
           C0ToC1Data
-            { _ast = AstC1P.Compound [],
+            { _ast = AstC1.Compound [],
               _nextUnusedVar = nextUnusedVar,
               _remainingAssignment = Nothing
             }
@@ -322,9 +322,9 @@ traverseC0ToC1P a nextUnusedVar = case a of
         remainingAssignment <- compatibleRemainingAssignment remainingAssignmentX remainingAssignment
         let compoundInternals =
               case ast of
-                AstC1P.Compound compoundInternals -> compoundInternals
+                AstC1.Compound compoundInternals -> compoundInternals
                 _ -> error "unreachable"
-        let ast = AstC1P.Compound $ astX : compoundInternals
+        let ast = AstC1.Compound $ astX : compoundInternals
         pure $
           C0ToC1Data
             { _ast = ast,
@@ -369,10 +369,10 @@ newVar = do
   modify incC2Var
   pure var
 
-indexAssignStmts :: Var -> AssignmentLocation -> AstC1P.Index -> AstC2.Ast NamedLabel
+indexAssignStmts :: Var -> AssignmentLocation -> AstC1.Index -> AstC2.Ast NamedLabel
 indexAssignStmts var loc = addAssignmentToInputWhenToplevel . cata go
   where
-    go :: Cata AstC1P.Index (AstC2.Ast NamedLabel)
+    go :: Cata AstC1.Index (AstC2.Ast NamedLabel)
     go = \case
       Nil -> []
       Cons i stmts -> assignment : stmts
@@ -386,9 +386,9 @@ indexAssignStmts var loc = addAssignmentToInputWhenToplevel . cata go
                       C2Expr.ArrayAccess
                       (C2Expr.Var var)
                       ( case i of
-                          AstC1P.ZeroPlus zeroPlus ->
+                          AstC1.ZeroPlus zeroPlus ->
                             C2Expr.Nat zeroPlus
-                          AstC1P.LenMinus lenMinus ->
+                          AstC1.LenMinus lenMinus ->
                             C2Expr.BinOp
                               C2Expr.Sub
                               (C2Expr.Length $ C2Expr.Var var)
@@ -407,7 +407,7 @@ indexAssignStmts var loc = addAssignmentToInputWhenToplevel . cata go
                   AstC2Assign.rhs = C2Expr.Input
                 }
 
-compileC1PToC2 :: Var -> AstC1P.Ast -> AstC2.Ast NamedLabel
+compileC1PToC2 :: Var -> AstC1.Ast -> AstC2.Ast NamedLabel
 compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
   where
     initialState :: C1ToC2InputData
@@ -416,22 +416,22 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
         { _c2iNextUnusedVar = nextUnusedVar,
           _c2iCompoundTermLengthCounter = Nothing
         }
-    isC1PNonLoopVariant :: AstC1P.Ast -> Bool
-    isC1PNonLoopVariant (AstC1P.Loop {}) = False
-    isC1PNonLoopVariant (AstC1P.Assignment _ x) = isC1PNonLoopVariant x
+    isC1PNonLoopVariant :: AstC1.Ast -> Bool
+    isC1PNonLoopVariant (AstC1.Loop {}) = False
+    isC1PNonLoopVariant (AstC1.Assignment _ x) = isC1PNonLoopVariant x
     isC1PNonLoopVariant _ = True
 
     -- We use 'para' instead of 'cata' because in the 'CompoundF' case, we
     -- need to be able to count the number of non-loops in the subterms.
-    go :: Para AstC1P.Ast (State C1ToC2InputData (AstC2.Ast NamedLabel))
+    go :: Para AstC1.Ast (State C1ToC2InputData (AstC2.Ast NamedLabel))
     go = \case
-      AstC1P.SymbolF s -> do
+      AstC1.SymbolF s -> do
         pure [AstC2.Push $ C2Expr.Symbol s]
-      AstC1P.CompoundF inputXsPairs -> do
+      AstC1.CompoundF inputXsPairs -> do
         lengthCountVar <- newLengthCountVar
         let resetLengthCountVarInX ::
-              (AstC1P.Ast, State C1ToC2InputData [AstC2.Stmt NamedLabel]) ->
-              (AstC1P.Ast, State C1ToC2InputData [AstC2.Stmt NamedLabel])
+              (AstC1.Ast, State C1ToC2InputData [AstC2.Stmt NamedLabel]) ->
+              (AstC1.Ast, State C1ToC2InputData [AstC2.Stmt NamedLabel])
             resetLengthCountVarInX = Data.Bifunctor.second $ withState $ setLengthCountVar lengthCountVar
         let inputXsPairs' = map resetLengthCountVarInX inputXsPairs
         xs <- concat <$> mapM snd inputXsPairs'
@@ -447,13 +447,13 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
             buildCompoundTerm =
               AstC2.Build $ C2Expr.Var lengthCountVar
         pure $ initLengthCountVar : xs ++ [buildCompoundTerm]
-      AstC1P.AssignmentF (var, index, loc) inputXPair -> do
+      AstC1.AssignmentF (var, index, loc) inputXPair -> do
         x <- snd inputXPair
         let assignmentStmts = indexAssignStmts var loc index
         pure $ assignmentStmts ++ x
-      AstC1P.CopyF v -> do
+      AstC1.CopyF v -> do
         pure [AstC2.Push $ C2Expr.Var v]
-      AstC1P.LoopF var src start end inputXPair -> do
+      AstC1.LoopF var src start end inputXPair -> do
         --        #0 = start              ; #0 is 'loopCounterVar'
         --        #1 = #src.length - end  ; #1 is 'loopEndVar'
         --        jump BOT
