@@ -41,23 +41,6 @@ setNth i defaultValue x xs = left ++ [x] ++ right
     left = take i (xs ++ map defaultValue [0..])
     right = drop (i + 1) xs
 
--- classifyC0 ::
---   AstC0.Index ->
---   Either
---     AstC1.Index
---     ( AstC0.Index,
---       Between,
---       AstC1.Index
---     )
--- classifyC0 i =
---   let (c0, c1) = AstC0.popTrailingC1Index i
---    in if null c0
---         then Left c1
---         else case AstC0.popBetweenTail c0 of
---           (c0, Just (zeroPlus, lenMinus)) ->
---             Right (c0, Between zeroPlus lenMinus, c1)
---           (_, Nothing) -> error "unreachable"
-
 data Between = Between !Int !Int
   deriving (Show, Eq)
 
