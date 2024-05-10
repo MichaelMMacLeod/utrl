@@ -1,4 +1,4 @@
-module Ast0 (Ast (..), AstF (..), index0, replace0At) where
+module Ast0 (Ast (..), AstF (..), index0, replace0At, index0WithBase) where
 
 import Control.Comonad.Cofree (Cofree (..))
 import Control.Comonad.Trans.Cofree (CofreeF)
@@ -19,6 +19,13 @@ data Ast
 
 index0 :: Ast -> Cofree AstF [Int]
 index0 ast = cata go ast []
+  where
+    go :: AstF ([Int] -> Cofree AstF [Int]) -> [Int] -> Cofree AstF [Int]
+    go (SymbolF s) index = index :< SymbolF s
+    go (CompoundF xs) index = index :< CompoundF (zipWith (. snoc index) xs [0 ..])
+
+index0WithBase :: [Int] -> Ast -> Cofree AstF [Int]
+index0WithBase base ast = cata go ast base
   where
     go :: AstF ([Int] -> Cofree AstF [Int]) -> [Int] -> Cofree AstF [Int]
     go (SymbolF s) index = index :< SymbolF s

@@ -24,7 +24,7 @@ import Predicate
     applyPredicate,
   )
 import qualified Read
-import Test.Tasty (TestTree, testGroup)
+import Test.Tasty (TestTree, localOption, mkTimeout, testGroup)
 import Test.Tasty.HUnit (Assertion, assertBool, assertEqual, testCase)
 import Utils (getAtC0Index)
 
@@ -221,7 +221,73 @@ tests =
         "(def (read ($c ..) 0 $x ..)\
         \     (read (0 $c ..) $x ..))"
         "(read () 0 0 0 0 0)"
-        (Right "(read (0 0 0 0 0))")
+        (Right "(read (0 0 0 0 0))"),
+      localOption (mkTimeout 1000000 {- 1 second in microseconds -}) $
+        -- The point of this test is to ensure that, when failing to match
+        -- a term to a rule, we try to apply rules to subterms in a
+        -- *breadth-first* and not *depth-first* search fashion. This test
+        -- should go into an infinite loop if *depth-first* is chosen,
+        -- but should finish quickly if *breadth-first* is chosen, hence
+        -- the timeout.
+        runProgramTest
+          16
+          "(def (take 0 $c)\
+          \  nil)\
+          \(def (take (S $n) (cons $a $d))\
+          \  (cons $a (take $n $d)))\
+          \\
+          \(def (repeat $x)\
+          \  (cons $x (repeat $x)))\
+          \\
+          \(def (map $f nil)\
+          \  nil)\
+          \(def (map $f (cons $a $d))\
+          \  (cons ($f $a)\
+          \        (map $f $d)))\
+          \\
+          \(def (foldr $f $z nil)\
+          \  $z)\
+          \(def (foldr $f $z (cons $a $d))\
+          \  ($f $a (foldr $f $z $d)))\
+          \\
+          \(def (add $n 0)\
+          \  $n)\
+          \(def (add $n (S $m))\
+          \  (S (add $n $m)))\
+          \\
+          \(def (mul $n 0)\
+          \  0)\
+          \(def (mul $n (S $m))\
+          \  (add $n (mul $n $m)))\
+          \\
+          \(def (zipWith $f $c nil)\
+          \  nil)\
+          \(def (zipWith $f nil $c)\
+          \  nil)\
+          \(def (zipWith $f (cons $a1 $d1) (cons $a2 $d2))\
+          \  (cons ($f $a1 $a2)\
+          \        (zipWith $f $d1 $d2)))\
+          \\
+          \(def (equal 0 0)\
+          \  true)\
+          \(def (equal 0 (S $m))\
+          \  false)\
+          \(def (equal (S $n) 0)\
+          \  false)\
+          \(def (equal (S $n) (S $m))\
+          \  (equal $n $m))"
+          "(equal\
+          \  (mul\
+          \    (S (S (S (S 0))))\
+          \    (add\
+          \      (S (S 0))\
+          \      (S (S (S 0)))))\
+          \  (foldr add 0\
+          \    (take (S (S (S (S 0))))\
+          \      (zipWith add\
+          \        (repeat (S (S 0)))\
+          \        (repeat (S (S (S 0))))))))"
+          (Right "true")
     ]
 
 runProgramTest :: Int -> Text -> Text -> CompileResult Text -> TestTree

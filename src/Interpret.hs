@@ -1,10 +1,12 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module Interpret
   ( runProgram,
     interpret,
   )
 where
 
-import Ast0 (index0, replace0At)
+import Ast0 (index0, index0WithBase, replace0At)
 import qualified Ast0
 import qualified AstC2
 import qualified AstC2Assign
@@ -21,8 +23,9 @@ import Data.Foldable (find)
 import Data.Functor.Foldable (Corecursive (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.List.Extra ((!?))
-import Data.Maybe (catMaybes, listToMaybe)
 import Data.Text (Text)
+import Debug.Trace (trace)
+import qualified Display
 import Environment (Environment (..), createEnvironment)
 import Error (CompileResult)
 import InterpretMemory (Memory (Memory))
@@ -45,8 +48,9 @@ runProgram rules input = do
 
 interpretInEnvironment :: Environment -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
 interpretInEnvironment e input =
-  let initialMatcher = Matcher (_start e) input
-   in _ast $ last $ iterateMaybe (transitionInEnvironment e) initialMatcher
+  let results = iterateMaybe (transition e) input
+   in --  in last results
+      last (trace (unlines $ map (Display.display0 . uncofree) results) results)
 
 uncofree :: Cofree Ast0.AstF [Int] -> Ast0.Ast
 uncofree = cata go
@@ -54,41 +58,62 @@ uncofree = cata go
     go :: CofreeF Ast0.AstF [Int] Ast0.Ast -> Ast0.Ast
     go (_ CCTC.:< ast) = embed ast
 
-transitionInEnvironment :: Environment -> Matcher -> Maybe Matcher
+pushAllBack :: [a] -> [a] -> [a]
+pushAllBack = (++)
+
+popFront :: [a] -> Maybe (a, [a])
+popFront = \case
+  [] -> Nothing
+  a : as -> Just (a, as)
+
+transition :: Environment -> Cofree Ast0.AstF [Int] -> Maybe (Cofree Ast0.AstF [Int])
+transition environment ast = go [Matcher (_start environment) ast]
+  where
+    go :: [Matcher] -> Maybe (Cofree Ast0.AstF [Int])
+    go matcherQueue =
+      -- trace (show $ map ((\x@(i :< _) -> (i, Display.display0 $ uncofree x)) . _ast) matcherQueue) $
+      case popFront matcherQueue of
+        Nothing -> Nothing
+        Just (matcher, matcherQueue) ->
+          case transitionInEnvironment environment matcher of
+            Left subtermMatchers ->
+              go $ pushAllBack matcherQueue subtermMatchers
+            Right matcher ->
+              case _ast matcher of
+                index :< replacementAst ->
+                  -- trace (show index ++ " " ++ Display.display0 (uncofree ast)) $
+                  Just $
+                    index0 $
+                      replace0At (uncofree ast) index (uncofree (index :< replacementAst))
+
+-- Returns a single matcher holding the result of successfully applying a rule to the
+-- ast in the input matcher. Otherwise, if no rule applies to the ast. returns a list
+-- of matchers holding subterms of the ast so they may be later tried in a breadth-first
+-- search order.
+transitionInEnvironment :: Environment -> Matcher -> Either [Matcher] Matcher
 transitionInEnvironment environment matcher =
-  -- trace (display0 $ uncofree (_ast matcher)) $
   let currentNode = _node matcher
       currentAst = _ast matcher
+      currentIndex = case currentAst of
+        index :< _ -> index
       graph = _graph environment
       neighbors = lsuc graph currentNode
       maybeNextNode = fst <$> find (\(_, preds) -> applyPredicates preds (uncofree currentAst)) neighbors
    in case maybeNextNode of
         Just nextNode ->
           let constructor = snd $ labNode' $ context graph nextNode
-              nextAst = interpret constructor (uncofree currentAst)
+              nextAst = interpret constructor $ uncofree currentAst
               nextNodeNeighbors = lsuc graph nextNode
               newNode =
                 if null nextNodeNeighbors
                   then _start environment
                   else nextNode
-           in Just $ Matcher newNode (index0 nextAst)
-        Nothing -> case unwrap currentAst of
-          Ast0.SymbolF _ -> Nothing
+           in Right $ Matcher newNode (index0WithBase currentIndex nextAst)
+        Nothing -> Left $ case unwrap currentAst of
+          Ast0.SymbolF _ -> []
           Ast0.CompoundF xs ->
-            let xs' :: [Maybe (Matcher, [Int])]
-                xs' = flip map xs $ \(index :< x) ->
-                  let newMatcher =
-                        transitionInEnvironment
-                          environment
-                          (Matcher (_start environment) (index0 (uncofree (index :< x))))
-                   in (\m -> (m, index)) <$> newMatcher
-                maybeSubtermMatcher :: Maybe (Matcher, [Int])
-                maybeSubtermMatcher = listToMaybe $ catMaybes xs'
-             in case maybeSubtermMatcher of
-                  Nothing -> Nothing
-                  Just (subtermMatcher, subtermIndex) ->
-                    let newAst = replace0At (uncofree currentAst) subtermIndex (uncofree (_ast subtermMatcher))
-                     in Just $ Matcher (_start environment) (index0 newAst)
+            flip map xs $ \x ->
+              Matcher (_start environment) x
 
 interpret :: AstC2.Ast Int -> Ast0.Ast -> Ast0.Ast
 interpret prog initialInput =
@@ -114,7 +139,7 @@ interpret prog initialInput =
           Memory.dataStack = dataStack,
           Memory.variables = variables
         } ->
-          -- trace (Display.displayC2 program) $
+          -- trace (Display.display0 _input) $
           do
             i <- program !? instruction
             pure $ case i of
