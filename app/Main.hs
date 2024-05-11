@@ -24,6 +24,7 @@ import Options.Applicative
     (<**>),
   )
 import Options.Applicative.Types (ParserInfo)
+import Display (displayP0)
 
 main :: IO ()
 main = runConfig =<< execParser opts
@@ -73,6 +74,14 @@ handleCompileError r = case r of
     putStrLn "       ellipsis"
   CompileResult.VariableUsedMoreThanOnceInPattern -> do
     putStrLn "error: variable used more than once in rule pattern"
+  CompileResult.OverlappingPatterns (o1, o2) -> do
+    putStrLn "error: overlapping patterns are not allowed"
+    putStrLn ""
+    putStrLn $ "  " ++ displayP0 o1
+    putStrLn   ""
+    putStrLn $ "  " ++ displayP0 o2
+    putStrLn   ""
+    putStrLn   "note: these two patterns can match the same term"
 
 runConfig :: Config -> IO ()
 runConfig c = do

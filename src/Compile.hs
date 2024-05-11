@@ -14,6 +14,8 @@ module Compile
     compileRule2,
     compileC0ToC1P,
     C0ToC1Data (..),
+    findOverlappingPatterns,
+    errOnOverlappingPatterns,
   )
 where
 
@@ -40,15 +42,18 @@ import Control.Monad.State.Strict
     withState,
   )
 import qualified Data.Bifunctor
+import Data.Either (fromLeft)
 import Data.Either.Extra (maybeToEither)
+import Data.Foldable (find)
 import Data.Functor.Foldable (ListF (..), Recursive (..))
 import Data.HashMap.Strict ((!?))
 import qualified Data.HashMap.Strict as H
+import qualified Data.HashSet as HS
 import Data.Hashable (Hashable)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, isJust)
 import Error (CompileError (..), CompileResult)
 import GHC.Generics (Generic)
-import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo))
+import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo), applyPredicates)
 import Utils (Between (..), Cata, Para, popBetweenTail, popTrailingC1Index)
 import Var (Var)
 
@@ -132,11 +137,60 @@ p0VariableBindings = cata go . indexP0ByC0
         let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
         maybeToEither VariableUsedMoreThanOnceInPattern combined
 
-compileRule2 :: RuleDefinition -> CompileResult ([IndexedPredicate], AstC2.Ast Int)
-compileRule2 rule@(RuleDefinition vars _pattern constructor) = do
+compileRule2 :: RuleDefinition -> CompileResult (([IndexedPredicate], AstP0.Ast), AstC2.Ast Int)
+compileRule2 rule@(RuleDefinition vars pattern constructor) = do
   preds <- ruleDefinitionPredicates rule
   program <- compile vars constructor
-  Right (preds, program)
+  Right ((preds, pattern), program)
+
+errOnOverlappingPatterns :: [([IndexedPredicate], AstP0.Ast)] -> CompileResult ()
+errOnOverlappingPatterns predicatesPatternPairs =
+  case findOverlappingPatterns predicatesPatternPairs of
+    Nothing -> Right ()
+    Just pair -> Left $ OverlappingPatterns pair
+
+findOverlappingPatterns :: [([IndexedPredicate], AstP0.Ast)] -> Maybe (AstP0.Ast, AstP0.Ast)
+findOverlappingPatterns predicatesPatternPairs =
+  let removedEllipses =
+        zipWith
+          ( \i (preds, p0Ast) ->
+              (i, preds, p0Ast, removeEllipses p0Ast)
+          )
+          [0 ..]
+          predicatesPatternPairs
+      go ::
+        Cata
+          [ ( (Int, [IndexedPredicate], AstP0.Ast, Ast0.Ast),
+              (Int, [IndexedPredicate], AstP0.Ast, Ast0.Ast)
+            )
+          ]
+          (Maybe (AstP0.Ast, AstP0.Ast))
+      go = \case
+        Nil -> Nothing
+        Cons ((i, preds, astP0, _ast0), (i', _preds', astP0', ast0')) answer ->
+          case answer of
+            Just answer -> Just answer
+            Nothing ->
+              if i == i'
+                then Nothing
+                else
+                  if applyPredicates preds ast0'
+                    then Just (astP0, astP0')
+                    else Nothing
+      pairs = [(a, b) | a <- removedEllipses, b <- removedEllipses]
+   in cata go pairs
+
+removeEllipses :: AstP0.Ast -> Ast0.Ast
+removeEllipses = cata go
+  where
+    go :: Cata AstP0.Ast Ast0.Ast
+    go = \case
+      AstP0.SymbolF s -> Ast0.Symbol s
+      AstP0.CompoundWithoutEllipsesF xs -> Ast0.Compound xs
+      AstP0.CompoundWithEllipsesF b e a -> Ast0.Compound $ b ++ [e] ++ a
+
+-- predicateListsOverlap :: [IndexedPredicate] -> [IndexedPredicate] -> Bool
+-- predicateListsOverlap preds1 preds2 = _
 
 compile0toRuleDefinition :: Ast0.Ast -> CompileResult RuleDefinition
 compile0toRuleDefinition (Ast0.Symbol _) = Left InvalidRuleDefinition

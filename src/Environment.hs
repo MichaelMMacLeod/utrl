@@ -4,6 +4,8 @@ import qualified AstC2
 import Compile
   ( compile0toRuleDefinition,
     compileRule2,
+    errOnOverlappingPatterns,
+    findOverlappingPatterns,
   )
 import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)
@@ -25,9 +27,12 @@ createEnvironment text = do
   asts <- Read.read text
   rules <- mapM Compile.compile0toRuleDefinition asts
   rules' <- mapM compileRule2 rules
+  let predicatesP0Pairs = map fst rules'
+  errOnOverlappingPatterns predicatesP0Pairs
+  let rules'' = map (\((a, _), c) -> (a, c)) rules'
   let start = 0
-  let lnodes = (start, []) : zip [(start + 1) ..] (map snd rules')
-  let ledges = zipWith (\i p -> (start, i, p)) [(start + 1) ..] (map fst rules')
+  let lnodes = (start, []) : zip [(start + 1) ..] (map snd rules'')
+  let ledges = zipWith (\i p -> (start, i, p)) [(start + 1) ..] (map fst rules'')
   let gr = mkGraph lnodes ledges
   Right $ Environment gr start
 

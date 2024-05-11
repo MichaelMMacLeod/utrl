@@ -6,6 +6,7 @@ module Display
     displayC0,
     displayC2,
     displayExpr,
+    displayP0,
   )
 where
 
@@ -17,9 +18,19 @@ import qualified AstC2Assign
 import AstC2Expr (Expr)
 import qualified AstC2Expr as Expr
 import qualified AstC2Jump
+import qualified AstP0
 import Data.Functor.Foldable (ListF (..), cata)
 import Data.List (intercalate)
 import Utils (Cata)
+
+displayP0 :: AstP0.Ast -> String
+displayP0 = display0 . cata go
+  where
+    go :: Cata AstP0.Ast Ast0.Ast
+    go = \case
+      AstP0.SymbolF s -> Ast0.Symbol s
+      AstP0.CompoundWithoutEllipsesF xs -> Ast0.Compound xs
+      AstP0.CompoundWithEllipsesF b e a -> Ast0.Compound $ b ++ [e, Ast0.Symbol ".."] ++ a
 
 displayC2 :: (Show a) => AstC2.Ast a -> String
 displayC2 = addLineNumbers . cata go
