@@ -45,6 +45,18 @@ tests =
         7
         "\nx"
         (Right [Ast0.Symbol "x"]),
+      readTest
+        8
+        "(x )"
+        (Right [Ast0.Compound [Ast0.Symbol "x"]]),
+      readTest
+        9
+        "( x)"
+        (Right [Ast0.Compound [Ast0.Symbol "x"]]),
+      readTest
+        10
+        "( ()x)"
+        (Right [Ast0.Compound [Ast0.Compound [], Ast0.Symbol "x"]]),
       testProperty "readN" termIsReadable
     ]
 
