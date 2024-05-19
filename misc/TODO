@@ -1,0 +1,72 @@
+- Profile interpreter to determine possible places to improve performance
+- Add optimization passes on pattern graph
+- Actually compile patterns to stmts as well (currently only constructors are compiled)
+- Output webassemby/native code instead of running compiled code in haskell interpreter
+- Make error messages more informative (display offending program parts, etc.)
+- Add toggleable "best effort" infinite loop detection
+
+  Hash the input term, store it in a fixed-size set, kick oldest element out when it fills up,
+  crash when input hash already exists in set (e.g., an infinite loop is detected)
+
+- Add double-quotes to write identifiers containing spaces
+
+  E.g., with
+  
+    (def 123 "one hundred twenty three")
+
+  we could get:
+
+    123
+    -->
+    "one hundred twenty three"
+
+- Make it possible to pattern match against/construct symbols
+
+  Something like this:
+
+    (def (to-string 0) "")
+    (def (to-string (times-two $n))
+      "(to-string $n)0")
+    (def (to-string (times-two-plus-one $n))
+      "(to-string $n)1")
+
+    (to-string (times-two-plus-one (times-two (times-two-plus-one 0))))
+    -->
+    "(to-string (times-two (times-two-plus-one 0)))1"
+    -->
+    "(to-string (times-two-plus-one 0))01"
+    -->
+    "(to-string 0)101"
+    -->
+    101
+
+- Add preprocessor mode
+
+  For example, given the following rules:
+
+    (def STUFF preprocessor_macros)
+    (def (2 + 3) 5)
+
+    So a document containing #STUFF could be preprocessed
+    and could do arbitrary calcualtions: #(2 + 3)
+
+    -->
+
+    So a document containing preprocessor_macros could be preprocessed
+    and could do arbitrary calcualtions: 5
+
+- Add debug mode which can print reductions and show which rules apply in which step
+- Improve parser
+  - Needs better testing
+  - Use megaparsec?
+- Make sure all possible errors to detect at compile time actually are detected
+  - E.g., fix this compiling without error (undefined var reference)
+
+    (def pattern $undefined-var)
+
+  - And this (overlapping rules should be detected)
+
+    (def (add $n 0)
+      $n)
+    (def (add 0 $m)
+      $m)

@@ -1,0 +1,5 @@
+(list
+  (equal (bin 1)
+    (div (bin 1 1)
+         (bin 1 0)))
+  )
