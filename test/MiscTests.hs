@@ -325,7 +325,12 @@ tests =
         "(def A X)\
         \(def B Y)\
         \(def A Y)"
-        ("A", "A")
+        ("A", "A"),
+      runProgramOverlappingPatternsTest
+        6
+        "(def (add $n 0) $n)\
+        \(def (add 0 $m) $m)"
+        ("(add $n 0)", "(add 0 $m)")
     ]
 
 runProgramOverlappingPatternsTest :: Int -> Text -> (Text, Text) -> TestTree
