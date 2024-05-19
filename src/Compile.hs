@@ -42,15 +42,12 @@ import Control.Monad.State.Strict
     withState,
   )
 import qualified Data.Bifunctor
-import Data.Either (fromLeft)
 import Data.Either.Extra (maybeToEither)
-import Data.Foldable (find)
 import Data.Functor.Foldable (ListF (..), Recursive (..))
 import Data.HashMap.Strict ((!?))
 import qualified Data.HashMap.Strict as H
-import qualified Data.HashSet as HS
 import Data.Hashable (Hashable)
-import Data.Maybe (fromJust, isJust)
+import Data.Maybe (fromJust)
 import Error (CompileError (..), CompileResult)
 import GHC.Generics (Generic)
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo), applyPredicates)

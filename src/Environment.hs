@@ -5,7 +5,6 @@ import Compile
   ( compile0toRuleDefinition,
     compileRule2,
     errOnOverlappingPatterns,
-    findOverlappingPatterns,
   )
 import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)

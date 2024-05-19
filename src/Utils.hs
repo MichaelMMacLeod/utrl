@@ -21,7 +21,6 @@ import qualified AstC1
 import Control.Comonad.Cofree (Cofree)
 import Data.Functor.Base (ListF (..))
 import Data.Functor.Foldable (Base, Corecursive (..))
-import qualified AstP0
 
 type Cata t a = Base t a -> a
 
