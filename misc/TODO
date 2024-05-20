@@ -59,6 +59,7 @@
 - Improve parser
   - Needs better testing
   - Use megaparsec?
+  - Add ability to add comments
 - Make sure all possible errors to detect at compile time actually are detected
   - E.g., fix this compiling without error (undefined var reference)
 

@@ -18,7 +18,7 @@ import qualified Data.HashMap.Strict as H
 import Data.Text (Text)
 import Display (displayP0)
 import Environment (createEnvironment)
-import Error (CompileError (..), CompileResult)
+import Error (ErrorType (..), CompileResult)
 import Interpret (runProgram)
 import Predicate
   ( IndexedPredicate (IndexedPredicate),

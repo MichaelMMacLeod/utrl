@@ -1,16 +1,19 @@
 module Read (parseRW, Read.read, read') where
 
-import qualified Ast0
+import Ast0 qualified
 import Data.Char (isSpace)
 import Data.Either.Extra (fromRight', mapLeft)
 import Data.Text (Text)
-import Error (CompileError (..), CompileResult)
+import Error (CompileResult, ErrorType (..), genericErrorInfo)
 import Text.Parsec (ParseError, Parsec, between, choice, eof, many, many1, satisfy, skipMany, space)
 import Text.Parsec.Char (char)
 import Text.ParserCombinators.Parsec (parse)
 
 read :: Text -> CompileResult [Ast0.Ast]
-read input = mapLeft ParsecParseError (parseRW input)
+-- read input = mapLeft (genericErrorInfo ParsingError) (parseRW input)
+read input = case parseRW input of
+  Left e -> Left (genericErrorInfo ParsingError)
+  Right s -> Right s
 
 -- Partial read, which errors at runtime on compile errors. Useful for reducing
 -- boilerplate for tests.

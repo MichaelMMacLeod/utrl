@@ -12,6 +12,7 @@ module Utils
     popTrailingC1Index,
     popBetweenTail,
     getAtC0Index,
+    tshow,
   )
 where
 
@@ -21,6 +22,7 @@ import qualified AstC1
 import Control.Comonad.Cofree (Cofree)
 import Data.Functor.Base (ListF (..))
 import Data.Functor.Foldable (Base, Corecursive (..))
+import Data.Text (Text, pack)
 
 type Cata t a = Base t a -> a
 
@@ -86,3 +88,6 @@ getAtC0Index (AstC0.Between zp lm : i) (Ast0.Compound xs) =
    in if zp < length xs && zpEnd > 0
         then concatMap (getAtC0Index i) (drop zp (take zpEnd xs))
         else []
+
+tshow :: Show a => a -> Text
+tshow = pack . show

@@ -1,14 +1,16 @@
 module Main (main) where
 
 import Config (Config (Config))
-import qualified Config
+import Config qualified
 import Control.Monad (liftM)
 import Control.Monad.Extra (when)
-import qualified Data.Text.IO as Text
-import Display (display0)
+import Data.HashMap.Strict qualified as H
+import Data.Text.IO qualified as T
+import Data.Text.IO qualified as Text
+import Display (display0, displayP0)
 import Environment (createEnvironment, dumpEnvironmentStmts)
-import Error (CompileError)
-import qualified Error as CompileResult
+import Error (SrcMap (..), formatErrorMessage)
+import Error qualified as CompileResult
 import Interpret (runProgram)
 import Options.Applicative
   ( Parser,
@@ -24,7 +26,7 @@ import Options.Applicative
     (<**>),
   )
 import Options.Applicative.Types (ParserInfo)
-import Display (displayP0)
+import Data.Text (pack)
 
 main :: IO ()
 main = runConfig =<< execParser opts
@@ -53,40 +55,41 @@ parseConfig =
           <> help "output assembly statements for debugging"
       )
 
-handleCompileError :: CompileError -> IO ()
-handleCompileError r = case r of
-  CompileResult.ParsecParseError e -> do
-    putStrLn "error: incorrect syntax:"
-    print e
-  CompileResult.TooFewEllipsesInConstructor -> do
-    putStrLn "error: too few ellipses in rule constructor"
-  CompileResult.TooManyEllipsesInConstructor -> do
-    putStrLn "error: too many ellipses in rule constructor"
-  CompileResult.VarsNotCapturedUnderSameEllipsisInConstructor -> do
-    putStrLn "error: variables not captured under same ellipsis in rule pattern"
-    putStrLn "       have been used under same ellipsis in rule constructor"
-  CompileResult.EllipsisAppliedToSymbolInConstructor -> do
-    putStrLn "error: ellipsis applied to symbol in constructor"
-  CompileResult.InvalidRuleDefinition -> do
-    putStrLn "error: invalid rule definition"
-  CompileResult.MoreThanOneEllipsisInSingleCompoundTermOfPattern -> do
-    putStrLn "error: a compound term a rule's pattern contains more than one"
-    putStrLn "       ellipsis"
-  CompileResult.VariableUsedMoreThanOnceInPattern -> do
-    putStrLn "error: variable used more than once in rule pattern"
-  CompileResult.OverlappingPatterns (o1, o2) -> do
-    putStrLn "error: overlapping patterns are not allowed"
-    putStrLn ""
-    putStrLn $ "  " ++ displayP0 o1
-    putStrLn   ""
-    putStrLn $ "  " ++ displayP0 o2
-    putStrLn   ""
-    putStrLn   "note: these two patterns can match the same term"
+-- handleCompileError :: CompileError -> IO ()
+-- handleCompileError r = case r of
+--   CompileResult.ParsecParseError e -> do
+--     putStrLn "error: incorrect syntax:"
+--     print e
+--   CompileResult.TooFewEllipsesInConstructor -> do
+--     putStrLn "error: too few ellipses in rule constructor"
+--   CompileResult.TooManyEllipsesInConstructor -> do
+--     putStrLn "error: too many ellipses in rule constructor"
+--   CompileResult.VarsNotCapturedUnderSameEllipsisInConstructor -> do
+--     putStrLn "error: variables not captured under same ellipsis in rule pattern"
+--     putStrLn "       have been used under same ellipsis in rule constructor"
+--   CompileResult.EllipsisAppliedToSymbolInConstructor -> do
+--     putStrLn "error: ellipsis applied to symbol in constructor"
+--   CompileResult.InvalidRuleDefinition -> do
+--     putStrLn "error: invalid rule definition"
+--   CompileResult.MoreThanOneEllipsisInSingleCompoundTermOfPattern -> do
+--     putStrLn "error: a compound term a rule's pattern contains more than one"
+--     putStrLn "       ellipsis"
+--   CompileResult.VariableUsedMoreThanOnceInPattern -> do
+--     putStrLn "error: variable used more than once in rule pattern"
+--   CompileResult.OverlappingPatterns (o1, o2) -> do
+--     putStrLn "error: overlapping patterns are not allowed"
+--     putStrLn ""
+--     putStrLn $ "  " ++ displayP0 o1
+--     putStrLn   ""
+--     putStrLn $ "  " ++ displayP0 o2
+--     putStrLn   ""
+--     putStrLn   "note: these two patterns can match the same term"
 
 runConfig :: Config -> IO ()
 runConfig c = do
   rules <- Text.readFile $ Config.rules c
   input <- Text.readFile $ Config.input c
+  let srcmap = SrcMap $ H.singleton (pack $ Config.rules c) rules
   when (Config.dumpStmts c) $
     do
       let e = createEnvironment rules
@@ -94,6 +97,6 @@ runConfig c = do
         Left _ -> pure ()
         Right t -> putStrLn $ dumpEnvironmentStmts t
   case runProgram rules input of
-    Left c -> handleCompileError c
+    Left c -> T.putStr $ formatErrorMessage srcmap "rw" c
     Right output -> do
       putStrLn $ unlines $ map display0 output

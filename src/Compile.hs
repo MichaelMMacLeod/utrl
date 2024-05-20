@@ -48,7 +48,7 @@ import Data.HashMap.Strict ((!?))
 import qualified Data.HashMap.Strict as H
 import Data.Hashable (Hashable)
 import Data.Maybe (fromJust)
-import Error (CompileError (..), CompileResult)
+import Error (CompileResult, genericErrorInfo, ErrorType(..))
 import GHC.Generics (Generic)
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo), applyPredicates)
 import Utils (Between (..), Cata, Para, popBetweenTail, popTrailingC1Index)
@@ -99,7 +99,7 @@ compile1toP0 = para go
                   Right $ AstP0.CompoundWithoutEllipses $ map snd inputXsPairs
                 Just (b, e, a) ->
                   if any wasEllipses a
-                    then Left MoreThanOneEllipsisInSingleCompoundTermOfPattern
+                    then Left $ genericErrorInfo MoreThanOneEllipsisInSingleCompoundTermOfPattern
                     else Right $ AstP0.CompoundWithEllipses (map snd b) (snd e) (map snd a)
       Ast1.EllipsesF x -> extract x
 
@@ -126,13 +126,13 @@ p0VariableBindings = cata go . indexP0ByC0
       AstP0.CompoundWithoutEllipsesF xs -> do
         xs' <- sequence xs
         let combined = unionNonIntersectingHashMaps xs'
-        maybeToEither VariableUsedMoreThanOnceInPattern combined
+        maybeToEither (genericErrorInfo VariableUsedMoreThanOnceInPattern) combined
       AstP0.CompoundWithEllipsesF b e a -> do
         b' <- sequence b
         e' <- e
         a' <- sequence a
         let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
-        maybeToEither VariableUsedMoreThanOnceInPattern combined
+        maybeToEither (genericErrorInfo VariableUsedMoreThanOnceInPattern) combined
 
 compileRule2 :: RuleDefinition -> CompileResult (([IndexedPredicate], AstP0.Ast), AstC2.Ast Int)
 compileRule2 rule@(RuleDefinition vars pattern constructor) = do
@@ -144,7 +144,7 @@ errOnOverlappingPatterns :: [([IndexedPredicate], AstP0.Ast)] -> CompileResult (
 errOnOverlappingPatterns predicatesPatternPairs =
   case findOverlappingPatterns predicatesPatternPairs of
     Nothing -> Right ()
-    Just pair -> Left $ OverlappingPatterns pair
+    Just pair -> Left (genericErrorInfo (OverlappingPatterns {- pair -}))
 
 findOverlappingPatterns :: [([IndexedPredicate], AstP0.Ast)] -> Maybe (AstP0.Ast, AstP0.Ast)
 findOverlappingPatterns predicatesPatternPairs =
@@ -190,13 +190,13 @@ removeEllipses = cata go
 -- predicateListsOverlap preds1 preds2 = _
 
 compile0toRuleDefinition :: Ast0.Ast -> CompileResult RuleDefinition
-compile0toRuleDefinition (Ast0.Symbol _) = Left InvalidRuleDefinition
+compile0toRuleDefinition (Ast0.Symbol _) = Left (genericErrorInfo InvalidRuleDefinition)
 compile0toRuleDefinition (Ast0.Compound xs) =
   -- rules must have exactly 3 subterms:
   --  1   2 3
   -- (def a b)
   if length xs /= 3
-    then Left InvalidRuleDefinition
+    then Left (genericErrorInfo InvalidRuleDefinition)
     else
       let startsWithDefSymbol :: [Ast0.Ast] -> Bool
           startsWithDefSymbol (Ast0.Symbol "def" : _) = True
@@ -209,7 +209,7 @@ compile0toRuleDefinition (Ast0.Compound xs) =
                     pat' <- compile1toP0 pat
                     vars <- p0VariableBindings pat'
                     Right $ RuleDefinition vars pat' constr
-            else Left InvalidRuleDefinition
+            else Left (genericErrorInfo InvalidRuleDefinition)
 
 -- Returns the union of all hashmaps in the input list, or Nothing if there
 -- exists at least one key present in more than of the hashmaps.
@@ -285,7 +285,7 @@ compileC0ToC1P :: AstC0.Ast -> CompileResult (AstC1.Ast, Var)
 compileC0ToC1P ast = do
   d <- cata traverseC0ToC1P ast firstUnusedVar
   case _remainingAssignment d of
-    Just _ -> Left TooFewEllipsesInConstructor
+    Just _ -> Left (genericErrorInfo BadEllipsesCount {- too few -})
     Nothing ->
       Right (_ast d, _nextUnusedVar d)
   where
@@ -325,7 +325,7 @@ traverseC0ToC1P a nextUnusedVar = case a of
   AstC0.EllipsesF x -> do
     C0ToC1Data ast nextUnusedVar remainingAssignment <- x nextUnusedVar
     case remainingAssignment of
-      Nothing -> Left TooManyEllipsesInConstructor
+      Nothing -> Left (genericErrorInfo BadEllipsesCount {- too many -})
       Just (var, c0, Between zeroPlus lenMinus) ->
         let (c0', c1) = popTrailingC1Index c0
             loopAst =
@@ -393,7 +393,7 @@ traverseC0ToC1P a nextUnusedVar = case a of
           compatibleRemainingAssignment (Just t) (Just u) =
             if t == u
               then Right $ Just u
-              else Left VarsNotCapturedUnderSameEllipsisInConstructor
+              else Left (genericErrorInfo VarsNotCapturedUnderSameEllipsisInConstructor)
 
 data C1ToC2InputData = C1ToC2InputData
   { _c2iNextUnusedVar :: Var,
