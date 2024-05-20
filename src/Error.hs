@@ -5,12 +5,16 @@ module Error
     formatErrorMessage,
     Span (..),
     SrcMap (..),
+    Pos (..),
+    Filename,
     badEllipsesCount,
     genericErrorInfo,
+    extractErorrType,
   )
 where
 
 import AstP0 qualified
+import Data.Either.Extra (mapLeft)
 import Data.HashMap.Strict qualified as H
 import Data.List.Extra qualified as L
 import Data.Text (Text, pack)
@@ -73,6 +77,9 @@ errorCode = \case
 --   where
 --     srcloc = sourcePosToSrcloc source (errorPos parseError)
 
+extractErorrType :: CompileResult a -> Either ErrorType a
+extractErorrType = mapLeft (\(ErrorMessageInfo {errorType}) -> errorType)
+
 genericErrorInfo :: ErrorType -> ErrorMessageInfo
 genericErrorInfo errorType =
   ErrorMessageInfo
@@ -99,10 +106,6 @@ badEllipsesCount requiredCount actualCount patternVarSpan constructorVarSpan =
         ],
       help = Just "variables must be used with the same number of ellipses in the pattern and constructor"
     }
-
--- data TooFewEllipsesInfo = TooFewEllipsesInfo
---   {
---   }
 
 data ErrorMessageInfo = ErrorMessageInfo
   { errorType :: ErrorType,
@@ -205,7 +208,7 @@ formatErrorMessage srcmap thisCompilerName (ErrorMessageInfo {errorType, message
     errorCodeText = "E" <> T.justifyRight 3 '0' (tshow $ errorCode errorType)
 
 formatSrcSnippets :: SrcMap -> [Annotation] -> Text
-formatSrcSnippets srcmap = T.unlines . map (formatSrcSnippet srcmap)
+formatSrcSnippets srcmap = T.concat . map (formatSrcSnippet srcmap)
 
 -- Produces text which resembles the following, describing
 -- a portion of the text file that an error message applies to:
@@ -242,7 +245,7 @@ formatAnnotationBlock srcmap (Annotation {span = span@(Span {source, start}), an
   T.unlines [line1, line2, line3]
   where
     line1 = T.replicate line1And3PaddingCount " " <> "|"
-    line2 = " " <> columnNumberText <> " | " <> lineText
+    line2 = " " <> lineNumberText <> " | " <> lineText
     line3 =
       line1
         <> " "
@@ -254,11 +257,11 @@ formatAnnotationBlock srcmap (Annotation {span = span@(Span {source, start}), an
     lineText :: Text
     lineText = lookupPosLineText srcmap source start
 
-    columnNumberText :: Text
-    columnNumberText = tshow $ column start
+    lineNumberText :: Text
+    lineNumberText = tshow $ line start
 
     line1And3PaddingCount :: Int
-    line1And3PaddingCount = T.length columnNumberText + 2
+    line1And3PaddingCount = T.length lineNumberText + 2
 
     numberOfCarrots :: Int
     numberOfCarrots = oneLineLengthSpanned span lineText

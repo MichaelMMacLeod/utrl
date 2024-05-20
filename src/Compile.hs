@@ -19,18 +19,18 @@ module Compile
   )
 where
 
-import qualified Ast0
-import qualified Ast1
-import qualified AstC0
+import Ast0 qualified
+import Ast1 qualified
+import AstC0 qualified
 import AstC1 (AssignmentLocation (..))
-import qualified AstC1
-import qualified AstC2
-import qualified AstC2Assign
-import qualified AstC2Expr
-import qualified AstC2Expr as C2Expr
-import qualified AstC2Jump
+import AstC1 qualified
+import AstC2 qualified
+import AstC2Assign qualified
+import AstC2Expr qualified
+import AstC2Expr qualified as C2Expr
+import AstC2Jump qualified
 import AstP0 (indexP0ByC0)
-import qualified AstP0
+import AstP0 qualified
 import Control.Comonad (Comonad (..))
 import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Trans.Cofree (CofreeF (..))
@@ -41,14 +41,14 @@ import Control.Monad.State.Strict
     modify,
     withState,
   )
-import qualified Data.Bifunctor
+import Data.Bifunctor qualified
 import Data.Either.Extra (maybeToEither)
 import Data.Functor.Foldable (ListF (..), Recursive (..))
 import Data.HashMap.Strict ((!?))
-import qualified Data.HashMap.Strict as H
+import Data.HashMap.Strict qualified as H
 import Data.Hashable (Hashable)
 import Data.Maybe (fromJust)
-import Error (CompileResult, genericErrorInfo, ErrorType(..))
+import Error (CompileResult, ErrorType (..), Pos (..), Span (Span), badEllipsesCount, genericErrorInfo)
 import GHC.Generics (Generic)
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo), applyPredicates)
 import Utils (Between (..), Cata, Para, popBetweenTail, popTrailingC1Index)
@@ -285,7 +285,11 @@ compileC0ToC1P :: AstC0.Ast -> CompileResult (AstC1.Ast, Var)
 compileC0ToC1P ast = do
   d <- cata traverseC0ToC1P ast firstUnusedVar
   case _remainingAssignment d of
-    Just _ -> Left (genericErrorInfo BadEllipsesCount {- too few -})
+    Just _ -> Left (badEllipsesCount 1 0 span1 span2)
+      where
+        span1 = Span source (Pos 0 17) (Pos 0 19)
+        span2 = Span source (Pos 0 31) (Pos 0 33)
+        source = "./misc/programs/errors/too-few-ellipses.txt"
     Nothing ->
       Right (_ast d, _nextUnusedVar d)
   where

@@ -4,10 +4,17 @@ import Ast0 qualified
 import Data.Char (isSpace)
 import Data.Either.Extra (fromRight', mapLeft)
 import Data.Text (Text)
-import Error (CompileResult, ErrorType (..), genericErrorInfo)
+import Error (CompileResult, ErrorType (..), genericErrorInfo, Span, Filename)
 import Text.Parsec (ParseError, Parsec, between, choice, eof, many, many1, satisfy, skipMany, space)
 import Text.Parsec.Char (char)
 import Text.ParserCombinators.Parsec (parse)
+import Control.Comonad.Cofree (Cofree)
+import Data.Functor.Foldable (Base)
+
+type Ann t = Cofree (Base t) Span
+
+-- readWithAnnotations :: Filename -> Text -> CompileResult [Ann Ast0.Ast]
+-- readWithAnnotations source input = _
 
 read :: Text -> CompileResult [Ast0.Ast]
 -- read input = mapLeft (genericErrorInfo ParsingError) (parseRW input)

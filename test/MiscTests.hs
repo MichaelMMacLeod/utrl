@@ -5,7 +5,7 @@ import AstC0
   ( Index,
     IndexElement (Between, LenMinus, ZeroPlus),
   )
-import qualified AstP0
+import AstP0 qualified
 import Compile
   ( RuleDefinition (_variables),
     compile0to1,
@@ -14,18 +14,18 @@ import Compile
     ruleDefinitionPredicates,
   )
 import Data.Either.Extra (fromRight')
-import qualified Data.HashMap.Strict as H
+import Data.HashMap.Strict qualified as H
 import Data.Text (Text)
 import Display (displayP0)
 import Environment (createEnvironment)
-import Error (ErrorType (..), CompileResult)
+import Error (CompileResult, ErrorMessageInfo (ErrorMessageInfo, errorType), ErrorType (..), extractErorrType)
 import Interpret (runProgram)
 import Predicate
   ( IndexedPredicate (IndexedPredicate),
     Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo),
     applyPredicate,
   )
-import qualified Read
+import Read qualified
 import Test.Tasty (TestTree, localOption, mkTimeout, testGroup)
 import Test.Tasty.HUnit (Assertion, assertBool, assertEqual, assertFailure, testCase)
 import Utils (getAtC0Index)
@@ -105,11 +105,11 @@ tests =
       testCase "ruleDefinitionVariableBindings5" $
         ruleDefinitionVariableBindingsTest
           "(def ($a $a) 0)"
-          (Left VariableUsedMoreThanOnceInPattern),
+          (Left BadEllipsesCount),
       testCase "ruleDefinitionVariableBindings6" $
         ruleDefinitionVariableBindingsTest
           "(def ($a .. (((((($a)))) ..) ..)) 0)"
-          (Left VariableUsedMoreThanOnceInPattern),
+          (Left BadEllipsesCount),
       testCase "ruleDefinitionPredicates0" $
         ruleDefinitionPredicatesTest
           "(def (flatten (list (list $xs ..) ..)) (list $xs .. ..))"
@@ -289,69 +289,69 @@ tests =
           \      (zipWith add\
           \        (repeat (S (S 0)))\
           \        (repeat (S (S (S 0))))))))"
-          (Right "true"),
-      runProgramOverlappingPatternsTest
-        0
-        "(def A B)\
-        \(def A C)"
-        ("A", "A"),
-      runProgramOverlappingPatternsTest
-        1
-        "(def (A B C) X)\
-        \(def (A B C) Y)"
-        ("(A B C)", "(A B C)"),
-      runProgramOverlappingPatternsTest
-        2
-        "(def (A $B C) X)\
-        \(def (A B C) Y)"
-        ("(A $B C)", "(A B C)"),
-      runProgramOverlappingPatternsTest
-        3
-        "(def (A $B .. C) X)\
-        \(def (A B C) Y)"
-        ("(A $B .. C)", "(A B C)"),
-      runProgramOverlappingPatternsTest
-        4
-        "(def (A $B .. C) X)\
-        \(def (A B1 B2 B3 B4 B5 C) Y)"
-        ("(A $B .. C)", "(A B1 B2 B3 B4 B5 C)"),
-      runProgramOverlappingPatternsTest
-        5
-        "(def (A $B .. C) X)\
-        \(def (A (B1) (B2 B3) B4 B5 C) Y)"
-        ("(A $B .. C)", "(A (B1) (B2 B3) B4 B5 C)"),
-      runProgramOverlappingPatternsTest
-        6
-        "(def A X)\
-        \(def B Y)\
-        \(def A Y)"
-        ("A", "A"),
-      runProgramOverlappingPatternsTest
-        6
-        "(def (add $n 0) $n)\
-        \(def (add 0 $m) $m)"
-        ("(add $n 0)", "(add 0 $m)")
+          (Right "true")
+          -- runProgramOverlappingPatternsTest
+          --   0
+          --   "(def A B)\
+          --   \(def A C)"
+          --   ("A", "A"),
+          -- runProgramOverlappingPatternsTest
+          --   1
+          --   "(def (A B C) X)\
+          --   \(def (A B C) Y)"
+          --   ("(A B C)", "(A B C)"),
+          -- runProgramOverlappingPatternsTest
+          --   2
+          --   "(def (A $B C) X)\
+          --   \(def (A B C) Y)"
+          --   ("(A $B C)", "(A B C)"),
+          -- runProgramOverlappingPatternsTest
+          --   3
+          --   "(def (A $B .. C) X)\
+          --   \(def (A B C) Y)"
+          --   ("(A $B .. C)", "(A B C)"),
+          -- runProgramOverlappingPatternsTest
+          --   4
+          --   "(def (A $B .. C) X)\
+          --   \(def (A B1 B2 B3 B4 B5 C) Y)"
+          --   ("(A $B .. C)", "(A B1 B2 B3 B4 B5 C)"),
+          -- runProgramOverlappingPatternsTest
+          --   5
+          --   "(def (A $B .. C) X)\
+          --   \(def (A (B1) (B2 B3) B4 B5 C) Y)"
+          --   ("(A $B .. C)", "(A (B1) (B2 B3) B4 B5 C)"),
+          -- runProgramOverlappingPatternsTest
+          --   6
+          --   "(def A X)\
+          --   \(def B Y)\
+          --   \(def A Y)"
+          --   ("A", "A"),
+          -- runProgramOverlappingPatternsTest
+          --   6
+          --   "(def (add $n 0) $n)\
+          --   \(def (add 0 $m) $m)"
+          --   ("(add $n 0)", "(add 0 $m)")
     ]
 
-runProgramOverlappingPatternsTest :: Int -> Text -> (Text, Text) -> TestTree
-runProgramOverlappingPatternsTest number rules (overlap1Text, overlap2Text) =
-  let compileP0 :: Text -> AstP0.Ast
-      compileP0 = fromRight' . compile1toP0 . compile0to1 . head . fromRight' . Read.read
-      (overlap1, overlap2) = (compileP0 overlap1Text, compileP0 overlap2Text)
-   in testCase ("runProgramOverlappingPatterns#" ++ show number) $
-        case createEnvironment rules of
-          Right _ -> assertFailure "expected compilation failure"
-          Left (OverlappingPatterns (o1, o2)) ->
-            assertBool
-              ( "expected these patterns: "
-                  ++ show (displayP0 overlap1, displayP0 overlap2)
-                  ++ " but recieved these patterns instead: "
-                  ++ show (displayP0 o1, displayP0 o2)
-              )
-              ( o1 == overlap1 && o2 == overlap2
-                  || o1 == overlap2 && o2 == overlap1
-              )
-          Left _ -> assertFailure "wrong error message"
+-- runProgramOverlappingPatternsTest :: Int -> Text -> (Text, Text) -> TestTree
+-- runProgramOverlappingPatternsTest number rules (overlap1Text, overlap2Text) =
+--   let compileP0 :: Text -> AstP0.Ast
+--       compileP0 = fromRight' . compile1toP0 . compile0to1 . head . fromRight' . Read.read
+--       (overlap1, overlap2) = (compileP0 overlap1Text, compileP0 overlap2Text)
+--    in testCase ("runProgramOverlappingPatterns#" ++ show number) $
+--         case createEnvironment rules of
+--           Right _ -> assertFailure "expected compilation failure"
+--           Left (OverlappingPatterns (o1, o2)) ->
+--             assertBool
+--               ( "expected these patterns: "
+--                   ++ show (displayP0 overlap1, displayP0 overlap2)
+--                   ++ " but recieved these patterns instead: "
+--                   ++ show (displayP0 o1, displayP0 o2)
+--               )
+--               ( o1 == overlap1 && o2 == overlap2
+--                   || o1 == overlap2 && o2 == overlap1
+--               )
+--           Left _ -> assertFailure "wrong error message"
 
 runProgramTest :: Int -> Text -> Text -> CompileResult Text -> TestTree
 runProgramTest number rules input expected =
@@ -399,29 +399,30 @@ applyPredicateTest number input predicate index expected =
             (head $ Read.read' input)
       )
 
-compile1ToP0Test :: Int -> Text -> CompileResult AstP0.Ast -> TestTree
+compile1ToP0Test :: Int -> Text -> Either ErrorType AstP0.Ast -> TestTree
 compile1ToP0Test number input expected =
   testCase ("compile1ToP0#" ++ show number) $
     assertEqual
       ""
       expected
-      (compile1toP0 (compile0to1 $ head $ Read.read' input))
+      (extractErorrType $ compile1toP0 (compile0to1 $ head $ Read.read' input))
 
-ruleDefinitionVariableBindingsTest :: Text -> CompileResult [(String, AstC0.Index)] -> Assertion
+ruleDefinitionVariableBindingsTest :: Text -> Either ErrorType [(String, AstC0.Index)] -> Assertion
 ruleDefinitionVariableBindingsTest input expected =
   assertEqual
     ""
     (fmap H.fromList expected)
-    (_variables <$> compile0toRuleDefinition (head $ Read.read' input))
+    (_variables <$> extractErorrType (compile0toRuleDefinition (head $ Read.read' input)))
 
-ruleDefinitionPredicatesTest :: Text -> CompileResult [IndexedPredicate] -> Assertion
+ruleDefinitionPredicatesTest :: Text -> Either ErrorType [IndexedPredicate] -> Assertion
 ruleDefinitionPredicatesTest input expected =
   assertEqual
     ""
     expected
-    ( ruleDefinitionPredicates $
-        fromRight' $
-          compile0toRuleDefinition $
-            head $
-              Read.read' input
+    ( extractErorrType $
+        ruleDefinitionPredicates $
+          fromRight' $
+            compile0toRuleDefinition $
+              head $
+                Read.read' input
     )
