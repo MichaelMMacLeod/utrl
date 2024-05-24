@@ -9,7 +9,7 @@ import Data.Text.IO qualified as T
 import Data.Text.IO qualified as Text
 import Display (display0, displayP0)
 import Environment (createEnvironment, dumpEnvironmentStmts)
-import Error (SrcMap (..), formatErrorMessage)
+import Error (formatErrorMessage, errorMessages)
 import Error qualified as CompileResult
 import Interpret (runProgram)
 import Options.Applicative
@@ -89,7 +89,6 @@ runConfig :: Config -> IO ()
 runConfig c = do
   rules <- Text.readFile $ Config.rules c
   input <- Text.readFile $ Config.input c
-  let srcmap = SrcMap $ H.singleton (pack $ Config.rules c) rules
   when (Config.dumpStmts c) $
     do
       let e = createEnvironment rules
@@ -97,6 +96,6 @@ runConfig c = do
         Left _ -> pure ()
         Right t -> putStrLn $ dumpEnvironmentStmts t
   case runProgram rules input of
-    Left c -> T.putStr $ formatErrorMessage srcmap "rw" c
+    Left e -> T.putStr $ errorMessages (Config.rules c) rules [e]
     Right output -> do
       putStrLn $ unlines $ map display0 output

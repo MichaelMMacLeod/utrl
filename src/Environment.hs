@@ -23,7 +23,7 @@ data Environment = Environment
 
 createEnvironment :: Text -> CompileResult Environment
 createEnvironment text = do
-  asts <- Read.read text
+  asts <- Read.read "./misc/programs/errors/bad-syntax.txt" text
   rules <- mapM Compile.compile0toRuleDefinition asts
   rules' <- mapM compileRule2 rules
   let predicatesP0Pairs = map fst rules'

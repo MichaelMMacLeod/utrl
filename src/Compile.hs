@@ -48,7 +48,7 @@ import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
 import Data.Hashable (Hashable)
 import Data.Maybe (fromJust)
-import Error (CompileResult, ErrorType (..), Pos (..), Span (Span), badEllipsesCount, genericErrorInfo)
+import Error (CompileResult, ErrorType (..), badEllipsesCountErrorMessage, genericErrorInfo, Span (Span))
 import GHC.Generics (Generic)
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo), applyPredicates)
 import Utils (Between (..), Cata, Para, popBetweenTail, popTrailingC1Index)
@@ -285,11 +285,10 @@ compileC0ToC1P :: AstC0.Ast -> CompileResult (AstC1.Ast, Var)
 compileC0ToC1P ast = do
   d <- cata traverseC0ToC1P ast firstUnusedVar
   case _remainingAssignment d of
-    Just _ -> Left (badEllipsesCount 1 0 span1 span2)
+    Just _ -> Left (badEllipsesCountErrorMessage 1 0 span1 span2)
       where
-        span1 = Span source (Pos 0 17) (Pos 0 19)
-        span2 = Span source (Pos 0 31) (Pos 0 33)
-        source = "./misc/programs/errors/too-few-ellipses.txt"
+        span1 = Span 16 2
+        span2 = Span 30 2
     Nothing ->
       Right (_ast d, _nextUnusedVar d)
   where

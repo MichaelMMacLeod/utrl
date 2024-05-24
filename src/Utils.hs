@@ -13,6 +13,7 @@ module Utils
     popBetweenTail,
     getAtC0Index,
     tshow,
+    Ana,
   )
 where
 
@@ -29,6 +30,8 @@ type Cata t a = Base t a -> a
 type Para t a = Base t (t, a) -> a
 
 type Histo t a = Base t (Cofree (Base t) a) -> a
+
+type Ana t a = a -> Base t a
 
 iterateMaybe :: (b -> Maybe b) -> b -> [b]
 iterateMaybe f b = b : ana go b

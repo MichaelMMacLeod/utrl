@@ -43,7 +43,7 @@ data Matcher = Matcher
 runProgram :: Text -> Text -> CompileResult [Ast0.Ast]
 runProgram rules input = do
   environment <- createEnvironment rules
-  asts <- Read.read input
+  asts <- Read.read "LICENSE.txt" input
   let results = map (uncofree . interpretInEnvironment environment . index0) asts
   pure results
 
