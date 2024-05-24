@@ -14,11 +14,6 @@ import Text.Megaparsec.Char.Lexer qualified as L
 
 type SrcLocked t = Cofree (Base t) Int
 
--- readWithAnnotations :: Filename -> Text -> CompileResult [Ann Ast0.Ast]
--- readWithAnnotations source input = _
-
-data Token = LeftParen | RightParen | Symbol !Text
-
 read :: Filename -> FileContents -> CompileResult [Ast0.Ast]
 read name contents =
   case runParser terms (unpack name) contents of
@@ -31,24 +26,6 @@ read' :: Text -> [Ast0.Ast]
 read' = fromRight' . Read.read "unknown_file_name"
 
 type Parser = Parsec Void Text
-
--- rwAst :: Parser Ast0.Ast
--- rwAst = do
---   ts <- tokens
---   _
-
--- tokens :: Parser [Token]
--- tokens = do
---   spaceConsumer
---   ts <- many token
---   eof
---   pure ts
-
--- token :: Parser Token
--- token = choice [leftParen, rightParen, rwSymbol]
-
--- term :: Parser Ast0.Ast
--- term =
 
 terms :: Parser [Ast0.Ast]
 terms = do
@@ -96,42 +73,3 @@ spaceConsumer =
     space1
     (L.skipLineComment "//")
     (L.skipBlockCommentNested "/*" "*/")
-
--- read :: Text -> CompileResult [Ast0.Ast]
--- -- read input = mapLeft (genericErrorInfo ParsingError) (parseRW input)
--- read input = case parseRW input of
---   Left e -> Left (genericErrorInfo ParsingError)
---   Right s -> Right s
-
--- parseRW :: Text -> Either ParseError [Ast0.Ast]
--- parseRW = parse rwFile ""
-
--- rwFile :: Parsec Text () [Ast0.Ast]
--- rwFile = do
---   skipMany space
---   ast <- many term
---   eof
---   pure ast
-
--- term :: Parsec Text () Ast0.Ast
--- term = do
---   t <- choice [compoundTerm, symbolTerm]
---   skipMany space
---   pure t
-
--- compoundTerm :: Parsec Text () Ast0.Ast
--- compoundTerm =
---   Ast0.Compound
---     <$> between
---       (char '(')
---       (char ')')
---       ( do
---           skipMany space
---           many term
---       )
-
--- symbolTerm :: Parsec Text () Ast0.Ast
--- symbolTerm = Ast0.Symbol <$> many1 symbolChar
-
--- symbolChar :: Parsec Text () Char
--- symbolChar = satisfy $ \c -> not (isSpace c) && c /= '(' && c /= ')'
