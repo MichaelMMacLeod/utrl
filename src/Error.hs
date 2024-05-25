@@ -155,12 +155,13 @@ formatAnnotationBlock :: Annotation OffendingLine -> Text
 formatAnnotationBlock (Annotation {span, annotation}) =
   let Span {location, length} = span
       OffendingLine {line, sourcePos} = location
+      columnZeroIndexed = unPos (sourceColumn sourcePos) - 1
       line1 = T.replicate line1And3PaddingCount " " <> "|"
       line2 = " " <> lineNumberText <> " | " <> line
       line3 =
         line1
           <> " "
-          <> T.replicate (unPos $ sourceColumn sourcePos) " "
+          <> T.replicate columnZeroIndexed " "
           <> T.replicate length "^"
           <> " "
           <> indentedAnnotation
@@ -174,7 +175,7 @@ formatAnnotationBlock (Annotation {span, annotation}) =
               [] -> error "unreachable: empty annotation"
               (l : others) ->
                 let indentedOthers = map (T.replicate indentation " " <>) others
-                    indentation = 4 + line1And3PaddingCount + unPos (sourceColumn sourcePos)
+                    indentation = 4 + line1And3PaddingCount + columnZeroIndexed
                  in T.unlines $ l : indentedOthers
    in T.unlines [line1, line2, line3]
 
