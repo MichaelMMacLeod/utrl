@@ -1,6 +1,7 @@
 module Environment (createEnvironment, Environment (..), dumpEnvironmentStmts) where
 
-import qualified AstC2
+import AstC2 qualified
+import AstP0 qualified
 import Compile
   ( compile0toRuleDefinition,
     compileRule2,
@@ -10,10 +11,12 @@ import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)
 import Data.List (intercalate)
 import Data.Text (Text)
-import qualified Display
-import Error (CompileResult)
-import Predicate (IndexedPredicate)
-import qualified Read
+import Display qualified
+import Error (CompileResult, FileContents)
+import Predicate (IndexedPredicate (IndexedPredicate))
+import Read (SrcLocked)
+import Read qualified
+import Utils (uncofree)
 
 data Environment = Environment
   { _graph :: !(Gr (AstC2.Ast Int) [IndexedPredicate]),
@@ -21,18 +24,28 @@ data Environment = Environment
   }
   deriving (Show, Eq)
 
-createEnvironment :: Text -> CompileResult Environment
-createEnvironment text = do
-  asts <- Read.read "./misc/programs/errors/bad-syntax.txt" text
+createEnvironment :: Maybe FilePath -> FileContents -> CompileResult Environment
+createEnvironment filePath text = do
+  asts <- Read.read filePath text
   rules <- mapM Compile.compile0toRuleDefinition asts
-  rules' <- mapM compileRule2 rules
+  rules' :: [(([IndexedPredicate], SrcLocked AstP0.Ast), SrcLocked (AstC2.Ast Int))] <-
+    mapM compileRule2 rules
   let predicatesP0Pairs = map fst rules'
   errOnOverlappingPatterns predicatesP0Pairs
-  let rules'' = map (\((a, _), c) -> (a, c)) rules'
-  let start = 0
-  let lnodes = (start, []) : zip [(start + 1) ..] (map snd rules'')
-  let ledges = zipWith (\i p -> (start, i, p)) [(start + 1) ..] (map fst rules'')
-  let gr = mkGraph lnodes ledges
+  let rules'' :: [([IndexedPredicate], [AstC2.Stmt Int])]
+      rules'' = map (\((a, _), c) -> (a, uncofree c)) rules'
+
+      start :: Int
+      start = 0
+
+      lnodes :: [(Int, AstC2.Ast Int)]
+      lnodes = (start, []) : zip [(start + 1) ..] (map snd rules'')
+
+      ledges :: [(Int, Int, [IndexedPredicate])]
+      ledges = zipWith (\i p -> (start, i, p)) [(start + 1) ..] (map fst rules'')
+
+      gr :: Gr (AstC2.Ast Int) [IndexedPredicate]
+      gr = mkGraph lnodes ledges
   Right $ Environment gr start
 
 dumpEnvironmentStmts :: Environment -> String

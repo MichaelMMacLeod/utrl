@@ -2,15 +2,7 @@ module Error
   ( ErrorType (..),
     ErrorBundle (..),
     CompileResult,
-    ErrorMessageInfo (..),
-    -- formatErrorMessage,
-    Span (..),
-    -- SrcMap (..),
-    -- Pos (..),
-    Filename,
     FileContents,
-    -- badEllipsesCount,
-    -- genericErrorInfo,
     extractErorrType,
     OffendingLine (..),
     parseErrorMessage,
@@ -18,38 +10,43 @@ module Error
     badEllipsesCountErrorMessage,
     formatErrorMessage,
     errorMessages,
-    -- parseError,
+    addLength,
+    mkFilePathName,
   )
 where
 
-import AstP0 qualified
 import Data.Either.Extra (mapLeft)
-import Data.Functor.Foldable (Corecursive (..), Recursive (..))
-import Data.HashMap.Strict qualified as H
-import Data.List.Extra qualified as L
 import Data.List.NonEmpty.Extra (toList)
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack)
 import Data.Text qualified as T
 import Data.Void (Void)
-import Text.Megaparsec (ParseErrorBundle (..), PosState (..), ShowErrorComponent (showErrorComponent), SourcePos (..), TraversableStream (reachOffset), attachSourcePos, defaultTabWidth, errorOffset, initialPos, parseErrorTextPretty)
+import Text.Megaparsec
+  ( ParseErrorBundle (..),
+    PosState (..),
+    SourcePos (..),
+    TraversableStream (reachOffset),
+    defaultTabWidth,
+    errorOffset,
+    initialPos,
+    parseErrorTextPretty,
+  )
 import Text.Megaparsec.Error (ParseError)
 import Text.Megaparsec.Pos (unPos)
-import Utils (Ana, Cata, tshow)
+import Utils (Annotation (..), ErrorMessageInfo (..), ErrorType (..), Span (..), tshow)
 import Prelude hiding (span)
 
-type CompileResult a = Either (ErrorMessageInfo Int) a
+errorMessages :: Maybe FilePath -> FileContents -> [ErrorMessageInfo Int] -> Text
+errorMessages name contents errors =
+  T.concat . map formatErrorMessage $ errorBundleMessages bundle
+  where
+    bundle = mkErrorBundle name' contents errors
+    name' = mkFilePathName name
 
-data ErrorType
-  = ParsingError
-  | BadEllipsesCount
-  | VarsNotCapturedUnderSameEllipsisInConstructor
-  | EllipsisAppliedToSymbolInConstructor
-  | InvalidRuleDefinition
-  | MoreThanOneEllipsisInSingleCompoundTermOfPattern
-  | VariableUsedMoreThanOnceInPattern
-  | OverlappingPatterns
-  deriving (Eq, Show)
+mkFilePathName :: Maybe FilePath -> String
+mkFilePathName = fromMaybe "<input>"
+
+type CompileResult a = Either (ErrorMessageInfo Int) a
 
 errorCode :: ErrorType -> Int
 errorCode = \case
@@ -62,8 +59,6 @@ errorCode = \case
   VariableUsedMoreThanOnceInPattern -> 7
   OverlappingPatterns -> 8
 
-type Filename = Text
-
 type FileContents = Text
 
 extractErorrType :: CompileResult a -> Either ErrorType a
@@ -73,11 +68,6 @@ data ErrorBundle = ErrorBundle
   { posState :: PosState Text,
     errors :: [ErrorMessageInfo Int]
   }
-
-errorMessages :: FilePath -> FileContents -> [ErrorMessageInfo Int] -> Text
-errorMessages name contents errors =
-  T.concat . map formatErrorMessage . errorBundleMessages $
-    mkErrorBundle name contents errors
 
 mkErrorBundle :: FilePath -> FileContents -> [ErrorMessageInfo Int] -> ErrorBundle
 mkErrorBundle name contents errors =
@@ -119,25 +109,12 @@ attachOffendingLine posState ann@(Annotation {span = s@(Span {location = offset}
       ann' = ann {span = s {location = offendingLine}}
    in (ann', posState')
 
-data ErrorMessageInfo l = ErrorMessageInfo
-  { errorType :: ErrorType,
-    message :: Text,
-    annotations :: [Annotation l],
-    help :: Maybe Text
-  }
-  deriving (Eq, Show)
+spanEnd :: Span Int -> Int
+spanEnd (Span {location, length}) = location + length
 
-data Annotation l = Annotation
-  { span :: Span l,
-    annotation :: Text
-  }
-  deriving (Eq, Show)
-
-data Span l = Span
-  { location :: l,
-    length :: Int
-  }
-  deriving (Eq, Show)
+-- Extends the first span to include the length of the second
+addLength :: Span Int -> Span Int -> Span Int
+addLength s1 s2 = s1 {length = spanEnd s2 - location s1}
 
 data OffendingLine = OffendingLine
   { line :: Text,

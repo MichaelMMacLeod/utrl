@@ -2,15 +2,12 @@ module Main (main) where
 
 import Config (Config (Config))
 import Config qualified
-import Control.Monad (liftM)
 import Control.Monad.Extra (when)
-import Data.HashMap.Strict qualified as H
 import Data.Text.IO qualified as T
 import Data.Text.IO qualified as Text
-import Display (display0, displayP0)
+import Display (display0)
 import Environment (createEnvironment, dumpEnvironmentStmts)
-import Error (formatErrorMessage, errorMessages)
-import Error qualified as CompileResult
+import Error (errorMessages)
 import Interpret (runProgram)
 import Options.Applicative
   ( Parser,
@@ -26,7 +23,6 @@ import Options.Applicative
     (<**>),
   )
 import Options.Applicative.Types (ParserInfo)
-import Data.Text (pack)
 
 main :: IO ()
 main = runConfig =<< execParser opts
@@ -91,11 +87,11 @@ runConfig c = do
   input <- Text.readFile $ Config.input c
   when (Config.dumpStmts c) $
     do
-      let e = createEnvironment rules
+      let e = createEnvironment (Just (Config.rules c)) rules
       case e of
         Left _ -> pure ()
         Right t -> putStrLn $ dumpEnvironmentStmts t
-  case runProgram rules input of
-    Left e -> T.putStr $ errorMessages (Config.rules c) rules [e]
+  case runProgram (Just (Config.rules c)) rules (Just (Config.input c)) input of
+    Left e -> T.putStr $ errorMessages (Just (Config.rules c)) rules [e]
     Right output -> do
       putStrLn $ unlines $ map display0 output

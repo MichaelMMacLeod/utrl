@@ -1,4 +1,4 @@
-module Ast0 (Ast (..), AstF (..), index0, replace0At, index0WithBase) where
+module Ast0 (Ast (..), AstF (..)) where
 
 import Control.Comonad.Cofree (Cofree (..))
 import Control.Comonad.Trans.Cofree (CofreeF)
@@ -16,31 +16,6 @@ data Ast
   = Symbol String
   | Compound [Ast]
   deriving (Show, Eq)
-
-index0 :: Ast -> Cofree AstF [Int]
-index0 ast = cata go ast []
-  where
-    go :: AstF ([Int] -> Cofree AstF [Int]) -> [Int] -> Cofree AstF [Int]
-    go (SymbolF s) index = index :< SymbolF s
-    go (CompoundF xs) index = index :< CompoundF (zipWith (. snoc index) xs [0 ..])
-
-index0WithBase :: [Int] -> Ast -> Cofree AstF [Int]
-index0WithBase base ast = cata go ast base
-  where
-    go :: AstF ([Int] -> Cofree AstF [Int]) -> [Int] -> Cofree AstF [Int]
-    go (SymbolF s) index = index :< SymbolF s
-    go (CompoundF xs) index = index :< CompoundF (zipWith (. snoc index) xs [0 ..])
-
--- Replaces the node at 'index' with 'replacement' in 'ast'. No
--- replacement is made if 'index' is invalid.
-replace0At :: Ast -> [Int] -> Ast -> Ast
-replace0At ast index replacement = cata go (index0 ast)
-  where
-    go :: CofreeF AstF [Int] Ast -> Ast
-    go (i CCTC.:< t) =
-      if i == index
-        then replacement
-        else embed t
 
 data AstF r
   = SymbolF String

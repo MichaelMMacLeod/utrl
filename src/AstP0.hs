@@ -1,7 +1,8 @@
 module AstP0 (Ast (..), AstF (..), indexP0ByC0) where
 
-import qualified AstC0
-import Control.Comonad.Cofree (Cofree (..))
+import AstC0 qualified
+import Control.Comonad.Cofree (Cofree ((:<)))
+import Control.Comonad.Trans.Cofree qualified as C
 import Data.Functor.Foldable
   ( Base,
     Corecursive,
@@ -11,6 +12,8 @@ import Data.Functor.Foldable
     project,
   )
 import Data.List.Extra (snoc)
+import Read (SrcLocked)
+import Utils (Cata, Span (..))
 
 data Ast
   = Symbol String
@@ -22,21 +25,19 @@ data Ast
       }
   deriving (Show, Eq)
 
-indexP0ByC0 :: Ast -> Cofree AstF AstC0.Index
+indexP0ByC0 :: SrcLocked Ast -> Cofree AstF (Span Int, AstC0.Index)
 indexP0ByC0 ast = cata go ast []
   where
-    go ::
-      AstF (AstC0.Index -> Cofree AstF AstC0.Index) ->
-      (AstC0.Index -> Cofree AstF AstC0.Index)
-    go (SymbolF s) index = index :< SymbolF s
-    go (CompoundWithoutEllipsesF xs) index =
+    go :: Cata (SrcLocked Ast) (AstC0.Index -> Cofree AstF (Span Int, AstC0.Index))
+    go (l C.:< SymbolF s) index = (l, index) :< SymbolF s
+    go (l C.:< CompoundWithoutEllipsesF xs) index =
       let xs' = zipWith (. snoc index . AstC0.ZeroPlus) xs [0 ..]
-       in index :< CompoundWithoutEllipsesF xs'
-    go (CompoundWithEllipsesF b e a) index =
+       in (l, index) :< CompoundWithoutEllipsesF xs'
+    go (l C.:< CompoundWithEllipsesF b e a) index =
       let b' = zipWith (. snoc index . AstC0.ZeroPlus) b [0 ..]
-          e' = e $ snoc index $ AstC0.Between (length b) (length a)
+          e' = e $ snoc index $ AstC0.Between (Prelude.length b) (Prelude.length a)
           a' = reverse $ zipWith (. snoc index . AstC0.LenMinus) (reverse a) [1 ..]
-       in index :< CompoundWithEllipsesF b' e' a'
+       in (l, index) :< CompoundWithEllipsesF b' e' a'
 
 data AstF r
   = SymbolF String

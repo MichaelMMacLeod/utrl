@@ -6,19 +6,18 @@ module Interpret
   )
 where
 
-import Ast0 (index0, index0WithBase, replace0At)
-import qualified Ast0
-import qualified AstC2
-import qualified AstC2Assign
+import Ast0 qualified
+import AstC2 qualified
+import AstC2Assign qualified
 import AstC2Expr (Expr)
-import qualified AstC2Expr as Expr
+import AstC2Expr qualified as Expr
 import AstC2ExprVar (Var)
-import qualified AstC2Jump
+import AstC2Jump qualified
 import AstC2Value (Value)
-import qualified AstC2Value as Value
+import AstC2Value qualified as Value
 import Control.Comonad.Cofree (Cofree ((:<)))
 import Control.Comonad.Trans.Cofree (CofreeF, ComonadCofree (unwrap))
-import qualified Control.Comonad.Trans.Cofree as CCTC
+import Control.Comonad.Trans.Cofree qualified as CCTC
 import Data.Foldable (find)
 import Data.Functor.Foldable (Corecursive (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
@@ -26,25 +25,30 @@ import Data.List.Extra ((!?))
 import Data.Sequence (Seq (..), fromList, singleton)
 import Data.Text (Text)
 import Debug.Trace (trace)
-import qualified Display
+import Display qualified
 import Environment (Environment (..), createEnvironment)
 import Error (CompileResult)
 import InterpretMemory (Memory (Memory))
-import qualified InterpretMemory as Memory
+import InterpretMemory qualified as Memory
 import Predicate (applyPredicates)
-import qualified Read
-import Utils (Cata, iterateMaybe, setNth)
+import Read qualified
+import Utils (Cata, index0, index0WithBase, iterateMaybe, replace0At, setNth, uncofree)
 
 data Matcher = Matcher
   { _node :: !Node,
     _ast :: !(Cofree Ast0.AstF [Int])
   }
 
-runProgram :: Text -> Text -> CompileResult [Ast0.Ast]
-runProgram rules input = do
-  environment <- createEnvironment rules
-  asts <- Read.read "LICENSE.txt" input
-  let results = map (uncofree . interpretInEnvironment environment . index0) asts
+runProgram ::
+  Maybe FilePath ->
+  Text ->
+  Maybe FilePath ->
+  Text ->
+  CompileResult [Ast0.Ast]
+runProgram rulesFilePath rules inputFilePath input = do
+  environment <- createEnvironment rulesFilePath rules
+  asts <- Read.read inputFilePath input
+  let results = map ((uncofree . interpretInEnvironment environment . index0) . uncofree) asts
   pure results
 
 interpretInEnvironment :: Environment -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
@@ -52,12 +56,6 @@ interpretInEnvironment e input =
   let results = iterateMaybe (transition e) input
    in --  in last results
       last (trace (unlines $ map (Display.display0 . uncofree) results) results)
-
-uncofree :: Cofree Ast0.AstF [Int] -> Ast0.Ast
-uncofree = cata go
-  where
-    go :: CofreeF Ast0.AstF [Int] Ast0.Ast -> Ast0.Ast
-    go (_ CCTC.:< ast) = embed ast
 
 transition :: Environment -> Cofree Ast0.AstF [Int] -> Maybe (Cofree Ast0.AstF [Int])
 transition environment ast = go $ singleton $ Matcher (_start environment) ast

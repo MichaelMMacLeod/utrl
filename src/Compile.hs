@@ -32,7 +32,10 @@ import AstC2Jump qualified
 import AstP0 (indexP0ByC0)
 import AstP0 qualified
 import Control.Comonad (Comonad (..))
-import Control.Comonad.Cofree (Cofree)
+import Control.Comonad qualified as C
+import Control.Comonad.Cofree (Cofree, hoistCofree)
+import Control.Comonad.Cofree qualified as C
+import Control.Comonad.Identity (Identity (Identity))
 import Control.Comonad.Trans.Cofree (CofreeF (..))
 import Control.Monad.State.Strict
   ( State,
@@ -43,20 +46,21 @@ import Control.Monad.State.Strict
   )
 import Data.Bifunctor qualified
 import Data.Either.Extra (maybeToEither)
-import Data.Functor.Foldable (ListF (..), Recursive (..))
+import Data.Functor.Foldable (Corecursive (..), ListF (..), Recursive (..))
 import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
 import Data.Hashable (Hashable)
 import Data.Maybe (fromJust)
-import Error (CompileResult, ErrorType (..), badEllipsesCountErrorMessage, genericErrorInfo, Span (Span))
+import Error (CompileResult, ErrorType (..), addLength, badEllipsesCountErrorMessage, genericErrorInfo)
 import GHC.Generics (Generic)
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo), applyPredicates)
-import Utils (Between (..), Cata, Para, popBetweenTail, popTrailingC1Index)
+import Read (SrcLocked, SrcLockedF)
+import Utils (Between (..), Cata, Para, Span (Span), popBetweenTail, popTrailingC1Index)
 import Var (Var)
 
 type VariableBindings = H.HashMap String AstC0.Index
 
-compile :: VariableBindings -> Ast0.Ast -> CompileResult (AstC2.Ast Int)
+compile :: VariableBindings -> SrcLocked Ast0.Ast -> CompileResult (SrcLocked (AstC2.Ast Int))
 compile vars ast = do
   let ast1 = compile0to1 ast
       astC0 = compile1toC0 vars ast1
@@ -76,48 +80,48 @@ splitBeforeAndAfter p = go []
       | otherwise = go (x : acc) xs
     go _ [] = Nothing
 
-compile1toP0 :: Ast1.Ast -> CompileResult AstP0.Ast
+compile1toP0 :: SrcLocked Ast1.Ast -> CompileResult (SrcLocked AstP0.Ast)
 compile1toP0 = para go
   where
-    go :: Para Ast1.Ast (CompileResult AstP0.Ast)
+    go :: Para (SrcLocked Ast1.Ast) (CompileResult (SrcLocked AstP0.Ast))
     go = \case
-      Ast1.SymbolF s -> Right $ AstP0.Symbol s
-      Ast1.CompoundF inputXsPairs ->
-        let input :: [Ast1.Ast]
+      l :< Ast1.SymbolF s -> Right $ l C.:< AstP0.SymbolF s
+      l :< Ast1.CompoundF inputXsPairs ->
+        let input :: [SrcLocked Ast1.Ast]
             input = map fst inputXsPairs
-            xs :: [CompileResult AstP0.Ast]
+            xs :: [CompileResult (SrcLocked AstP0.Ast)]
             xs = map snd inputXsPairs
-            wasEllipses :: (Ast1.Ast, AstP0.Ast) -> Bool
+            wasEllipses :: (SrcLocked Ast1.Ast, SrcLocked AstP0.Ast) -> Bool
             wasEllipses = \case
-              (Ast1.Ellipses _, _) -> True
+              (_ C.:< Ast1.EllipsesF _, _) -> True
               _ -> False
          in do
               inputXsPairs <- zip input <$> sequence xs
               let inputXsPairsSplit = splitBeforeAndAfter wasEllipses inputXsPairs
               case inputXsPairsSplit of
                 Nothing ->
-                  Right $ AstP0.CompoundWithoutEllipses $ map snd inputXsPairs
+                  Right $ l C.:< AstP0.CompoundWithoutEllipsesF (map snd inputXsPairs)
                 Just (b, e, a) ->
                   if any wasEllipses a
                     then Left $ genericErrorInfo MoreThanOneEllipsisInSingleCompoundTermOfPattern
-                    else Right $ AstP0.CompoundWithEllipses (map snd b) (snd e) (map snd a)
-      Ast1.EllipsesF x -> extract x
+                    else Right $ l C.:< AstP0.CompoundWithEllipsesF (map snd b) (snd e) (map snd a)
+      l :< Ast1.EllipsesF x -> extract x
 
 data RuleDefinition = RuleDefinition
   { _variables :: !VariableBindings,
-    _pattern :: !AstP0.Ast,
-    _constructor :: !Ast0.Ast
+    _pattern :: !(SrcLocked AstP0.Ast),
+    _constructor :: !(SrcLocked Ast0.Ast)
   }
 
 isDollarSignVar :: String -> Bool
 isDollarSignVar ('$' : _) = True
 isDollarSignVar _ = False
 
-p0VariableBindings :: AstP0.Ast -> CompileResult VariableBindings
+p0VariableBindings :: SrcLocked AstP0.Ast -> CompileResult VariableBindings
 p0VariableBindings = cata go . indexP0ByC0
   where
-    go :: Cata (Cofree AstP0.AstF AstC0.Index) (CompileResult VariableBindings)
-    go (index :< ast) = case ast of
+    go :: Cata (Cofree AstP0.AstF (Span Int, AstC0.Index)) (CompileResult VariableBindings)
+    go ((_l, index) :< ast) = case ast of
       AstP0.SymbolF s ->
         Right $
           if isDollarSignVar s
@@ -134,48 +138,48 @@ p0VariableBindings = cata go . indexP0ByC0
         let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
         maybeToEither (genericErrorInfo VariableUsedMoreThanOnceInPattern) combined
 
-compileRule2 :: RuleDefinition -> CompileResult (([IndexedPredicate], AstP0.Ast), AstC2.Ast Int)
+compileRule2 :: RuleDefinition -> CompileResult (([IndexedPredicate], SrcLocked AstP0.Ast), SrcLocked (AstC2.Ast Int))
 compileRule2 rule@(RuleDefinition vars pattern constructor) = do
   preds <- ruleDefinitionPredicates rule
   program <- compile vars constructor
   Right ((preds, pattern), program)
 
-errOnOverlappingPatterns :: [([IndexedPredicate], AstP0.Ast)] -> CompileResult ()
+errOnOverlappingPatterns :: [([IndexedPredicate], SrcLocked AstP0.Ast)] -> CompileResult ()
 errOnOverlappingPatterns predicatesPatternPairs =
   case findOverlappingPatterns predicatesPatternPairs of
     Nothing -> Right ()
     Just pair -> Left (genericErrorInfo (OverlappingPatterns {- pair -}))
 
-findOverlappingPatterns :: [([IndexedPredicate], AstP0.Ast)] -> Maybe (AstP0.Ast, AstP0.Ast)
-findOverlappingPatterns predicatesPatternPairs =
-  let removedEllipses =
-        zipWith
-          ( \i (preds, p0Ast) ->
-              (i, preds, p0Ast, removeEllipses p0Ast)
-          )
-          [0 ..]
-          predicatesPatternPairs
-      go ::
-        Cata
-          [ ( (Int, [IndexedPredicate], AstP0.Ast, Ast0.Ast),
-              (Int, [IndexedPredicate], AstP0.Ast, Ast0.Ast)
-            )
-          ]
-          (Maybe (AstP0.Ast, AstP0.Ast))
-      go = \case
-        Nil -> Nothing
-        Cons ((i, preds, astP0, _ast0), (i', _preds', astP0', ast0')) answer ->
-          case answer of
-            Just answer -> Just answer
-            Nothing ->
-              if i == i'
-                then Nothing
-                else
-                  if applyPredicates preds ast0'
-                    then Just (astP0, astP0')
-                    else Nothing
-      pairs = [(a, b) | a <- removedEllipses, b <- removedEllipses]
-   in cata go pairs
+findOverlappingPatterns :: [([IndexedPredicate], SrcLocked AstP0.Ast)] -> Maybe (SrcLocked AstP0.Ast, SrcLocked AstP0.Ast)
+findOverlappingPatterns predicatesPatternPairs = Nothing -- TODO!
+-- let removedEllipses =
+--       zipWith
+--         ( \i (preds, p0Ast) ->
+--             (i, preds, p0Ast, removeEllipses p0Ast)
+--         )
+--         [0 ..]
+--         predicatesPatternPairs
+--     go ::
+--       Cata
+--         [ ( (Int, [IndexedPredicate], AstP0.Ast, Ast0.Ast),
+--             (Int, [IndexedPredicate], AstP0.Ast, Ast0.Ast)
+--           )
+--         ]
+--         (Maybe (AstP0.Ast, AstP0.Ast))
+--     go = \case
+--       Nil -> Nothing
+--       Cons ((i, preds, astP0, _ast0), (i', _preds', astP0', ast0')) answer ->
+--         case answer of
+--           Just answer -> Just answer
+--           Nothing ->
+--             if i == i'
+--               then Nothing
+--               else
+--                 if applyPredicates preds ast0'
+--                   then Just (astP0, astP0')
+--                   else Nothing
+--     pairs = [(a, b) | a <- removedEllipses, b <- removedEllipses]
+--  in cata go pairs
 
 removeEllipses :: AstP0.Ast -> Ast0.Ast
 removeEllipses = cata go
@@ -189,22 +193,24 @@ removeEllipses = cata go
 -- predicateListsOverlap :: [IndexedPredicate] -> [IndexedPredicate] -> Bool
 -- predicateListsOverlap preds1 preds2 = _
 
-compile0toRuleDefinition :: Ast0.Ast -> CompileResult RuleDefinition
-compile0toRuleDefinition (Ast0.Symbol _) = Left (genericErrorInfo InvalidRuleDefinition)
-compile0toRuleDefinition (Ast0.Compound xs) =
+compile0toRuleDefinition :: SrcLocked Ast0.Ast -> CompileResult RuleDefinition
+compile0toRuleDefinition (_ C.:< Ast0.SymbolF _) = Left (genericErrorInfo InvalidRuleDefinition)
+compile0toRuleDefinition (_ C.:< Ast0.CompoundF xs) =
   -- rules must have exactly 3 subterms:
   --  1   2 3
   -- (def a b)
   if length xs /= 3
     then Left (genericErrorInfo InvalidRuleDefinition)
     else
-      let startsWithDefSymbol :: [Ast0.Ast] -> Bool
-          startsWithDefSymbol (Ast0.Symbol "def" : _) = True
+      let xs' :: [SrcLocked Ast0.Ast]
+          xs' = xs
+          startsWithDefSymbol :: [SrcLocked Ast0.Ast] -> Bool
+          startsWithDefSymbol ((_ C.:< Ast0.SymbolF "def") : _) = True
           startsWithDefSymbol _ = False
-       in if startsWithDefSymbol xs
+       in if startsWithDefSymbol xs'
             then
-              let pat = compile0to1 $ xs !! 1
-                  constr = xs !! 2
+              let pat = compile0to1 $ xs' !! 1
+                  constr = xs' !! 2
                in do
                     pat' <- compile1toP0 pat
                     vars <- p0VariableBindings pat'
@@ -241,8 +247,8 @@ ruleDefinitionPredicates :: RuleDefinition -> CompileResult [IndexedPredicate]
 ruleDefinitionPredicates (RuleDefinition vars pat _constructor) = cata go (indexP0ByC0 pat)
   where
     go ::
-      Cata (Cofree AstP0.AstF AstC0.Index) (CompileResult [IndexedPredicate])
-    go (index :< ast) = case ast of
+      Cata (Cofree AstP0.AstF (Span Int, AstC0.Index)) (CompileResult [IndexedPredicate])
+    go ((_l, index) :< ast) = case ast of
       AstP0.SymbolF s ->
         Right [IndexedPredicate (SymbolEqualTo s) index | not $ H.member s vars]
       AstP0.CompoundWithoutEllipsesF xs -> do
@@ -256,32 +262,34 @@ ruleDefinitionPredicates (RuleDefinition vars pat _constructor) = cata go (index
         let p = IndexedPredicate (LengthGreaterThanOrEqualTo $ length b + length a) index
         pure $ p : (b' ++ e' ++ a')
 
-compile0to1 :: Ast0.Ast -> Ast1.Ast
+compile0to1 :: SrcLocked Ast0.Ast -> SrcLocked Ast1.Ast
 compile0to1 = cata $ \case
-  Ast0.SymbolF s -> Ast1.Symbol s
-  Ast0.CompoundF xs -> Ast1.Compound $ go xs
+  l :< Ast0.SymbolF s -> l C.:< Ast1.SymbolF s
+  l :< Ast0.CompoundF xs -> l C.:< Ast1.CompoundF (go xs)
     where
-      go :: [Ast1.Ast] -> [Ast1.Ast]
-      go (y : Ast1.Symbol ".." : ys) = go $ Ast1.Ellipses y : ys
+      go :: [SrcLocked Ast1.Ast] -> [SrcLocked Ast1.Ast]
+      go ((l1 C.:< y) : (l2 C.:< Ast1.SymbolF "..") : ys) = go (y' : ys)
+        where
+          y' :: SrcLocked Ast1.Ast
+          y' = addLength l1 l2 C.:< Ast1.EllipsesF (l1 C.:< y)
       go (y : ys) = y : go ys
       go [] = []
 
-compile1toC0 :: VariableBindings -> Ast1.Ast -> AstC0.Ast
+compile1toC0 :: VariableBindings -> SrcLocked Ast1.Ast -> SrcLocked AstC0.Ast
 compile1toC0 vars = cata $ \case
-  Ast1.SymbolF s -> case H.lookup s vars of
-    Nothing -> AstC0.Symbol s
-    Just index -> AstC0.Variable index
-  Ast1.CompoundF xs -> AstC0.Compound xs
-  Ast1.EllipsesF x -> AstC0.Ellipses x
+  l :< Ast1.SymbolF s -> case H.lookup s vars of
+    Nothing -> l C.:< AstC0.SymbolF s
+    Just index -> l C.:< AstC0.VariableF index
+  l :< Ast1.CompoundF xs -> l C.:< AstC0.CompoundF xs
+  l :< Ast1.EllipsesF x -> l C.:< AstC0.EllipsesF x
 
 data C0ToC1Data = C0ToC1Data
-  { _ast :: !AstC1.Ast,
+  { _ast :: !(SrcLocked AstC1.Ast),
     _nextUnusedVar :: !Var,
     _remainingAssignment :: Maybe (Var, AstC0.Index, Between)
   }
-  deriving (Show)
 
-compileC0ToC1P :: AstC0.Ast -> CompileResult (AstC1.Ast, Var)
+compileC0ToC1P :: SrcLocked AstC0.Ast -> CompileResult (SrcLocked AstC1.Ast, Var)
 compileC0ToC1P ast = do
   d <- cata traverseC0ToC1P ast firstUnusedVar
   case _remainingAssignment d of
@@ -295,18 +303,18 @@ compileC0ToC1P ast = do
     firstUnusedVar :: Var
     firstUnusedVar = 0
 
-traverseC0ToC1P :: Cata AstC0.Ast (Var -> CompileResult C0ToC1Data)
+traverseC0ToC1P :: Cata (SrcLocked AstC0.Ast) (Var -> CompileResult C0ToC1Data)
 traverseC0ToC1P a nextUnusedVar = case a of
-  AstC0.SymbolF s ->
+  l :< AstC0.SymbolF s ->
     Right $
       C0ToC1Data
-        { _ast = AstC1.Symbol s,
+        { _ast = l C.:< AstC1.SymbolF s,
           _nextUnusedVar = nextUnusedVar,
           _remainingAssignment = Nothing
         }
-  AstC0.VariableF i ->
+  l :< AstC0.VariableF i ->
     let (c0, c1) = popTrailingC1Index i
-        copyAst = AstC1.Copy nextUnusedVar
+        copyAst = l C.:< AstC1.CopyF nextUnusedVar
      in Right $
           C0ToC1Data
             { _ast =
@@ -314,7 +322,7 @@ traverseC0ToC1P a nextUnusedVar = case a of
                   then copyAst
                   else
                     let location = if null c0 then TopLevel else NotTopLevel
-                     in AstC1.Assignment (nextUnusedVar, c1, location) copyAst,
+                     in l C.:< AstC1.AssignmentF (nextUnusedVar, c1, location) copyAst,
               _nextUnusedVar = nextUnusedVar + 1,
               _remainingAssignment =
                 if null c0
@@ -325,31 +333,32 @@ traverseC0ToC1P a nextUnusedVar = case a of
                         (nextUnusedVar, c0', Between zeroPlus lenMinus)
                       _ -> error "unreachable"
             }
-  AstC0.EllipsesF x -> do
+  l :< AstC0.EllipsesF x -> do
     C0ToC1Data ast nextUnusedVar remainingAssignment <- x nextUnusedVar
     case remainingAssignment of
       Nothing -> Left (genericErrorInfo BadEllipsesCount {- too many -})
       Just (var, c0, Between zeroPlus lenMinus) ->
         let (c0', c1) = popTrailingC1Index c0
             loopAst =
-              AstC1.Loop
-                { AstC1.var = var,
-                  AstC1.src = nextUnusedVar + 1,
-                  AstC1.start = zeroPlus,
-                  AstC1.end = lenMinus,
-                  AstC1.body = ast
-                }
+              l
+                C.:< AstC1.LoopF
+                  { AstC1.varF = var,
+                    AstC1.srcF = nextUnusedVar + 1,
+                    AstC1.startF = zeroPlus,
+                    AstC1.endF = lenMinus,
+                    AstC1.bodyF = ast
+                  }
          in Right $
               C0ToC1Data
                 { _ast =
                     if null c1
                       then
                         if null c0'
-                          then AstC1.Assignment (nextUnusedVar + 1, c1, TopLevel) loopAst
+                          then l C.:< AstC1.AssignmentF (nextUnusedVar + 1, c1, TopLevel) loopAst
                           else loopAst
                       else
                         let location = if null c0' then TopLevel else NotTopLevel
-                         in AstC1.Assignment (nextUnusedVar + 1, c1, location) loopAst,
+                         in l C.:< AstC1.AssignmentF (nextUnusedVar + 1, c1, location) loopAst,
                   _nextUnusedVar = nextUnusedVar + 2,
                   _remainingAssignment =
                     if null c0'
@@ -360,13 +369,13 @@ traverseC0ToC1P a nextUnusedVar = case a of
                             (nextUnusedVar + 1, c0', Between zeroPlus lenMinus)
                           _ -> error "unreachable"
                 }
-  AstC0.CompoundF xs -> cata mergeXS xs nextUnusedVar
+  l :< AstC0.CompoundF xs -> cata mergeXS xs nextUnusedVar
     where
       mergeXS :: Cata [Var -> CompileResult C0ToC1Data] (Var -> CompileResult C0ToC1Data)
       mergeXS Nil nextUnusedVar =
         Right $
           C0ToC1Data
-            { _ast = AstC1.Compound [],
+            { _ast = l C.:< AstC1.CompoundF [],
               _nextUnusedVar = nextUnusedVar,
               _remainingAssignment = Nothing
             }
@@ -376,9 +385,9 @@ traverseC0ToC1P a nextUnusedVar = case a of
         remainingAssignment <- compatibleRemainingAssignment remainingAssignmentX remainingAssignment
         let compoundInternals =
               case ast of
-                AstC1.Compound compoundInternals -> compoundInternals
+                _l C.:< AstC1.CompoundF compoundInternals -> compoundInternals
                 _ -> error "unreachable"
-        let ast = AstC1.Compound $ astX : compoundInternals
+        let ast = l C.:< AstC1.CompoundF (astX : compoundInternals)
         pure $
           C0ToC1Data
             { _ast = ast,
@@ -423,8 +432,8 @@ newVar = do
   modify incC2Var
   pure var
 
-indexAssignStmts :: Var -> AssignmentLocation -> AstC1.Index -> AstC2.Ast NamedLabel
-indexAssignStmts var loc = addAssignmentToInputWhenToplevel . cata go
+indexAssignStmts :: Span Int -> Var -> AssignmentLocation -> AstC1.Index -> SrcLocked (AstC2.Ast NamedLabel)
+indexAssignStmts l var loc = mapSrcLock l . addAssignmentToInputWhenToplevel . cata go
   where
     go :: Cata AstC1.Index (AstC2.Ast NamedLabel)
     go = \case
@@ -461,7 +470,25 @@ indexAssignStmts var loc = addAssignmentToInputWhenToplevel . cata go
                   AstC2Assign.rhs = C2Expr.Input
                 }
 
-compileC1PToC2 :: Var -> AstC1.Ast -> AstC2.Ast NamedLabel
+mapSrcLock :: Span Int -> [a] -> Cofree (ListF a) (Span Int)
+mapSrcLock s = cata (s C.:<)
+
+cofreeAppend :: Cofree (ListF a) b -> Cofree (ListF a) b -> Cofree (ListF a) b
+cofreeAppend (_ C.:< Nil) cf = cf
+cofreeAppend (l1 C.:< Cons x xs) cf = l1 C.:< Cons x (cofreeAppend xs cf)
+
+cofreeConcat2 :: Cofree (ListF (Cofree (ListF a) b)) b -> Cofree (ListF a) b
+cofreeConcat2 = cata go
+  where
+    go :: Cata (Cofree (ListF (Cofree (ListF a) b)) b) (Cofree (ListF a) b)
+    go = \case
+      l :< Nil -> l C.:< Nil
+      _ :< Cons x xs -> cofreeAppend x xs
+
+cofreeConcat :: b -> [Cofree (ListF a) b] -> Cofree (ListF a) b
+cofreeConcat l = foldr cofreeAppend (l C.:< Nil)
+
+compileC1PToC2 :: Var -> SrcLocked AstC1.Ast -> SrcLocked (AstC2.Ast NamedLabel)
 compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
   where
     initialState :: C1ToC2InputData
@@ -470,26 +497,33 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
         { _c2iNextUnusedVar = nextUnusedVar,
           _c2iCompoundTermLengthCounter = Nothing
         }
-    isC1PNonLoopVariant :: AstC1.Ast -> Bool
-    isC1PNonLoopVariant (AstC1.Loop {}) = False
-    isC1PNonLoopVariant (AstC1.Assignment _ x) = isC1PNonLoopVariant x
+    isC1PNonLoopVariant :: SrcLocked AstC1.Ast -> Bool
+    isC1PNonLoopVariant (_ C.:< AstC1.LoopF {}) = False
+    isC1PNonLoopVariant (_ C.:< AstC1.AssignmentF _ x) = isC1PNonLoopVariant x
     isC1PNonLoopVariant _ = True
 
     -- We use 'para' instead of 'cata' because in the 'CompoundF' case, we
     -- need to be able to count the number of non-loops in the subterms.
-    go :: Para AstC1.Ast (State C1ToC2InputData (AstC2.Ast NamedLabel))
+    go :: Para (SrcLocked AstC1.Ast) (State C1ToC2InputData (SrcLocked (AstC2.Ast NamedLabel)))
     go = \case
-      AstC1.SymbolF s -> do
-        pure [AstC2.Push $ C2Expr.Symbol s]
-      AstC1.CompoundF inputXsPairs -> do
+      l :< AstC1.SymbolF s -> do
+        pure $ mapSrcLock l [AstC2.Push $ C2Expr.Symbol s]
+      l :< AstC1.CompoundF inputXsPairs -> do
         lengthCountVar <- newLengthCountVar
         let resetLengthCountVarInX ::
-              (AstC1.Ast, State C1ToC2InputData [AstC2.Stmt NamedLabel]) ->
-              (AstC1.Ast, State C1ToC2InputData [AstC2.Stmt NamedLabel])
+              (SrcLocked AstC1.Ast, State C1ToC2InputData (SrcLocked [AstC2.Stmt NamedLabel])) ->
+              (SrcLocked AstC1.Ast, State C1ToC2InputData (SrcLocked [AstC2.Stmt NamedLabel]))
             resetLengthCountVarInX = Data.Bifunctor.second $ withState $ setLengthCountVar lengthCountVar
-        let inputXsPairs' = map resetLengthCountVarInX inputXsPairs
-        xs <- concat <$> mapM snd inputXsPairs'
-        let inputs = map fst inputXsPairs'
+        let inputXsPairs' :: [(SrcLocked AstC1.Ast, State C1ToC2InputData (SrcLocked [AstC2.Stmt NamedLabel]))]
+            inputXsPairs' = map resetLengthCountVarInX inputXsPairs
+        let q1 :: State C1ToC2InputData [SrcLocked [AstC2.Stmt NamedLabel]]
+            q1 = mapM snd inputXsPairs'
+
+            q2 :: State C1ToC2InputData (SrcLocked [AstC2.Stmt NamedLabel])
+            q2 = cofreeConcat l <$> q1
+        xs <- q2
+        let inputs :: [SrcLocked AstC1.Ast]
+            inputs = map fst inputXsPairs'
             numNonLoopInputs = length . filter isC1PNonLoopVariant $ inputs
             initLengthCountVar =
               AstC2.Assign $
@@ -500,14 +534,18 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                   }
             buildCompoundTerm =
               AstC2.Build $ C2Expr.Var lengthCountVar
-        pure $ initLengthCountVar : xs ++ [buildCompoundTerm]
-      AstC1.AssignmentF (var, index, loc) inputXPair -> do
+        pure
+          ( mapSrcLock l [initLengthCountVar]
+              `cofreeAppend` xs
+              `cofreeAppend` mapSrcLock l [buildCompoundTerm]
+          )
+      l :< AstC1.AssignmentF (var, index, loc) inputXPair -> do
         x <- snd inputXPair
-        let assignmentStmts = indexAssignStmts var loc index
-        pure $ assignmentStmts ++ x
-      AstC1.CopyF v -> do
-        pure [AstC2.Push $ C2Expr.Var v]
-      AstC1.LoopF var src start end inputXPair -> do
+        let assignmentStmts = indexAssignStmts l var loc index
+        pure $ assignmentStmts `cofreeAppend` x
+      l :< AstC1.CopyF v -> do
+        pure $ mapSrcLock l [AstC2.Push $ C2Expr.Var v]
+      l :< AstC1.LoopF var src start end inputXPair -> do
         --        #0 = start              ; #0 is 'loopCounterVar'
         --        #1 = #src.length - end  ; #1 is 'loopEndVar'
         --        jump BOT
@@ -586,35 +624,47 @@ compileC1PToC2 nextUnusedVar ast = evalState (para go ast) initialState
                         (C2Expr.Var loopCounterVar)
                         (C2Expr.Var loopEndVar)
                   }
-        pure $
-          [ assignLoopCountVar,
-            assignLoopEndVar,
-            jumpBot,
-            assignVarToSrc
-          ]
-            ++ x
-            ++ [ incremeentLoopCountVar,
-                 incremenetLengthCountVar,
-                 jumpTop
-               ]
+            srcLockedPrologue =
+              mapSrcLock
+                l
+                [ assignLoopCountVar,
+                  assignLoopEndVar,
+                  jumpBot,
+                  assignVarToSrc
+                ]
+            srcLockedEpilogue =
+              mapSrcLock
+                l
+                [ incremeentLoopCountVar,
+                  incremenetLengthCountVar,
+                  jumpTop
+                ]
+        pure $ srcLockedPrologue `cofreeAppend` x `cofreeAppend` srcLockedEpilogue
 
 data NamedLabel = TopOfLoop !Int | BotOfLoop !Int deriving (Eq, Generic)
 
 instance Hashable NamedLabel
 
-resolveC2NamedLabels :: AstC2.Ast NamedLabel -> AstC2.Ast Int
+enumerateCofree :: Cofree (ListF a) b -> Cofree (ListF a) (Int, b)
+enumerateCofree = cata $ \case
+  b :< Nil -> (0, b) C.:< Nil
+  b :< Cons x xs -> (i + 1, b) C.:< Cons x xs
+    where
+      ((i, _) C.:< _) = xs
+
+resolveC2NamedLabels :: SrcLocked (AstC2.Ast NamedLabel) -> SrcLocked (AstC2.Ast Int)
 resolveC2NamedLabels ast = replaceNamesWithOffsets namedLabelOffsets ast
   where
     namedLabelOffsets :: H.HashMap NamedLabel Int
     namedLabelOffsets = H.fromList $ cata go offsetStmtPairs
       where
-        offsetStmtPairs :: [(Int, AstC2.Stmt NamedLabel)]
-        offsetStmtPairs = zip [0 ..] ast
+        offsetStmtPairs :: Cofree (ListF (AstC2.Stmt NamedLabel)) (Int, Span Int)
+        offsetStmtPairs = enumerateCofree ast
 
-        go :: Cata [(Int, AstC2.Stmt NamedLabel)] [(NamedLabel, Int)]
+        go :: Cata (Cofree (ListF (AstC2.Stmt NamedLabel)) (Int, Span Int)) [(NamedLabel, Int)]
         go = \case
-          Nil -> []
-          Cons (offset, stmt) labelOffsetPairs -> case stmt of
+          (_offset, _l) :< Nil -> []
+          (offset, _l) :< Cons stmt labelOffsetPairs -> case stmt of
             -- Jump statements are the only ones which contain labels,
             -- so they are the only ones we care about here.
             AstC2.Jump (AstC2Jump.Jump label _condition) ->
@@ -623,14 +673,14 @@ resolveC2NamedLabels ast = replaceNamesWithOffsets namedLabelOffsets ast
 
     replaceNamesWithOffsets ::
       H.HashMap NamedLabel Int ->
-      AstC2.Ast NamedLabel ->
-      AstC2.Ast Int
+      SrcLocked (AstC2.Ast NamedLabel) ->
+      SrcLocked (AstC2.Ast Int)
     replaceNamesWithOffsets ht = cata go
       where
-        go :: Cata [AstC2.Stmt NamedLabel] [AstC2.Stmt Int]
+        go :: Cata (SrcLocked (AstC2.Ast NamedLabel)) (SrcLocked (AstC2.Ast Int))
         go = \case
-          Nil -> []
-          Cons namedStmt offsetStmts -> offsetStmt : offsetStmts
+          l :< Nil -> l C.:< Nil
+          l :< Cons namedStmt offsetStmts -> l C.:< Cons offsetStmt offsetStmts
             where
               offsetStmt :: AstC2.Stmt Int
               offsetStmt = replaceNameWithOffset <$> namedStmt
