@@ -1,1 +1,2 @@
-(def (copy (list $x ..)) (list $x))
+(def (copy (list ($x ..) ..)) 
+  (list $x .. .. ..))

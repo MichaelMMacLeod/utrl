@@ -64,6 +64,7 @@ common extensions
     , TypeFamilies
     , OverloadedStrings
     , DuplicateRecordFields
+    , OverloadedRecordDot
 
 library
     import:

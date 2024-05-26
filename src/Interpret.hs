@@ -1,8 +1,8 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Interpret
-  ( runProgram,
-    interpret,
+  ( compileAndRun,
+    runConstructor,
   )
 where
 
@@ -16,14 +16,12 @@ import AstC2Jump qualified
 import AstC2Value (Value)
 import AstC2Value qualified as Value
 import Control.Comonad.Cofree (Cofree ((:<)))
-import Control.Comonad.Trans.Cofree (CofreeF, ComonadCofree (unwrap))
-import Control.Comonad.Trans.Cofree qualified as CCTC
-import Data.Foldable (find, Foldable (foldl'))
-import Data.Functor.Foldable (Corecursive (..), cata)
+import Control.Comonad.Trans.Cofree (ComonadCofree (unwrap))
+import Data.Foldable (Foldable (foldl'), find)
+import Data.Functor.Foldable (cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.List.Extra ((!?))
 import Data.Sequence (Seq (..), fromList, singleton)
-import Data.Text (Text)
 import Debug.Trace (trace)
 import Display qualified
 import Environment (Environment (..), createEnvironment)
@@ -31,7 +29,7 @@ import Error (CompileResult)
 import InterpretMemory (Memory (Memory))
 import InterpretMemory qualified as Memory
 import Predicate (applyPredicates)
-import Read qualified
+import Read (SrcLocked)
 import Utils (Cata, index0, index0WithBase, iterateMaybe, replace0At, setNth, uncofree)
 
 data Matcher = Matcher
@@ -39,28 +37,31 @@ data Matcher = Matcher
     _ast :: !(Cofree Ast0.AstF [Int])
   }
 
-runProgram ::
-  Maybe FilePath ->
-  Text ->
-  Maybe FilePath ->
-  Text ->
+compileAndRun ::
+  [SrcLocked Ast0.Ast] ->
+  [SrcLocked Ast0.Ast] ->
   CompileResult [Ast0.Ast]
-runProgram rulesFilePath rules inputFilePath input = do
-  environment <- createEnvironment rulesFilePath rules
-  asts <- Read.read inputFilePath input
-  let results = map ((uncofree . interpretInEnvironment environment . index0) . uncofree) asts
+compileAndRun ruleAsts inputAsts = do
+  environment <- createEnvironment ruleAsts
+  let results = map (run environment . uncofree) inputAsts
   pure results
 
-interpretInEnvironment :: Environment -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
-interpretInEnvironment e input =
-  let results = iterateMaybe (transition e) input
-   in foldl' (\x y -> trace (Display.display0 $ uncofree y) y) input results
-    
-    --  in last results
-      -- last (trace (unlines $ map (Display.display0 . uncofree) results) results)
+run :: Environment -> Ast0.Ast -> Ast0.Ast
+run environment = uncofree . runIndexed environment . index0
 
-transition :: Environment -> Cofree Ast0.AstF [Int] -> Maybe (Cofree Ast0.AstF [Int])
-transition environment ast = go $ singleton $ Matcher (_start environment) ast
+runIndexed :: Environment -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
+runIndexed e input =
+  let results = iterateMaybe (applyOneDefinitionBFS e) input
+   in foldl' (\_ y -> trace (Display.display0 $ uncofree y) y) input results
+
+--  in last results
+-- last (trace (unlines $ map (Display.display0 . uncofree) results) results)
+
+-- | Recursively searches through 'ast' from the top to bottom in a breadth-first-search order,
+-- applying and returning the result of the first matching definition from 'environment'. Returns
+-- 'Nothing' if no such definition exists.
+applyOneDefinitionBFS :: Environment -> Cofree Ast0.AstF [Int] -> Maybe (Cofree Ast0.AstF [Int])
+applyOneDefinitionBFS environment ast = go $ singleton $ Matcher (_start environment) ast
   where
     go :: Seq Matcher -> Maybe (Cofree Ast0.AstF [Int])
     go matcherQueue =
@@ -68,7 +69,7 @@ transition environment ast = go $ singleton $ Matcher (_start environment) ast
       case matcherQueue of
         Empty -> Nothing
         matcher :<| matcherQueue ->
-          case transitionInEnvironment environment matcher of
+          case applyOneDefinition environment matcher of
             Left subtermMatchers ->
               go $ matcherQueue <> subtermMatchers
             Right matcher ->
@@ -79,12 +80,12 @@ transition environment ast = go $ singleton $ Matcher (_start environment) ast
                     index0 $
                       replace0At (uncofree ast) index (uncofree (index :< replacementAst))
 
--- Returns a single matcher holding the result of successfully applying a rule to the
--- ast in the input matcher. Otherwise, if no rule applies to the ast. returns a list
+-- | Returns a single matcher holding the result of successfully applying a definition to the
+-- ast in the input matcher. Otherwise, if no definition applies to the ast. returns a list
 -- of matchers holding subterms of the ast so they may be later tried in a breadth-first
 -- search order.
-transitionInEnvironment :: Environment -> Matcher -> Either (Seq Matcher) Matcher
-transitionInEnvironment environment matcher =
+applyOneDefinition :: Environment -> Matcher -> Either (Seq Matcher) Matcher
+applyOneDefinition environment matcher =
   let currentNode = _node matcher
       currentAst = _ast matcher
       currentIndex = case currentAst of
@@ -95,7 +96,7 @@ transitionInEnvironment environment matcher =
    in case maybeNextNode of
         Just nextNode ->
           let constructor = snd $ labNode' $ context graph nextNode
-              nextAst = interpret constructor $ uncofree currentAst
+              nextAst = runConstructor constructor $ uncofree currentAst
               nextNodeNeighbors = lsuc graph nextNode
               newNode =
                 if null nextNodeNeighbors
@@ -108,16 +109,16 @@ transitionInEnvironment environment matcher =
             flip map xs $ \x ->
               Matcher (_start environment) x
 
-interpret :: AstC2.Ast Int -> Ast0.Ast -> Ast0.Ast
-interpret prog initialInput =
+runConstructor :: AstC2.Ast Int -> Ast0.Ast -> Ast0.Ast
+runConstructor constructor input =
   head . Memory.dataStack . last $
     iterateMaybe transition initialState
   where
     initialState :: Memory
     initialState =
       Memory
-        { Memory.input = initialInput,
-          Memory.program = prog,
+        { Memory.input = input,
+          Memory.program = constructor,
           Memory.instruction = 0,
           Memory.dataStack = [],
           Memory.variables = []

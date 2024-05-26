@@ -1,21 +1,20 @@
 module Environment (createEnvironment, Environment (..), dumpEnvironmentStmts) where
 
+import Ast0 qualified
 import AstC2 qualified
 import AstP0 qualified
 import Compile
   ( compile0toRuleDefinition,
-    compileRule2,
+    compileDefinition,
     errOnOverlappingPatterns,
   )
 import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)
 import Data.List (intercalate)
-import Data.Text (Text)
 import Display qualified
-import Error (CompileResult, FileContents)
-import Predicate (IndexedPredicate (IndexedPredicate))
+import Error (CompileResult)
+import Predicate (IndexedPredicate)
 import Read (SrcLocked)
-import Read qualified
 import Utils (uncofree)
 
 data Environment = Environment
@@ -24,12 +23,11 @@ data Environment = Environment
   }
   deriving (Show, Eq)
 
-createEnvironment :: Maybe FilePath -> FileContents -> CompileResult Environment
-createEnvironment filePath text = do
-  asts <- Read.read filePath text
+createEnvironment :: [SrcLocked Ast0.Ast] -> CompileResult Environment
+createEnvironment asts = do
   rules <- mapM Compile.compile0toRuleDefinition asts
   rules' :: [(([IndexedPredicate], SrcLocked AstP0.Ast), SrcLocked (AstC2.Ast Int))] <-
-    mapM compileRule2 rules
+    mapM compileDefinition rules
   let predicatesP0Pairs = map fst rules'
   errOnOverlappingPatterns predicatesP0Pairs
   let rules'' :: [([IndexedPredicate], [AstC2.Stmt Int])]

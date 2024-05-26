@@ -1,10 +1,7 @@
-{-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Compile
-  ( compile,
+  ( compileConstructor,
     compile0toRuleDefinition,
     ruleDefinitionPredicates,
     compile0to1,
@@ -12,7 +9,7 @@ module Compile
     compile1toC0,
     VariableBindings,
     RuleDefinition (..),
-    compileRule2,
+    compileDefinition,
     compileC0ToC1P,
     C0ToC1Data (..),
     findOverlappingPatterns,
@@ -33,10 +30,8 @@ import AstC2Jump qualified
 import AstP0 (indexP0ByC0)
 import AstP0 qualified
 import Control.Comonad (Comonad (..))
-import Control.Comonad qualified as C
-import Control.Comonad.Cofree (Cofree, hoistCofree)
+import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as C
-import Control.Comonad.Identity (Identity (Identity))
 import Control.Comonad.Trans.Cofree (CofreeF (..))
 import Control.Monad.State.Strict
   ( State,
@@ -47,22 +42,44 @@ import Control.Monad.State.Strict
   )
 import Data.Bifunctor qualified
 import Data.Either.Extra (maybeToEither)
-import Data.Functor.Foldable (Corecursive (..), ListF (..), Recursive (..))
+import Data.Functor.Foldable (ListF (..), Recursive (..))
 import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
 import Data.Hashable (Hashable)
-import Data.Maybe (catMaybes, fromJust)
-import Error (CompileResult, ErrorType (..), addLength, badEllipsesCountErrorMessage, genericErrorInfo)
+import Data.Maybe (fromJust)
+import Error
+  ( CompileResult,
+    ErrorType (..),
+    addLength,
+    badEllipsesCountErrorMessage,
+    genericErrorInfo,
+  )
 import GHC.Generics (Generic)
-import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo), applyPredicates)
-import Read (SrcLocked, SrcLockedF)
-import Utils (Between (..), Cata, ErrorMessageInfo (ErrorMessageInfo), Para, Span (Span), popBetweenTail, popTrailingC1Index)
+import Predicate
+  ( IndexedPredicate (..),
+    Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo),
+  )
+import Read (SrcLocked)
+import Utils
+  ( Between (..),
+    Cata,
+    Para,
+    Span (Span),
+    popBetweenTail,
+    popTrailingC1Index, ErrorMessageInfo,
+  )
 import Var (Var)
+
+compileDefinition :: RuleDefinition -> CompileResult (([IndexedPredicate], SrcLocked AstP0.Ast), SrcLocked (AstC2.Ast Int))
+compileDefinition rule@(RuleDefinition vars pattern constructor) = do
+  preds <- ruleDefinitionPredicates rule
+  program <- compileConstructor vars constructor
+  Right ((preds, pattern), program)
 
 type VariableBindings = H.HashMap String (AstC0.Index, Span Int)
 
-compile :: VariableBindings -> SrcLocked Ast0.Ast -> CompileResult (SrcLocked (AstC2.Ast Int))
-compile vars ast = do
+compileConstructor :: VariableBindings -> SrcLocked Ast0.Ast -> CompileResult (SrcLocked (AstC2.Ast Int))
+compileConstructor vars ast = do
   let ast1 = compile0to1 ast
       astC0 = compile1toC0 vars ast1
   (astC1P, nextUnusedVar) <- compileC0ToC1P vars astC0
@@ -138,12 +155,6 @@ p0VariableBindings = cata go . indexP0ByC0
         a' <- sequence a
         let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
         maybeToEither (genericErrorInfo VariableUsedMoreThanOnceInPattern) combined
-
-compileRule2 :: RuleDefinition -> CompileResult (([IndexedPredicate], SrcLocked AstP0.Ast), SrcLocked (AstC2.Ast Int))
-compileRule2 rule@(RuleDefinition vars pattern constructor) = do
-  preds <- ruleDefinitionPredicates rule
-  program <- compile vars constructor
-  Right ((preds, pattern), program)
 
 errOnOverlappingPatterns :: [([IndexedPredicate], SrcLocked AstP0.Ast)] -> CompileResult ()
 errOnOverlappingPatterns predicatesPatternPairs =
@@ -503,14 +514,6 @@ mapSrcLock s = cata (s C.:<)
 cofreeAppend :: Cofree (ListF a) b -> Cofree (ListF a) b -> Cofree (ListF a) b
 cofreeAppend (_ C.:< Nil) cf = cf
 cofreeAppend (l1 C.:< Cons x xs) cf = l1 C.:< Cons x (cofreeAppend xs cf)
-
-cofreeConcat2 :: Cofree (ListF (Cofree (ListF a) b)) b -> Cofree (ListF a) b
-cofreeConcat2 = cata go
-  where
-    go :: Cata (Cofree (ListF (Cofree (ListF a) b)) b) (Cofree (ListF a) b)
-    go = \case
-      l :< Nil -> l C.:< Nil
-      _ :< Cons x xs -> cofreeAppend x xs
 
 cofreeConcat :: b -> [Cofree (ListF a) b] -> Cofree (ListF a) b
 cofreeConcat l = foldr cofreeAppend (l C.:< Nil)

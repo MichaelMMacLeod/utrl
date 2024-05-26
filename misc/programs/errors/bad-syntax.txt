@@ -1,1 +1,1 @@
-(missing (right (parens
+(def a (b)
