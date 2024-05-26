@@ -2,13 +2,14 @@
 
 module Compile
   ( compileConstructor,
-    compile0toRuleDefinition,
+    compile0ToDefinition,
     ruleDefinitionPredicates,
     compile0to1,
     compile1toP0,
     compile1toC0,
     VariableBindings,
-    RuleDefinition (..),
+    Definition (..),
+    CompiledDefinition (..),
     compileDefinition,
     compileC0ToC1P,
     C0ToC1Data (..),
@@ -63,18 +64,25 @@ import Read (SrcLocked)
 import Utils
   ( Between (..),
     Cata,
+    ErrorMessageInfo,
     Para,
     Span (Span),
     popBetweenTail,
-    popTrailingC1Index, ErrorMessageInfo,
+    popTrailingC1Index,
   )
 import Var (Var)
 
-compileDefinition :: RuleDefinition -> CompileResult (([IndexedPredicate], SrcLocked AstP0.Ast), SrcLocked (AstC2.Ast Int))
-compileDefinition rule@(RuleDefinition vars pattern constructor) = do
-  preds <- ruleDefinitionPredicates rule
-  program <- compileConstructor vars constructor
-  Right ((preds, pattern), program)
+compileDefinition :: Definition -> CompileResult CompiledDefinition
+compileDefinition definition = do
+  predicates <- ruleDefinitionPredicates definition
+  constructor <- compileConstructor definition.variables definition.constructor
+  Right CompiledDefinition {predicates, pattern = definition.pattern, constructor}
+
+data CompiledDefinition = CompiledDefinition
+  { predicates :: [IndexedPredicate],
+    pattern :: SrcLocked AstP0.Ast,
+    constructor :: SrcLocked (AstC2.Ast Int)
+  }
 
 type VariableBindings = H.HashMap String (AstC0.Index, Span Int)
 
@@ -125,10 +133,10 @@ compile1toP0 = para go
                     else Right $ l C.:< AstP0.CompoundWithEllipsesF (map snd b) (snd e) (map snd a)
       l :< Ast1.EllipsesF x -> extract x
 
-data RuleDefinition = RuleDefinition
-  { _variables :: !VariableBindings,
-    _pattern :: !(SrcLocked AstP0.Ast),
-    _constructor :: !(SrcLocked Ast0.Ast)
+data Definition = Definition
+  { variables :: !VariableBindings,
+    pattern :: !(SrcLocked AstP0.Ast),
+    constructor :: !(SrcLocked Ast0.Ast)
   }
 
 isDollarSignVar :: String -> Bool
@@ -156,11 +164,13 @@ p0VariableBindings = cata go . indexP0ByC0
         let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
         maybeToEither (genericErrorInfo VariableUsedMoreThanOnceInPattern) combined
 
-errOnOverlappingPatterns :: [([IndexedPredicate], SrcLocked AstP0.Ast)] -> CompileResult ()
-errOnOverlappingPatterns predicatesPatternPairs =
-  case findOverlappingPatterns predicatesPatternPairs of
-    Nothing -> Right ()
-    Just pair -> Left (genericErrorInfo (OverlappingPatterns {- pair -}))
+-- errOnOverlappingPatterns :: [([IndexedPredicate], SrcLocked AstP0.Ast)] -> CompileResult ()
+errOnOverlappingPatterns :: [CompiledDefinition] -> CompileResult ()
+errOnOverlappingPatterns predicatesPatternPairs = Right ()
+
+-- case findOverlappingPatterns predicatesPatternPairs of
+--   Nothing -> Right ()
+--   Just pair -> Left (genericErrorInfo (OverlappingPatterns {- pair -}))
 
 findOverlappingPatterns :: [([IndexedPredicate], SrcLocked AstP0.Ast)] -> Maybe (SrcLocked AstP0.Ast, SrcLocked AstP0.Ast)
 findOverlappingPatterns predicatesPatternPairs = Nothing -- TODO!
@@ -205,9 +215,9 @@ removeEllipses = cata go
 -- predicateListsOverlap :: [IndexedPredicate] -> [IndexedPredicate] -> Bool
 -- predicateListsOverlap preds1 preds2 = _
 
-compile0toRuleDefinition :: SrcLocked Ast0.Ast -> CompileResult RuleDefinition
-compile0toRuleDefinition (_ C.:< Ast0.SymbolF _) = Left (genericErrorInfo InvalidRuleDefinition)
-compile0toRuleDefinition (_ C.:< Ast0.CompoundF xs) =
+compile0ToDefinition :: SrcLocked Ast0.Ast -> CompileResult Definition
+compile0ToDefinition (_ C.:< Ast0.SymbolF _) = Left (genericErrorInfo InvalidRuleDefinition)
+compile0ToDefinition (_ C.:< Ast0.CompoundF xs) =
   -- rules must have exactly 3 subterms:
   --  1   2 3
   -- (def a b)
@@ -226,7 +236,7 @@ compile0toRuleDefinition (_ C.:< Ast0.CompoundF xs) =
                in do
                     pat' <- compile1toP0 pat
                     vars <- p0VariableBindings pat'
-                    Right $ RuleDefinition vars pat' constr
+                    Right Definition {variables = vars, pattern = pat', constructor = constr}
             else Left (genericErrorInfo InvalidRuleDefinition)
 
 -- Returns the union of all hashmaps in the input list, or Nothing if there
@@ -255,8 +265,8 @@ unionNonIntersectingHashMaps hs =
 -- - Index [1,0] == "list"
 -- - Indices [1,1..length] are compound terms of length >= 1
 -- - Indices [1,1..length,0] == "list"
-ruleDefinitionPredicates :: RuleDefinition -> CompileResult [IndexedPredicate]
-ruleDefinitionPredicates (RuleDefinition vars pat _constructor) = cata go (indexP0ByC0 pat)
+ruleDefinitionPredicates :: Definition -> CompileResult [IndexedPredicate]
+ruleDefinitionPredicates (Definition vars pat _constructor) = cata go (indexP0ByC0 pat)
   where
     go ::
       Cata (Cofree AstP0.AstF (Span Int, AstC0.Index)) (CompileResult [IndexedPredicate])

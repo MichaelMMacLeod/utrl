@@ -4,9 +4,9 @@ import Ast0 qualified
 import AstC2 qualified
 import AstP0 qualified
 import Compile
-  ( compile0toRuleDefinition,
+  ( compile0ToDefinition,
     compileDefinition,
-    errOnOverlappingPatterns,
+    errOnOverlappingPatterns, Definition (Definition), CompiledDefinition (CompiledDefinition), predicates, constructor,
   )
 import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)
@@ -25,22 +25,21 @@ data Environment = Environment
 
 createEnvironment :: [SrcLocked Ast0.Ast] -> CompileResult Environment
 createEnvironment asts = do
-  rules <- mapM Compile.compile0toRuleDefinition asts
-  rules' :: [(([IndexedPredicate], SrcLocked AstP0.Ast), SrcLocked (AstC2.Ast Int))] <-
-    mapM compileDefinition rules
-  let predicatesP0Pairs = map fst rules'
-  errOnOverlappingPatterns predicatesP0Pairs
-  let rules'' :: [([IndexedPredicate], [AstC2.Stmt Int])]
-      rules'' = map (\((a, _), c) -> (a, uncofree c)) rules'
+  definitions <- mapM compile0ToDefinition asts
+  compiledDefinitions <- mapM compileDefinition definitions
+  errOnOverlappingPatterns compiledDefinitions
+  let predicatesConstructorPairs :: [([IndexedPredicate], [AstC2.Stmt Int])]
+      predicatesConstructorPairs = 
+        map (\d -> (d.predicates, uncofree d.constructor)) compiledDefinitions
 
       start :: Int
       start = 0
 
       lnodes :: [(Int, AstC2.Ast Int)]
-      lnodes = (start, []) : zip [(start + 1) ..] (map snd rules'')
+      lnodes = (start, []) : zip [(start + 1) ..] (map snd predicatesConstructorPairs)
 
       ledges :: [(Int, Int, [IndexedPredicate])]
-      ledges = zipWith (\i p -> (start, i, p)) [(start + 1) ..] (map fst rules'')
+      ledges = zipWith (\i p -> (start, i, p)) [(start + 1) ..] (map fst predicatesConstructorPairs)
 
       gr :: Gr (AstC2.Ast Int) [IndexedPredicate]
       gr = mkGraph lnodes ledges
