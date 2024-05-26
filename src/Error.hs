@@ -223,15 +223,20 @@ badEllipsesCountErrorMessage requiredCount actualCount patternVar constructorVar
       annotations =
         [ Annotation
             { span = patternVar,
-              annotation = "matched with " <> tshow requiredCount <> " ellipses in pattern"
+              annotation = "matched with " <> numDotDotWords requiredCount <> " in pattern"
             },
           Annotation
             { span = constructorVar,
-              annotation = "used with " <> tshow actualCount <> " ellipses in constructor"
+              annotation = "used with " <> numDotDotWords actualCount <> " in constructor"
             }
         ],
       help = Just "variables must be used with the same number of ellipses they were matched with"
     }
+  where
+    numDotDotWords :: Int -> Text
+    numDotDotWords = \case
+      1 -> "1 ellipsis"
+      n -> tshow n <> " ellipses"
 
 -- Copied from megaparsec 9.6.1 as our version here isn't high enough yet for
 -- this to be defined.

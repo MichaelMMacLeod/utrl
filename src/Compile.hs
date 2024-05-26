@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Compile
@@ -50,21 +51,21 @@ import Data.Functor.Foldable (Corecursive (..), ListF (..), Recursive (..))
 import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
 import Data.Hashable (Hashable)
-import Data.Maybe (fromJust)
+import Data.Maybe (catMaybes, fromJust)
 import Error (CompileResult, ErrorType (..), addLength, badEllipsesCountErrorMessage, genericErrorInfo)
 import GHC.Generics (Generic)
 import Predicate (IndexedPredicate (..), Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo), applyPredicates)
 import Read (SrcLocked, SrcLockedF)
-import Utils (Between (..), Cata, Para, Span (Span), popBetweenTail, popTrailingC1Index)
+import Utils (Between (..), Cata, ErrorMessageInfo (ErrorMessageInfo), Para, Span (Span), popBetweenTail, popTrailingC1Index)
 import Var (Var)
 
-type VariableBindings = H.HashMap String AstC0.Index
+type VariableBindings = H.HashMap String (AstC0.Index, Span Int)
 
 compile :: VariableBindings -> SrcLocked Ast0.Ast -> CompileResult (SrcLocked (AstC2.Ast Int))
 compile vars ast = do
   let ast1 = compile0to1 ast
       astC0 = compile1toC0 vars ast1
-  (astC1P, nextUnusedVar) <- compileC0ToC1P astC0
+  (astC1P, nextUnusedVar) <- compileC0ToC1P vars astC0
   let namedC2Stmts = compileC1PToC2 nextUnusedVar astC1P
       offsetC2Stmts = resolveC2NamedLabels namedC2Stmts
   pure offsetC2Stmts
@@ -121,11 +122,11 @@ p0VariableBindings :: SrcLocked AstP0.Ast -> CompileResult VariableBindings
 p0VariableBindings = cata go . indexP0ByC0
   where
     go :: Cata (Cofree AstP0.AstF (Span Int, AstC0.Index)) (CompileResult VariableBindings)
-    go ((_l, index) :< ast) = case ast of
+    go ((l, index) :< ast) = case ast of
       AstP0.SymbolF s ->
         Right $
           if isDollarSignVar s
-            then H.singleton s index
+            then H.singleton s (index, l)
             else H.empty
       AstP0.CompoundWithoutEllipsesF xs -> do
         xs' <- sequence xs
@@ -279,7 +280,7 @@ compile1toC0 :: VariableBindings -> SrcLocked Ast1.Ast -> SrcLocked AstC0.Ast
 compile1toC0 vars = cata $ \case
   l :< Ast1.SymbolF s -> case H.lookup s vars of
     Nothing -> l C.:< AstC0.SymbolF s
-    Just index -> l C.:< AstC0.VariableF index
+    Just (index, _l) -> l C.:< AstC0.VariableF (index, s)
   l :< Ast1.CompoundF xs -> l C.:< AstC0.CompoundF xs
   l :< Ast1.EllipsesF x -> l C.:< AstC0.EllipsesF x
 
@@ -289,19 +290,45 @@ data C0ToC1Data = C0ToC1Data
     _remainingAssignment :: Maybe (Var, AstC0.Index, Between)
   }
 
-compileC0ToC1P :: SrcLocked AstC0.Ast -> CompileResult (SrcLocked AstC1.Ast, Var)
-compileC0ToC1P ast = do
-  d <- cata traverseC0ToC1P ast firstUnusedVar
-  case _remainingAssignment d of
-    Just _ -> Left (badEllipsesCountErrorMessage 1 0 span1 span2)
-      where
-        span1 = Span 16 2
-        span2 = Span 30 2
-    Nothing ->
-      Right (_ast d, _nextUnusedVar d)
+requiredEllipses :: AstC0.Index -> Int
+requiredEllipses = length . filter AstC0.isBetween
+
+verifyC0EllipsesCounts :: VariableBindings -> SrcLocked AstC0.Ast -> [ErrorMessageInfo Int]
+verifyC0EllipsesCounts variableBindings ast = cata go ast 0
   where
-    firstUnusedVar :: Var
-    firstUnusedVar = 0
+    go :: Cata (SrcLocked AstC0.Ast) (Int -> [ErrorMessageInfo Int])
+    go cofree actualEllipsesCount = case cofree of
+      _ :< AstC0.SymbolF _ -> []
+      _ :< AstC0.CompoundF xs -> concatMap ($ actualEllipsesCount) xs
+      constructorVarSpan :< AstC0.VariableF (x, s) ->
+        let requiredCount = requiredEllipses x
+            (_, paternVarSpan) = fromJust $ variableBindings H.!? s
+            errorMessage =
+              badEllipsesCountErrorMessage
+                requiredCount
+                actualEllipsesCount
+                paternVarSpan
+                constructorVarSpan
+         in [errorMessage | requiredCount /= actualEllipsesCount]
+      _ :< AstC0.EllipsesF x -> x $ actualEllipsesCount + 1
+
+compileC0ToC1P :: VariableBindings -> SrcLocked AstC0.Ast -> CompileResult (SrcLocked AstC1.Ast, Var)
+compileC0ToC1P variableBindings ast =
+  case verifyC0EllipsesCounts variableBindings ast of
+    [] ->
+      do
+        d <- cata traverseC0ToC1P ast firstUnusedVar
+        case _remainingAssignment d of
+          Just (cvar, _, _) -> Left (badEllipsesCountErrorMessage 1 0 span1 span2)
+            where
+              span1 = Span 16 2
+              span2 = Span 30 2
+          Nothing ->
+            Right (_ast d, _nextUnusedVar d)
+      where
+        firstUnusedVar :: Var
+        firstUnusedVar = 0
+    errors -> Left $ head errors
 
 traverseC0ToC1P :: Cata (SrcLocked AstC0.Ast) (Var -> CompileResult C0ToC1Data)
 traverseC0ToC1P a nextUnusedVar = case a of
@@ -312,7 +339,7 @@ traverseC0ToC1P a nextUnusedVar = case a of
           _nextUnusedVar = nextUnusedVar,
           _remainingAssignment = Nothing
         }
-  l :< AstC0.VariableF i ->
+  l :< AstC0.VariableF (i, _s) ->
     let (c0, c1) = popTrailingC1Index i
         copyAst = l C.:< AstC1.CopyF nextUnusedVar
      in Right $
@@ -646,11 +673,12 @@ data NamedLabel = TopOfLoop !Int | BotOfLoop !Int deriving (Eq, Generic)
 instance Hashable NamedLabel
 
 enumerateCofree :: Cofree (ListF a) b -> Cofree (ListF a) (Int, b)
-enumerateCofree = cata $ \case
-  b :< Nil -> (0, b) C.:< Nil
-  b :< Cons x xs -> (i + 1, b) C.:< Cons x xs
-    where
-      ((i, _) C.:< _) = xs
+enumerateCofree cf = cata go cf 0
+  where
+    go :: Cata (Cofree (ListF a) b) (Int -> Cofree (ListF a) (Int, b))
+    go cofree n = case cofree of
+      b :< Nil -> (n, b) C.:< Nil
+      b :< Cons x xs -> (n, b) C.:< Cons x (xs $ n + 1)
 
 resolveC2NamedLabels :: SrcLocked (AstC2.Ast NamedLabel) -> SrcLocked (AstC2.Ast Int)
 resolveC2NamedLabels ast = replaceNamesWithOffsets namedLabelOffsets ast

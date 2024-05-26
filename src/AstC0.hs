@@ -6,6 +6,7 @@ module AstC0
     AstF',
     Index,
     IndexElement (..),
+    isBetween,
   )
 where
 
@@ -15,7 +16,7 @@ data Ast
   = Symbol String
   | Compound [Ast]
   | Ellipses Ast
-  | Variable Index
+  | Variable (Index, String)
 
 data IndexElement
   = ZeroPlus Int
@@ -26,12 +27,17 @@ data IndexElement
       }
   deriving (Eq, Show, Ord)
 
+isBetween :: IndexElement -> Bool
+isBetween = \case
+  Between {} -> True
+  _ -> False
+
 type Index = [IndexElement]
 
 data AstF r
   = SymbolF String
   | CompoundF [r]
-  | VariableF Index
+  | VariableF (Index, String)
   | EllipsesF r
   deriving (Functor)
 

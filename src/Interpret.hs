@@ -18,7 +18,7 @@ import AstC2Value qualified as Value
 import Control.Comonad.Cofree (Cofree ((:<)))
 import Control.Comonad.Trans.Cofree (CofreeF, ComonadCofree (unwrap))
 import Control.Comonad.Trans.Cofree qualified as CCTC
-import Data.Foldable (find)
+import Data.Foldable (find, Foldable (foldl'))
 import Data.Functor.Foldable (Corecursive (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.List.Extra ((!?))
@@ -54,15 +54,17 @@ runProgram rulesFilePath rules inputFilePath input = do
 interpretInEnvironment :: Environment -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
 interpretInEnvironment e input =
   let results = iterateMaybe (transition e) input
-   in --  in last results
-      last (trace (unlines $ map (Display.display0 . uncofree) results) results)
+   in foldl' (\x y -> trace (Display.display0 $ uncofree y) y) input results
+    
+    --  in last results
+      -- last (trace (unlines $ map (Display.display0 . uncofree) results) results)
 
 transition :: Environment -> Cofree Ast0.AstF [Int] -> Maybe (Cofree Ast0.AstF [Int])
 transition environment ast = go $ singleton $ Matcher (_start environment) ast
   where
     go :: Seq Matcher -> Maybe (Cofree Ast0.AstF [Int])
     go matcherQueue =
-      -- trace (show $ map ((\x@(i :< _) -> (i, Display.display0 $ uncofree x)) . _ast) matcherQueue) $
+      -- trace (show $ fmap ((\x@(i :< _) -> (i, Display.display0 $ uncofree x)) . _ast) matcherQueue) $
       case matcherQueue of
         Empty -> Nothing
         matcher :<| matcherQueue ->
