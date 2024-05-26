@@ -1,5 +1,5 @@
 module Analyze
-  ( analyzeC0EllipsesCounts,
+  ( analyzeEllipsesCounts,
   )
 where
 
@@ -14,8 +14,8 @@ import ErrorTypes (ErrorMessageInfo)
 import Read (SrcLocked)
 import Utils (Cata)
 
-analyzeC0EllipsesCounts :: VariableBindings -> SrcLocked AstC0.Ast -> [ErrorMessageInfo Int]
-analyzeC0EllipsesCounts variableBindings ast = cata go ast 0
+analyzeEllipsesCounts :: VariableBindings -> SrcLocked AstC0.Ast -> [ErrorMessageInfo Int]
+analyzeEllipsesCounts variableBindings ast = cata go ast 0
   where
     go :: Cata (SrcLocked AstC0.Ast) (Int -> [ErrorMessageInfo Int])
     go cofree actualEllipsesCount = case cofree of

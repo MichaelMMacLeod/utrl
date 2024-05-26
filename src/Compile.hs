@@ -14,7 +14,7 @@ module Compile
   )
 where
 
-import Analyze (analyzeC0EllipsesCounts)
+import Analyze (analyzeEllipsesCounts)
 import Ast0 qualified
 import Ast1 qualified
 import AstC0 qualified
@@ -295,7 +295,7 @@ data Between = Between
 
 compileC0ToC1P :: VariableBindings -> SrcLocked AstC0.Ast -> CompileResult (SrcLocked AstC1.Ast, Var)
 compileC0ToC1P variableBindings ast =
-  case analyzeC0EllipsesCounts variableBindings ast of
+  case analyzeEllipsesCounts variableBindings ast of
     [] -> do
       d <- cata traverseC0ToC1P ast firstUnusedVar
       case d.remainingAssignment of
@@ -304,7 +304,7 @@ compileC0ToC1P variableBindings ast =
       where
         firstUnusedVar :: Var
         firstUnusedVar = 0
-    errors -> Left $ head errors
+    errors -> Left errors
 
 -- | Returns the C1-portion of the end of a C0-index, that is,
 -- drops all indices up to and including the last 'Between' variant

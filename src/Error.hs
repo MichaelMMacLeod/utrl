@@ -5,7 +5,6 @@ module Error
     ErrorBundle (..),
     CompileResult,
     FileContents,
-    extractErorrType,
     OffendingLine (..),
     parseErrorMessage,
     genericErrorInfo,
@@ -36,8 +35,8 @@ import Text.Megaparsec
   )
 import Text.Megaparsec.Error (ParseError)
 import Text.Megaparsec.Pos (unPos)
-import Prelude hiding (span)
 import Utils (tshow)
+import Prelude hiding (span)
 
 errorMessages :: Maybe FilePath -> FileContents -> [ErrorMessageInfo Int] -> Text
 errorMessages name contents errors =
@@ -49,7 +48,7 @@ errorMessages name contents errors =
 mkFilePathName :: Maybe FilePath -> String
 mkFilePathName = fromMaybe "<input>"
 
-type CompileResult a = Either (ErrorMessageInfo Int) a
+type CompileResult a = Either [ErrorMessageInfo Int] a
 
 errorCode :: ErrorType -> Int
 errorCode = \case
@@ -63,9 +62,6 @@ errorCode = \case
   OverlappingPatterns -> 8
 
 type FileContents = Text
-
-extractErorrType :: CompileResult a -> Either ErrorType a
-extractErorrType = mapLeft (\(ErrorMessageInfo {errorType}) -> errorType)
 
 data ErrorBundle = ErrorBundle
   { posState :: PosState Text,
@@ -181,23 +177,25 @@ formatAnnotationBlock (Annotation {span, annotation}) =
                  in T.unlines $ l : indentedOthers
    in T.unlines $ map T.stripEnd [line1, line2, line3]
 
-genericErrorInfo :: ErrorType -> ErrorMessageInfo Int
+genericErrorInfo :: ErrorType -> [ErrorMessageInfo Int]
 genericErrorInfo errorType =
-  ErrorMessageInfo
-    { errorType = InvalidRuleDefinition,
-      message = "error message not yet implemented for " <> tshow errorType,
-      annotations = [],
-      help = Nothing
-    }
+  [ ErrorMessageInfo
+      { errorType = InvalidRuleDefinition,
+        message = "error message not yet implemented for " <> tshow errorType,
+        annotations = [],
+        help = Nothing
+      }
+  ]
 
-parseErrorMessage :: ParseErrorBundle Text Void -> ErrorMessageInfo Int
+parseErrorMessage :: ParseErrorBundle Text Void -> [ErrorMessageInfo Int]
 parseErrorMessage (ParseErrorBundle {bundleErrors}) =
-  ErrorMessageInfo
-    { errorType = ParsingError,
-      message = "bad syntax",
-      annotations = map go $ toList bundleErrors,
-      help = Nothing
-    }
+  [ ErrorMessageInfo
+      { errorType = ParsingError,
+        message = "bad syntax",
+        annotations = map go $ toList bundleErrors,
+        help = Nothing
+      }
+  ]
   where
     go :: ParseError Text Void -> Annotation Int
     go e =
