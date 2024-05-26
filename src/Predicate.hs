@@ -2,13 +2,12 @@ module Predicate
   ( Predicate (..),
     IndexedPredicate (..),
     applyPredicate,
-    applyPredicates
+    applyPredicates,
   )
 where
 
-import qualified Ast0
-import Utils (getAtC0Index)
-import qualified AstC0
+import Ast0 qualified
+import AstC0 qualified
 
 data Predicate
   = SymbolEqualTo String
@@ -30,3 +29,21 @@ applyPredicate (IndexedPredicate p i) ast = all (toFunc p) (getAtC0Index i ast)
 
 applyPredicates :: [IndexedPredicate] -> Ast0.Ast -> Bool
 applyPredicates ps x = all (($ x) . applyPredicate) ps
+
+getAtC0Index :: AstC0.Index -> Ast0.Ast -> [Ast0.Ast]
+getAtC0Index [] ast = [ast]
+getAtC0Index _ (Ast0.Symbol _) = []
+getAtC0Index (AstC0.ZeroPlus zp : i) (Ast0.Compound xs) =
+  if zp < Prelude.length xs
+    then getAtC0Index i (xs !! zp)
+    else []
+getAtC0Index (AstC0.LenMinus lm : i) (Ast0.Compound xs) =
+  let zp = Prelude.length xs - lm
+   in if zp > 0
+        then getAtC0Index i (xs !! zp)
+        else []
+getAtC0Index (AstC0.Between zp lm : i) (Ast0.Compound xs) =
+  let zpEnd = Prelude.length xs - lm
+   in if zp < Prelude.length xs && zpEnd > 0
+        then concatMap (getAtC0Index i) (drop zp (take zpEnd xs))
+        else []

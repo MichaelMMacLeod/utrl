@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module Error
   ( ErrorType (..),
     ErrorBundle (..),
@@ -21,6 +23,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack)
 import Data.Text qualified as T
 import Data.Void (Void)
+import ErrorTypes (Annotation (..), ErrorMessageInfo (..), ErrorType (..), Span (..))
 import Text.Megaparsec
   ( ParseErrorBundle (..),
     PosState (..),
@@ -33,8 +36,8 @@ import Text.Megaparsec
   )
 import Text.Megaparsec.Error (ParseError)
 import Text.Megaparsec.Pos (unPos)
-import Utils (Annotation (..), ErrorMessageInfo (..), ErrorType (..), Span (..), tshow)
 import Prelude hiding (span)
+import Utils (tshow)
 
 errorMessages :: Maybe FilePath -> FileContents -> [ErrorMessageInfo Int] -> Text
 errorMessages name contents errors =

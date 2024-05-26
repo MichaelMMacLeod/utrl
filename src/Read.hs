@@ -6,7 +6,7 @@ import Control.Comonad.Trans.Cofree (CofreeF)
 import Data.Char (isSpace)
 import Data.Either.Extra (fromRight')
 import Data.Functor.Foldable (Base)
-import Data.Text (Text, unpack)
+import Data.Text (Text)
 import Data.Void (Void)
 import Error
   ( CompileResult,
@@ -14,6 +14,7 @@ import Error
     mkFilePathName,
     parseErrorMessage,
   )
+import ErrorTypes (Span (..))
 import Text.Megaparsec
   ( Parsec,
     between,
@@ -27,7 +28,6 @@ import Text.Megaparsec
 import Text.Megaparsec.Char (space1)
 import Text.Megaparsec.Char.Lexer qualified as L
 import Prelude hiding (span)
-import Utils (Span (..))
 
 type SrcLocked t = Cofree (Base t) (Span Int)
 

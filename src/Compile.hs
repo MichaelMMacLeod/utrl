@@ -7,17 +7,14 @@ module Compile
     compile0to1,
     compile1toP0,
     compile1toC0,
-    VariableBindings,
-    Definition (..),
-    CompiledDefinition (..),
     compileDefinition,
     compileC0ToC1P,
-    C0ToC1Data (..),
     findOverlappingPatterns,
     errOnOverlappingPatterns,
   )
 where
 
+import Analyze (analyzeC0EllipsesCounts)
 import Ast0 qualified
 import Ast1 qualified
 import AstC0 qualified
@@ -30,6 +27,7 @@ import AstC2Expr qualified as C2Expr
 import AstC2Jump qualified
 import AstP0 (indexP0ByC0)
 import AstP0 qualified
+import CompileTypes (CompiledDefinition (..), Definition (..), VariableBindings)
 import Control.Comonad (Comonad (..))
 import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as C
@@ -52,24 +50,16 @@ import Error
   ( CompileResult,
     ErrorType (..),
     addLength,
-    badEllipsesCountErrorMessage,
     genericErrorInfo,
   )
+import ErrorTypes (Span)
 import GHC.Generics (Generic)
 import Predicate
   ( IndexedPredicate (..),
     Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo),
   )
 import Read (SrcLocked)
-import Utils
-  ( Between (..),
-    Cata,
-    ErrorMessageInfo,
-    Para,
-    Span (Span),
-    popBetweenTail,
-    popTrailingC1Index,
-  )
+import Utils (Cata, Para)
 import Var (Var)
 
 compileDefinition :: Definition -> CompileResult CompiledDefinition
@@ -77,14 +67,6 @@ compileDefinition definition = do
   predicates <- ruleDefinitionPredicates definition
   constructor <- compileConstructor definition.variables definition.constructor
   Right CompiledDefinition {predicates, pattern = definition.pattern, constructor}
-
-data CompiledDefinition = CompiledDefinition
-  { predicates :: [IndexedPredicate],
-    pattern :: SrcLocked AstP0.Ast,
-    constructor :: SrcLocked (AstC2.Ast Int)
-  }
-
-type VariableBindings = H.HashMap String (AstC0.Index, Span Int)
 
 compileConstructor :: VariableBindings -> SrcLocked Ast0.Ast -> CompileResult (SrcLocked (AstC2.Ast Int))
 compileConstructor vars ast = do
@@ -132,12 +114,6 @@ compile1toP0 = para go
                     then Left $ genericErrorInfo MoreThanOneEllipsisInSingleCompoundTermOfPattern
                     else Right $ l C.:< AstP0.CompoundWithEllipsesF (map snd b) (snd e) (map snd a)
       l :< Ast1.EllipsesF x -> extract x
-
-data Definition = Definition
-  { variables :: !VariableBindings,
-    pattern :: !(SrcLocked AstP0.Ast),
-    constructor :: !(SrcLocked Ast0.Ast)
-  }
 
 isDollarSignVar :: String -> Bool
 isDollarSignVar ('$' : _) = True
@@ -306,86 +282,103 @@ compile1toC0 vars = cata $ \case
   l :< Ast1.EllipsesF x -> l C.:< AstC0.EllipsesF x
 
 data C0ToC1Data = C0ToC1Data
-  { _ast :: !(SrcLocked AstC1.Ast),
-    _nextUnusedVar :: !Var,
-    _remainingAssignment :: Maybe (Var, AstC0.Index, Between)
+  { ast :: !(SrcLocked AstC1.Ast),
+    nextUnusedVar :: !Var,
+    remainingAssignment :: Maybe (Var, AstC0.Index, Between)
   }
 
-requiredEllipses :: AstC0.Index -> Int
-requiredEllipses = length . filter AstC0.isBetween
-
-verifyC0EllipsesCounts :: VariableBindings -> SrcLocked AstC0.Ast -> [ErrorMessageInfo Int]
-verifyC0EllipsesCounts variableBindings ast = cata go ast 0
-  where
-    go :: Cata (SrcLocked AstC0.Ast) (Int -> [ErrorMessageInfo Int])
-    go cofree actualEllipsesCount = case cofree of
-      _ :< AstC0.SymbolF _ -> []
-      _ :< AstC0.CompoundF xs -> concatMap ($ actualEllipsesCount) xs
-      constructorVarSpan :< AstC0.VariableF (x, s) ->
-        let requiredCount = requiredEllipses x
-            (_, paternVarSpan) = fromJust $ variableBindings H.!? s
-            errorMessage =
-              badEllipsesCountErrorMessage
-                requiredCount
-                actualEllipsesCount
-                paternVarSpan
-                constructorVarSpan
-         in [errorMessage | requiredCount /= actualEllipsesCount]
-      _ :< AstC0.EllipsesF x -> x $ actualEllipsesCount + 1
+data Between = Between
+  { zeroPlus :: Int,
+    lenMinus :: Int
+  }
+  deriving (Show, Eq)
 
 compileC0ToC1P :: VariableBindings -> SrcLocked AstC0.Ast -> CompileResult (SrcLocked AstC1.Ast, Var)
 compileC0ToC1P variableBindings ast =
-  case verifyC0EllipsesCounts variableBindings ast of
-    [] ->
-      do
-        d <- cata traverseC0ToC1P ast firstUnusedVar
-        case _remainingAssignment d of
-          Just (cvar, _, _) -> Left (badEllipsesCountErrorMessage 1 0 span1 span2)
-            where
-              span1 = Span 16 2
-              span2 = Span 30 2
-          Nothing ->
-            Right (_ast d, _nextUnusedVar d)
+  case analyzeC0EllipsesCounts variableBindings ast of
+    [] -> do
+      d <- cata traverseC0ToC1P ast firstUnusedVar
+      case d.remainingAssignment of
+        Just _ -> error "unreachable due to analyzeC0EllipsesCounts"
+        Nothing -> Right (d.ast, d.nextUnusedVar)
       where
         firstUnusedVar :: Var
         firstUnusedVar = 0
     errors -> Left $ head errors
+
+-- | Returns the C1-portion of the end of a C0-index, that is,
+-- drops all indices up to and including the last 'Between' variant
+-- of the input C0-index. Because all 'Between' variants are dropped,
+-- the resulting index is a C1-index.
+c1Tail :: AstC0.Index -> AstC1.Index
+c1Tail = reverse . go . reverse
+  where
+    go :: AstC0.Index -> AstC1.Index
+    go ((AstC0.ZeroPlus i) : xs) = AstC1.ZeroPlus i : go xs
+    go ((AstC0.LenMinus i) : xs) = AstC1.LenMinus i : go xs
+    go _ = []
+
+-- | Returns the C0-portion of the start of a C0-index, that is,
+-- takes all indices up to and including the last 'Between' variant
+-- of the input C0-index.
+c0Head :: AstC0.Index -> AstC0.Index
+c0Head = reverse . go . reverse
+  where
+    go :: AstC0.Index -> AstC0.Index
+    go xs@(AstC0.Between {} : _) = xs
+    go (_ : xs) = go xs
+    go [] = []
+
+-- | Subdivides a C0-index into its initial C0 portion and its
+-- trailing C1 portion.
+popTrailingC1Index :: AstC0.Index -> (AstC0.Index, AstC1.Index)
+popTrailingC1Index c0 = (c0Head c0, c1Tail c0)
+
+-- | Returns the 'Between' 'IndexElement' at the end of the input
+-- C0-index, or Nothing if the input index ends with a different
+-- 'IndexElement. The first elemnet of the returned pair is the
+-- rest of the input.
+popBetweenTail :: AstC0.Index -> (AstC0.Index, Maybe Between)
+popBetweenTail = go . reverse
+  where
+    go (AstC0.Between zp lm : others) = (reverse others, Just $ Between zp lm)
+    go others = (others, Nothing)
 
 traverseC0ToC1P :: Cata (SrcLocked AstC0.Ast) (Var -> CompileResult C0ToC1Data)
 traverseC0ToC1P a nextUnusedVar = case a of
   l :< AstC0.SymbolF s ->
     Right $
       C0ToC1Data
-        { _ast = l C.:< AstC1.SymbolF s,
-          _nextUnusedVar = nextUnusedVar,
-          _remainingAssignment = Nothing
+        { ast = l C.:< AstC1.SymbolF s,
+          nextUnusedVar = nextUnusedVar,
+          remainingAssignment = Nothing
         }
   l :< AstC0.VariableF (i, _s) ->
     let (c0, c1) = popTrailingC1Index i
         copyAst = l C.:< AstC1.CopyF nextUnusedVar
      in Right $
           C0ToC1Data
-            { _ast =
+            { ast =
                 if null c1
                   then copyAst
                   else
                     let location = if null c0 then TopLevel else NotTopLevel
                      in l C.:< AstC1.AssignmentF (nextUnusedVar, c1, location) copyAst,
-              _nextUnusedVar = nextUnusedVar + 1,
-              _remainingAssignment =
+              nextUnusedVar = nextUnusedVar + 1,
+              remainingAssignment =
                 if null c0
                   then Nothing
                   else Just $
                     case popBetweenTail c0 of
-                      (c0', Just (zeroPlus, lenMinus)) ->
-                        (nextUnusedVar, c0', Between zeroPlus lenMinus)
+                      (c0', Just between) ->
+                        (nextUnusedVar, c0', between)
                       _ -> error "unreachable"
             }
   l :< AstC0.EllipsesF x -> do
     C0ToC1Data ast nextUnusedVar remainingAssignment <- x nextUnusedVar
     case remainingAssignment of
       Nothing -> Left (genericErrorInfo BadEllipsesCount {- too many -})
-      Just (var, c0, Between zeroPlus lenMinus) ->
+      Just (var, c0, Between {zeroPlus, lenMinus}) ->
         let (c0', c1) = popTrailingC1Index c0
             loopAst =
               l
@@ -398,7 +391,7 @@ traverseC0ToC1P a nextUnusedVar = case a of
                   }
          in Right $
               C0ToC1Data
-                { _ast =
+                { ast =
                     if null c1
                       then
                         if null c0'
@@ -407,14 +400,14 @@ traverseC0ToC1P a nextUnusedVar = case a of
                       else
                         let location = if null c0' then TopLevel else NotTopLevel
                          in l C.:< AstC1.AssignmentF (nextUnusedVar + 1, c1, location) loopAst,
-                  _nextUnusedVar = nextUnusedVar + 2,
-                  _remainingAssignment =
+                  nextUnusedVar = nextUnusedVar + 2,
+                  remainingAssignment =
                     if null c0'
                       then Nothing
                       else Just $
                         case popBetweenTail c0' of
-                          (c0', Just (zeroPlus, lenMinus)) ->
-                            (nextUnusedVar + 1, c0', Between zeroPlus lenMinus)
+                          (c0', Just between) ->
+                            (nextUnusedVar + 1, c0', between)
                           _ -> error "unreachable"
                 }
   l :< AstC0.CompoundF xs -> cata mergeXS xs nextUnusedVar
@@ -423,9 +416,9 @@ traverseC0ToC1P a nextUnusedVar = case a of
       mergeXS Nil nextUnusedVar =
         Right $
           C0ToC1Data
-            { _ast = l C.:< AstC1.CompoundF [],
-              _nextUnusedVar = nextUnusedVar,
-              _remainingAssignment = Nothing
+            { ast = l C.:< AstC1.CompoundF [],
+              nextUnusedVar = nextUnusedVar,
+              remainingAssignment = Nothing
             }
       mergeXS (Cons x xs) nextUnusedVar = do
         C0ToC1Data astX nextUnusedVar remainingAssignmentX <- x nextUnusedVar
@@ -438,9 +431,9 @@ traverseC0ToC1P a nextUnusedVar = case a of
         let ast = l C.:< AstC1.CompoundF (astX : compoundInternals)
         pure $
           C0ToC1Data
-            { _ast = ast,
-              _nextUnusedVar = nextUnusedVar,
-              _remainingAssignment = remainingAssignment
+            { ast = ast,
+              nextUnusedVar = nextUnusedVar,
+              remainingAssignment = remainingAssignment
             }
         where
           compatibleRemainingAssignment ::

@@ -15,12 +15,13 @@ import AstC2ExprVar (Var)
 import AstC2Jump qualified
 import AstC2Value (Value)
 import AstC2Value qualified as Value
-import Control.Comonad.Cofree (Cofree ((:<)))
-import Control.Comonad.Trans.Cofree (ComonadCofree (unwrap))
+import Control.Comonad.Cofree (Cofree)
+import Control.Comonad.Cofree qualified as C
+import Control.Comonad.Trans.Cofree (CofreeF ((:<)), ComonadCofree (unwrap))
 import Data.Foldable (Foldable (foldl'), find)
-import Data.Functor.Foldable (cata)
+import Data.Functor.Foldable (cata, Corecursive (..))
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
-import Data.List.Extra ((!?))
+import Data.List.Extra ((!?), snoc)
 import Data.Sequence (Seq (..), fromList, singleton)
 import Debug.Trace (trace)
 import Display qualified
@@ -30,7 +31,7 @@ import InterpretMemory (Memory (Memory))
 import InterpretMemory qualified as Memory
 import Predicate (applyPredicates)
 import Read (SrcLocked)
-import Utils (Cata, index0, index0WithBase, iterateMaybe, replace0At, setNth, uncofree)
+import Utils (Cata, iterateMaybe, setNth, uncofree)
 
 data Matcher = Matcher
   { _node :: !Node,
@@ -74,11 +75,11 @@ applyOneDefinitionBFS environment ast = go $ singleton $ Matcher (_start environ
               go $ matcherQueue <> subtermMatchers
             Right matcher ->
               case _ast matcher of
-                index :< replacementAst ->
+                index C.:< replacementAst ->
                   -- trace (show index ++ " " ++ Display.display0 (uncofree ast)) $
                   Just $
                     index0 $
-                      replace0At (uncofree ast) index (uncofree (index :< replacementAst))
+                      replace0At (uncofree ast) index (uncofree (index C.:< replacementAst))
 
 -- | Returns a single matcher holding the result of successfully applying a definition to the
 -- ast in the input matcher. Otherwise, if no definition applies to the ast. returns a list
@@ -89,7 +90,7 @@ applyOneDefinition environment matcher =
   let currentNode = _node matcher
       currentAst = _ast matcher
       currentIndex = case currentAst of
-        index :< _ -> index
+        index C.:< _ -> index
       graph = _graph environment
       neighbors = lsuc graph currentNode
       maybeNextNode = fst <$> find (\(_, preds) -> applyPredicates preds (uncofree currentAst)) neighbors
@@ -208,3 +209,28 @@ evalExpr m = cata go
 
 evalVar :: Memory -> Var -> Value
 evalVar m v = Memory.variables m !! v
+
+index0 :: Ast0.Ast -> Cofree Ast0.AstF [Int]
+index0 ast = cata go ast []
+  where
+    go :: Ast0.AstF ([Int] -> Cofree Ast0.AstF [Int]) -> [Int] -> Cofree Ast0.AstF [Int]
+    go (Ast0.SymbolF s) index = index C.:< Ast0.SymbolF s
+    go (Ast0.CompoundF xs) index = index C.:< Ast0.CompoundF (zipWith (. snoc index) xs [0 ..])
+
+index0WithBase :: [Int] -> Ast0.Ast -> Cofree Ast0.AstF [Int]
+index0WithBase base ast = cata go ast base
+  where
+    go :: Ast0.AstF ([Int] -> Cofree Ast0.AstF [Int]) -> [Int] -> Cofree Ast0.AstF [Int]
+    go (Ast0.SymbolF s) index = index C.:< Ast0.SymbolF s
+    go (Ast0.CompoundF xs) index = index C.:< Ast0.CompoundF (zipWith (. snoc index) xs [0 ..])
+
+-- Replaces the node at 'index' with 'replacement' in 'ast'. No
+-- replacement is made if 'index' is invalid.
+replace0At :: Ast0.Ast -> [Int] -> Ast0.Ast -> Ast0.Ast
+replace0At ast index replacement = cata go (index0 ast)
+  where
+    go :: CofreeF Ast0.AstF [Int] Ast0.Ast -> Ast0.Ast
+    go (i :< t) =
+      if i == index
+        then replacement
+        else embed t

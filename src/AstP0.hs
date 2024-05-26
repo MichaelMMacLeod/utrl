@@ -12,8 +12,9 @@ import Data.Functor.Foldable
     project,
   )
 import Data.List.Extra (snoc)
+import ErrorTypes (Span (..))
 import Read (SrcLocked)
-import Utils (Cata, Span (..))
+import Utils (Cata)
 
 data Ast
   = Symbol String

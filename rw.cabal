@@ -73,8 +73,9 @@ library
       , extensions
 
     -- Modules exported by the library.
-    exposed-modules:  
-          Ast0
+    exposed-modules:
+          Analyze
+        , Ast0
         , Ast1
         , AstC0
         , AstC1
@@ -86,9 +87,11 @@ library
         , AstC2Value
         , AstP0
         , Compile
+        , CompileTypes
         , Display
         , Environment
         , Error
+        , ErrorTypes
         , Interpret
         , InterpretMemory
         , Lib

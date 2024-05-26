@@ -1,8 +1,5 @@
 module Ast0 (Ast (..), AstF (..)) where
 
-import Control.Comonad.Cofree (Cofree (..))
-import Control.Comonad.Trans.Cofree (CofreeF)
-import qualified Control.Comonad.Trans.Cofree as CCTC
 import Data.Functor.Foldable
   ( Base,
     Corecursive,
@@ -10,7 +7,6 @@ import Data.Functor.Foldable
     embed,
     project,
   )
-import Data.List.Extra (snoc)
 
 data Ast
   = Symbol String

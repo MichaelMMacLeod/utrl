@@ -2,11 +2,13 @@ module Environment (createEnvironment, Environment (..), dumpEnvironmentStmts) w
 
 import Ast0 qualified
 import AstC2 qualified
-import AstP0 qualified
 import Compile
   ( compile0ToDefinition,
     compileDefinition,
-    errOnOverlappingPatterns, Definition (Definition), CompiledDefinition (CompiledDefinition), predicates, constructor,
+    errOnOverlappingPatterns,
+  )
+import CompileTypes
+  ( CompiledDefinition (..),
   )
 import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)
@@ -29,7 +31,7 @@ createEnvironment asts = do
   compiledDefinitions <- mapM compileDefinition definitions
   errOnOverlappingPatterns compiledDefinitions
   let predicatesConstructorPairs :: [([IndexedPredicate], [AstC2.Stmt Int])]
-      predicatesConstructorPairs = 
+      predicatesConstructorPairs =
         map (\d -> (d.predicates, uncofree d.constructor)) compiledDefinitions
 
       start :: Int
