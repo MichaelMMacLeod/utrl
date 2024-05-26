@@ -132,9 +132,8 @@ formatErrorMessage (ErrorMessageInfo {errorType, message, annotations, help}) =
         <> formatAnnotations annotations
         <> ( case help of
                Nothing -> ""
-               Just helpText -> "help: " <> helpText
+               Just helpText -> "help: " <> helpText <> "\n"
            )
-        <> "\n"
 
 formatAnnotations :: [Annotation OffendingLine] -> Text
 formatAnnotations = T.concat . map formatAnnotation
@@ -174,10 +173,10 @@ formatAnnotationBlock (Annotation {span, annotation}) =
          in case ls of
               [] -> error "unreachable: empty annotation"
               (l : others) ->
-                let indentedOthers = map (T.replicate indentation " " <>) others
-                    indentation = 4 + line1And3PaddingCount + columnZeroIndexed
+                let indentedOthers = map ((line1 <> T.replicate indentation " ") <>) others
+                    indentation = 3 + columnZeroIndexed
                  in T.unlines $ l : indentedOthers
-   in T.unlines [line1, line2, line3]
+   in T.unlines $ map T.stripEnd [line1, line2, line3]
 
 genericErrorInfo :: ErrorType -> ErrorMessageInfo Int
 genericErrorInfo errorType =
