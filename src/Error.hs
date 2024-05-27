@@ -17,8 +17,11 @@ module Error
   )
 where
 
+import Data.Functor.Foldable (ListF (..), Recursive (..))
+import Data.HashMap.Strict qualified as H
+import Data.List (sortBy)
 import Data.List.NonEmpty.Extra (toList)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Text (Text, pack)
 import Data.Text qualified as T
 import Data.Void (Void)
@@ -29,6 +32,7 @@ import ErrorTypes
     ErrorType (..),
     Span (..),
   )
+import GHC.Base (compareInt)
 import Text.Megaparsec
   ( ParseErrorBundle (..),
     PosState (..),
@@ -41,7 +45,7 @@ import Text.Megaparsec
   )
 import Text.Megaparsec.Error (ParseError)
 import Text.Megaparsec.Pos (unPos)
-import Utils (tshow)
+import Utils (Cata, tshow)
 import Prelude hiding (span)
 
 errorMessages :: Maybe FilePath -> FileContents -> [ErrorMessageInfo Int] -> Text
@@ -82,53 +86,73 @@ mkErrorBundle name contents errors =
     }
 
 errorBundleMessages :: ErrorBundle -> [ErrorMessageInfo OffendingLine]
-errorBundleMessages (ErrorBundle {posState, errors}) = go posState errors
-  where
-    go ::
-      PosState Text ->
-      [ErrorMessageInfo Int] ->
-      [ErrorMessageInfo OffendingLine]
-    go _ [] = []
-    go s (e : es) =
-      let (errorMessageInfo, s') = attachOffendingLines s e
-       in errorMessageInfo : go s' es
+errorBundleMessages errorBundle =
+  let mapping = resolveSpans errorBundle.posState (errorBundleSpans errorBundle)
+   in map (resolveErrorMessageInfoSpans mapping) errorBundle.errors
 
-attachOffendingLines :: PosState Text -> ErrorMessageInfo Int -> (ErrorMessageInfo OffendingLine, PosState Text)
-attachOffendingLines posState err@(ErrorMessageInfo {annotations}) =
-  let (annotations', posState') = go posState annotations
-   in (err {annotations = annotations'}, posState')
-  where
-    go :: PosState Text -> [Annotation Int] -> ([Annotation OffendingLine], PosState Text)
-    go posState [] = ([], posState)
-    go posState (a : as) =
-      let (a', posState') = attachOffendingLine posState a
-          (as', posState'') = go posState' as
-       in (a' : as', posState'')
+resolveErrorMessageInfoSpans ::
+  H.HashMap (Span Int) (Span OffendingLine) ->
+  ErrorMessageInfo Int ->
+  ErrorMessageInfo OffendingLine
+resolveErrorMessageInfoSpans mapping errorMessageInfo =
+  let resolveAnnotationSpan :: Annotation Int -> Annotation OffendingLine
+      resolveAnnotationSpan a = a {span = fromJust $ mapping H.!? a.span}
+      annotations = map resolveAnnotationSpan errorMessageInfo.annotations
+   in errorMessageInfo {annotations}
 
-attachOffendingLine :: PosState Text -> Annotation Int -> (Annotation OffendingLine, PosState Text)
-attachOffendingLine posState ann@(Annotation {span = s@(Span {location = offset})}) =
-  let (maybeLine, posState') = reachOffset offset posState
+errorBundleSpans :: ErrorBundle -> [Span Int]
+errorBundleSpans errorBundle = concatMap errorMessageInfoSpans errorBundle.errors
+
+errorMessageInfoSpans :: ErrorMessageInfo Int -> [Span Int]
+errorMessageInfoSpans errorMessageInfo =
+  map (\annotaiton -> annotaiton.span) errorMessageInfo.annotations
+
+resolveSpans :: PosState Text -> [Span Int] -> H.HashMap (Span Int) (Span OffendingLine)
+resolveSpans posState spans =
+  let (_posState', result) = cata go sortedSpans
+   in result
+  where
+    -- 'resolveSpan' can't backtrack through the file to find an earlier span, we have
+    -- no choice but to sort them so that they are in order.
+    sortedSpans :: [Span Int]
+    sortedSpans = sortBy compareSpan spans
+
+    compareSpan :: Span Int -> Span Int -> Ordering
+    compareSpan s1 s2 = 
+      -- You'd think the order would be s1.location and then s2.location, but we 
+      -- reverse it here so that the earliest span comes last. This is because 'cata' 
+      -- is a right-fold, i.e., it processes the last element in the list first.
+      compareInt s2.location s1.location
+
+    go :: Cata [Span Int] (PosState Text, H.HashMap (Span Int) (Span OffendingLine))
+    go = \case
+      Nil -> (posState, H.empty)
+      Cons span (posState, result) ->
+        let (posState', span') = resolveSpan posState span
+            result' = H.insert span span' result
+         in (posState', result')
+
+resolveSpan :: PosState Text -> Span Int -> (PosState Text, Span OffendingLine)
+resolveSpan posState span =
+  let (maybeLine, posState') = reachOffset span.location posState
       line = pack $ fromMaybe "" maybeLine
       sourcePos = pstateSourcePos posState'
       offendingLine = OffendingLine {line, sourcePos}
-      ann' = ann {span = s {location = offendingLine}}
-   in (ann', posState')
-
-spanEnd :: Span Int -> Int
-spanEnd (Span {location, length}) = location + length
+   in (posState', span {location = offendingLine})
 
 -- Extends the first span to include the length of the second
 addLength :: Span Int -> Span Int -> Span Int
 addLength s1 s2 =
   Span
     { location = s1.location,
-      length = s2.location - s1.location + s2.length 
+      length = s2.location - s1.location + s2.length
     }
 
 data OffendingLine = OffendingLine
   { line :: Text,
     sourcePos :: SourcePos
   }
+  deriving (Show)
 
 formatErrorMessage :: ErrorMessageInfo OffendingLine -> Text
 formatErrorMessage (ErrorMessageInfo {errorType, message, annotations, help}) =
@@ -297,218 +321,3 @@ initialPosState name s =
       pstateTabWidth = defaultTabWidth,
       pstateLinePrefix = ""
     }
-
--- badEllipsesCount :: Int -> Int -> Span -> Span -> ErrorMessageInfo
--- badEllipsesCount requiredCount actualCount patternVarSpan constructorVarSpan =
---   ErrorMessageInfo
---     { errorType = BadEllipsesCount,
---       message = "too few ellipses",
---       annotations =
---         [ Annotation
---             { span = constructorVarSpan,
---               annotation = "used with " <> tshow actualCount <> " ellipses here"
---             },
---           Annotation
---             { span = patternVarSpan,
---               annotation = "used with " <> tshow requiredCount <> " ellipses here"
---             }
---         ],
---       help = Just "variables must be used with the same number of ellipses in the pattern and constructor"
---     }
-
--- parseError :: ParseErrorBundle Text Void -> ErrorMessageInfo
--- parseError (ParseErrorBundle {bundleErrors, bundlePosState}) =
---   ErrorMessageInfo
---     { errorType = ParsingError,
---       message = "bad syntax",
---       annotations = toList $ go <$> fst (attachSourcePos errorOffset bundleErrors bundlePosState),
---       help = Nothing
---     }
---   where
---     go :: (ParseError Text Void, SourcePos) -> Annotation
---     go (e, SourcePos {sourceName, sourceLine, sourceColumn}) =
---       Annotation
---         { span =
---             Span
---               { source = pack sourceName,
---                 start = Pos {line = unPos sourceLine, column = unPos sourceColumn},
---                 end = Pos {line = unPos sourceLine, column = 1 + unPos sourceColumn}
---               },
---           annotation = pack $ parseErrorTextPretty e
---         }
-
--- sourcePosToSrcloc :: Filename -> SourcePos -> Srcloc
--- sourcePosToSrcloc filename sourcePos =
---   Srcloc
---     { source = filename,
---       line = sourceLine sourcePos,
---       column = sourceColumn sourcePos
---     }
-
--- parsingErrorInfo :: ParseError -> Filename -> ErrorMessageInfo
--- parsingErrorInfo parseError source =
---   ErrorMessageInfo
---     { errorType = ParsingError,
---       message = "bad syntax",
---       sourceSnippets =
---         [ SrcSnippet
---             { srcloc = srcloc,
---               annotation =
---                 SrcSnippetAnnotation
---                   { columnStart = column srcloc,
---                     columnEnd = column srcloc + 1,
---                     text = T.concat (map (tshow . messageString) $ errorMessages parseError)
---                   }
---             }
---         ],
---       help = Nothing
---     }
---   where
---     srcloc = sourcePosToSrcloc source (errorPos parseError)
-
--- checkSpanInvariants :: Span -> ()
--- checkSpanInvariants span =
---   case (spanPosBothValid span, spanEndIsPastStart span) of
---     (True, True) -> ()
---     (False, _) -> error "invariant broken: Span Pos both valid"
---     (_, False) -> error "invariant broken: Span end is past start"
-
--- -- spanPosBothValid :: Span -> Bool
--- -- spanPosBothValid (Span {start, end}) = posHasNonnegativeFields start && posHasNonnegativeFields end
-
--- -- spanEndIsPastStart :: Span -> Bool
--- -- spanEndIsPastStart Span {start, end} = line start < line end || column start < column end
-
--- -- data Pos = Pos
--- --   { line :: Int,
--- --     column :: Int
--- --   }
--- --   deriving (Eq, Show)
-
--- -- checkPosInvariants :: Pos -> ()
--- -- checkPosInvariants pos =
--- --   if posHasNonnegativeFields pos
--- --     then ()
--- --     else error "invariant broken: Pos has negative fields"
-
--- -- posHasNonnegativeFields :: Pos -> Bool
--- -- posHasNonnegativeFields (Pos {line, column}) = line >= 0 && column >= 0
-
--- newtype SrcMap = SrcMap (H.HashMap Filename FileContents)
-
--- -- lookupPosLineText :: SrcMap -> Filename -> Pos -> Text
--- -- lookupPosLineText (SrcMap srcmap) source pos =
--- --   let contents :: Text
--- --       contents = case srcmap H.!? source of
--- --         Nothing -> error "invalid filename"
--- --         Just c -> c
--- --       lineText :: Text
--- --       lineText = case T.lines contents L.!? (line pos - 1) of
--- --         Nothing -> error ("invalid pos line: " <> show (line pos - 1))
--- --         Just l -> l
--- --    in lineText
-
--- -- Returns Text resembling the following, an informative message about
--- -- a compiler error:
--- --
--- --   error[E1]: variable not matched in pattern used in constructor
--- --   source:line:col
--- --      |
--- --   10 | (def foo $x)
--- --      |          ^^ the variable
--- --   help: either delete `$x` or also use it in the pattern
--- --
--- --   For further information about this error, try `rw --explain E1`.
--- formatErrorMessage :: SrcMap -> Text -> ErrorMessageInfo -> Text
--- formatErrorMessage srcmap thisCompilerName (ErrorMessageInfo {errorType, message, annotations, help}) =
---   "error["
---     <> errorCodeText
---     <> "]: "
---     <> message
---     <> "\n"
---     <> formatSrcSnippets srcmap annotations
---     <> ( case help of
---            Nothing -> ""
---            Just helpText -> "help: " <> helpText
---        )
---     <> "\n"
---     <> "For further information about this error, try `"
---     <> thisCompilerName
---     <> " --explain "
---     <> errorCodeText
---     <> "`"
---     <> "\n"
---   where
---     errorCodeText = "E" <> T.justifyRight 3 '0' (tshow $ errorCode errorType)
-
--- formatSrcSnippets :: SrcMap -> [Annotation] -> Text
--- formatSrcSnippets srcmap = T.concat . map (formatSrcSnippet srcmap)
-
--- -- Produces text which resembles the following, describing
--- -- a portion of the text file that an error message applies to:
--- --
--- --   rules.txt:10:12
--- --      |
--- --   10 | (def mydef $x)
--- --      |            ^^ the variable
--- formatSrcSnippet :: SrcMap -> Annotation -> Text
--- formatSrcSnippet srcmap annotation =
---   formatSrcloc annotation <> "\n" <> formatAnnotationBlock srcmap annotation
-
--- -- Produces text which labels the input name, row, and column,
--- -- separated by colons. Like this:
--- --
--- --   rules.txt:10:12
--- formatSrcloc :: Annotation -> Text
--- formatSrcloc (Annotation {span}) =
---   T.intercalate
---     ":"
---     [ source span,
---       tshow . line $ start span,
---       tshow . column $ start span
---     ]
-
--- -- Produces text which describes the location of an error in
--- -- the source code along with a annotation:
--- --
--- --      |
--- --   10 | (def mydef $x)
--- --      |            ^^ the variable
--- formatAnnotationBlock :: SrcMap -> Annotation -> Text
--- formatAnnotationBlock srcmap (Annotation {span = span@(Span {source, start}), annotation}) =
---   T.unlines [line1, line2, line3]
---   where
---     line1 = T.replicate line1And3PaddingCount " " <> "|"
---     line2 = " " <> lineNumberText <> " | " <> lineText
---     line3 =
---       line1
---         <> " "
---         <> T.replicate (column start) " "
---         <> T.replicate numberOfCarrots "^"
---         <> " "
---         <> annotation
-
---     lineText :: Text
---     lineText = lookupPosLineText srcmap source start
-
---     lineNumberText :: Text
---     lineNumberText = tshow $ line start
-
---     line1And3PaddingCount :: Int
---     line1And3PaddingCount = T.length lineNumberText + 2
-
---     numberOfCarrots :: Int
---     numberOfCarrots = oneLineLengthSpanned span lineText
-
--- oneLineLengthSpanned :: Span -> Text -> Int
--- oneLineLengthSpanned span@(Span {start, end}) lineText =
---   let result =
---         seq
---           (checkSpanInvariants span)
---           ( if line start == line end
---               then column end - column start
---               else T.length lineText - column start
---           )
---    in if result < 0
---         then error "span was outside of lineText"
---         else result

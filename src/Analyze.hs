@@ -1,5 +1,10 @@
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
+{-
+The functions in this file perform semantic analysis on various stages of compilation,
+returning informative error messages should errors be found.
+-}
+
 module Analyze
   ( analyzeEllipsesCounts,
     analyzeEllipsesCaptures,
@@ -12,14 +17,21 @@ import CompileTypes (VariableBindings)
 import Control.Comonad.Trans.Cofree (CofreeF (..))
 import Data.Functor.Foldable (Recursive (..))
 import Data.HashMap.Strict qualified as H
-import Data.List.Extra (snoc)
 import Data.Maybe (catMaybes, fromJust, listToMaybe)
 import Error (badEllipsesCapturesErrorMessage, badEllipsesCountErrorMessage)
 import ErrorTypes (ErrorMessage, ErrorMessageInfo, Span)
 import ReadTypes (SrcLocked)
-import Utils (Between, Cata, getPatternSpanAtC0Index, isDollarSignVar, popBetweenTail, popTrailingC1Index, pushBetweenTail, uncofree)
+import Utils
+  ( Between,
+    Cata,
+    getPatternSpanAtC0Index,
+    popBetweenTail,
+    popTrailingC1Index,
+    pushBetweenTail,
+  )
 import Prelude hiding (span)
 
+-- | Finds errors relating to the use of too few or too many ellipses
 analyzeEllipsesCounts :: VariableBindings -> SrcLocked AstC0.Ast -> [ErrorMessage]
 analyzeEllipsesCounts variableBindings ast = cata go ast 0
   where
@@ -29,44 +41,20 @@ analyzeEllipsesCounts variableBindings ast = cata go ast 0
       _ :< AstC0.CompoundF xs -> concatMap ($ actualEllipsesCount) xs
       constructorVarSpan :< AstC0.VariableF x s ->
         let requiredCount = requiredEllipses x
-            (_, paternVarSpan) = fromJust $ variableBindings H.!? s
+            (_, patternVarSpan) = fromJust $ variableBindings H.!? s
             errorMessage =
               badEllipsesCountErrorMessage
                 requiredCount
                 actualEllipsesCount
-                paternVarSpan
+                patternVarSpan
                 constructorVarSpan
          in [errorMessage | requiredCount /= actualEllipsesCount]
       _ :< AstC0.EllipsesF x -> x $ actualEllipsesCount + 1
     requiredEllipses :: AstC0.Index -> Int
     requiredEllipses = length . filter AstC0.isBetween
 
-data VariableUnderEllipses = VariableUnderEllipses
-  { variable :: String,
-    ellipses :: [Span Int]
-  }
-
-findVariablesUnderEllipses :: SrcLocked Ast1.Ast -> [VariableUnderEllipses]
-findVariablesUnderEllipses = cata go
-  where
-    go :: Cata (SrcLocked Ast1.Ast) [VariableUnderEllipses]
-    go (span :< ast) = case ast of
-      Ast1.SymbolF s -> [variableUnderEllipses | isDollarSignVar s]
-        where
-          variableUnderEllipses = VariableUnderEllipses {variable = s, ellipses = []}
-      Ast1.CompoundF xs -> concat xs
-      Ast1.EllipsesF x -> map appendThisEllipsis x
-        where
-          appendThisEllipsis :: VariableUnderEllipses -> VariableUnderEllipses
-          appendThisEllipsis v = v {ellipses = snoc v.ellipses span}
-
-data Assignment = Assignment
-  { variableName :: String,
-    variableSpan :: Span Int,
-    index :: (AstC0.Index, Between)
-  }
-  deriving (Show)
-
+-- | Finds errors relating to the use of variables under the same ellipsis that
+-- weren't matched under the same ellipsis
 analyzeEllipsesCaptures :: SrcLocked Ast1.Ast -> SrcLocked AstC0.Ast -> [ErrorMessage]
 analyzeEllipsesCaptures pattern = fixup . cata go
   where
@@ -126,3 +114,10 @@ analyzeEllipsesCaptures pattern = fixup . cata go
                       index = (c0', between)
                     }
                 ]
+
+data Assignment = Assignment
+  { variableName :: String,
+    variableSpan :: Span Int,
+    index :: (AstC0.Index, Between)
+  }
+  deriving (Show)

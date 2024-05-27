@@ -7,6 +7,8 @@ module ErrorTypes
   )
 where
 import Data.Text (Text)
+import Data.Hashable (Hashable)
+import GHC.Generics (Generic)
 
 data ErrorType
   = ParsingError
@@ -39,4 +41,6 @@ data Span l = Span
   { location :: l,
     length :: Int
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance Hashable (Span Int)
