@@ -13,7 +13,7 @@ import Data.Functor.Foldable
   )
 import Data.List.Extra (snoc)
 import ErrorTypes (Span (..))
-import Read (SrcLocked)
+import ReadTypes (SrcLocked)
 import Utils (Cata)
 
 data Ast

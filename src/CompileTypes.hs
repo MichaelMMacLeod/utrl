@@ -11,12 +11,12 @@ import AstC2 qualified
 import AstP0 qualified
 import Data.HashMap.Strict qualified as H
 import Predicate (IndexedPredicate)
-import Read (SrcLocked)
+import ReadTypes (SrcLocked)
 import ErrorTypes (Span)
 
 data Definition = Definition
   { variables :: !VariableBindings,
-    pattern :: !(SrcLocked AstP0.Ast),
+    pattern :: !(SrcLocked Ast0.Ast),
     constructor :: !(SrcLocked Ast0.Ast)
   }
 

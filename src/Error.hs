@@ -13,16 +13,22 @@ module Error
     errorMessages,
     addLength,
     mkFilePathName,
+    badEllipsesCapturesErrorMessage,
   )
 where
 
-import Data.Either.Extra (mapLeft)
 import Data.List.NonEmpty.Extra (toList)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, pack)
 import Data.Text qualified as T
 import Data.Void (Void)
-import ErrorTypes (Annotation (..), ErrorMessageInfo (..), ErrorType (..), Span (..))
+import ErrorTypes
+  ( Annotation (..),
+    ErrorMessage,
+    ErrorMessageInfo (..),
+    ErrorType (..),
+    Span (..),
+  )
 import Text.Megaparsec
   ( ParseErrorBundle (..),
     PosState (..),
@@ -113,7 +119,11 @@ spanEnd (Span {location, length}) = location + length
 
 -- Extends the first span to include the length of the second
 addLength :: Span Int -> Span Int -> Span Int
-addLength s1 s2 = s1 {length = spanEnd s2 - location s1}
+addLength s1 s2 =
+  Span
+    { location = s1.location,
+      length = s2.location - s1.location + s2.length 
+    }
 
 data OffendingLine = OffendingLine
   { line :: Text,
@@ -187,15 +197,14 @@ genericErrorInfo errorType =
       }
   ]
 
-parseErrorMessage :: ParseErrorBundle Text Void -> [ErrorMessageInfo Int]
+parseErrorMessage :: ParseErrorBundle Text Void -> ErrorMessage
 parseErrorMessage (ParseErrorBundle {bundleErrors}) =
-  [ ErrorMessageInfo
-      { errorType = ParsingError,
-        message = "bad syntax",
-        annotations = map go $ toList bundleErrors,
-        help = Nothing
-      }
-  ]
+  ErrorMessageInfo
+    { errorType = ParsingError,
+      message = "bad syntax",
+      annotations = map go $ toList bundleErrors,
+      help = Nothing
+    }
   where
     go :: ParseError Text Void -> Annotation Int
     go e =
@@ -210,7 +219,7 @@ parseErrorMessage (ParseErrorBundle {bundleErrors}) =
           annotation = pack $ parseErrorTextPretty e
         }
 
-badEllipsesCountErrorMessage :: Int -> Int -> Span Int -> Span Int -> ErrorMessageInfo Int
+badEllipsesCountErrorMessage :: Int -> Int -> Span Int -> Span Int -> ErrorMessage
 badEllipsesCountErrorMessage requiredCount actualCount patternVar constructorVar =
   ErrorMessageInfo
     { errorType = BadEllipsesCount,
@@ -238,6 +247,39 @@ badEllipsesCountErrorMessage requiredCount actualCount patternVar constructorVar
     numDotDotWords = \case
       1 -> "1 ellipsis"
       n -> tshow n <> " ellipses"
+
+badEllipsesCapturesErrorMessage ::
+  String ->
+  Span Int ->
+  String ->
+  Span Int ->
+  Span Int ->
+  ErrorMessage
+badEllipsesCapturesErrorMessage
+  var1Name
+  ellipses1PatternSpan
+  var2Name
+  ellipses2PatternSpan
+  ellipsesConstructorSpan =
+    ErrorMessageInfo
+      { errorType = VarsNotCapturedUnderSameEllipsisInConstructor,
+        message = "variables matched under different ellipses used with same ellipsis",
+        annotations =
+          [ Annotation
+              { span = ellipses1PatternSpan,
+                annotation = pack var1Name <> " matched under this ellipsis"
+              },
+            Annotation
+              { span = ellipses2PatternSpan,
+                annotation = pack var2Name <> " matched under this ellipsis"
+              },
+            Annotation
+              { span = ellipsesConstructorSpan,
+                annotation = "both used with this ellipsis"
+              }
+          ],
+        help = Just "variables matched under different ellipses can't be used with the same ellipsis"
+      }
 
 -- Copied from megaparsec 9.6.1 as our version here isn't high enough yet for
 -- this to be defined.

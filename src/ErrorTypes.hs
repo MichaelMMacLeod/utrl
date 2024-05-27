@@ -3,6 +3,7 @@ module ErrorTypes
     ErrorMessageInfo (..),
     Annotation (..),
     Span (..),
+    ErrorMessage,
   )
 where
 import Data.Text (Text)
@@ -17,6 +18,8 @@ data ErrorType
   | VariableUsedMoreThanOnceInPattern
   | OverlappingPatterns
   deriving (Eq, Show)
+
+type ErrorMessage = ErrorMessageInfo Int
 
 data ErrorMessageInfo l = ErrorMessageInfo
   { errorType :: ErrorType,

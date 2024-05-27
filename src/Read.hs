@@ -1,4 +1,4 @@
-module Read (Read.read, read', SrcLocked, SrcLockedF) where
+module Read (Read.read, read') where
 
 import Ast0 qualified
 import Control.Comonad.Cofree (Cofree (..))
@@ -15,6 +15,7 @@ import Error
     parseErrorMessage,
   )
 import ErrorTypes (Span (..))
+import ReadTypes (SrcLocked)
 import Text.Megaparsec
   ( Parsec,
     between,
@@ -29,15 +30,11 @@ import Text.Megaparsec.Char (space1)
 import Text.Megaparsec.Char.Lexer qualified as L
 import Prelude hiding (span)
 
-type SrcLocked t = Cofree (Base t) (Span Int)
-
-type SrcLockedF t = CofreeF (Base t) (Span Int)
-
 read :: Maybe FilePath -> FileContents -> CompileResult [SrcLocked Ast0.Ast]
 read name contents =
   case runParser terms (mkFilePathName name) contents of
     Right ts -> Right ts
-    Left parseErrorBundle -> Left $ parseErrorMessage parseErrorBundle
+    Left parseErrorBundle -> Left $ [parseErrorMessage parseErrorBundle]
 
 -- Partial read, which errors at runtime on compile errors. Useful for reducing
 -- boilerplate for tests.
@@ -59,8 +56,9 @@ term = rwSymbol <|> compoundTerm
 compoundTerm :: Parser (SrcLocked Ast0.Ast)
 compoundTerm = do
   offset <- getOffset
-  ts <- between leftParen rightParen (many term)
-  endingOffset <- getOffset
+  ts <- leftParen *> many term
+  endingOffset <- fmap (+ 1 {- to include the rightParen -}) getOffset
+  rightParen
   let span = Span offset (endingOffset - offset)
   pure $ span :< Ast0.CompoundF ts
 

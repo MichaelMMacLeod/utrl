@@ -30,7 +30,7 @@ import Error (CompileResult)
 import InterpretMemory (Memory (Memory))
 import InterpretMemory qualified as Memory
 import Predicate (applyPredicates)
-import Read (SrcLocked)
+import ReadTypes (SrcLocked)
 import Utils (Cata, iterateMaybe, setNth, uncofree)
 
 data Matcher = Matcher

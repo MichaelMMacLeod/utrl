@@ -16,7 +16,8 @@ data Ast
   = Symbol String
   | Compound [Ast]
   | Ellipses Ast
-  | Variable (Index, String)
+  | Variable Index String
+  deriving (Show)
 
 data IndexElement
   = ZeroPlus Int
@@ -37,7 +38,7 @@ type Index = [IndexElement]
 data AstF r
   = SymbolF String
   | CompoundF [r]
-  | VariableF (Index, String)
+  | VariableF Index String
   | EllipsesF r
   deriving (Functor)
 
@@ -48,11 +49,11 @@ type instance Base Ast = AstF
 instance Recursive Ast where
   project (Symbol s) = SymbolF s
   project (Compound xs) = CompoundF xs
-  project (Variable i) = VariableF i
+  project (Variable i n) = VariableF i n
   project (Ellipses x) = EllipsesF x
 
 instance Corecursive Ast where
   embed (SymbolF s) = Symbol s
   embed (CompoundF xs) = Compound xs
-  embed (VariableF i) = Variable i
+  embed (VariableF i n) = Variable i n
   embed (EllipsesF x) = Ellipses x

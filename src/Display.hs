@@ -96,7 +96,7 @@ displayC0 =
     . cata
       ( \case
           AstC0.SymbolF s -> Ast1.Symbol s
-          AstC0.VariableF (i, _s) ->
+          AstC0.VariableF i _s ->
             Ast1.Compound
               [ Ast1.Symbol "AstC0.Variable",
                 Ast1.Symbol $ displayIndexC0 i

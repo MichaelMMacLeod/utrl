@@ -16,7 +16,7 @@ import Data.List (intercalate)
 import Display qualified
 import Error (CompileResult)
 import Predicate (IndexedPredicate)
-import Read (SrcLocked)
+import ReadTypes (SrcLocked)
 import Utils (uncofree)
 
 data Environment = Environment
