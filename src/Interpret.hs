@@ -3,6 +3,7 @@
 module Interpret
   ( compileAndRun,
     runConstructor,
+    compileWithoutRunning,
   )
 where
 
@@ -46,6 +47,11 @@ compileAndRun ruleAsts inputAsts = do
   environment <- createEnvironment ruleAsts
   let results = map (run environment . uncofree) inputAsts
   pure results
+
+compileWithoutRunning :: [SrcLocked Ast0.Ast] -> CompileResult ()
+compileWithoutRunning defAsts = do
+  _environment <- createEnvironment defAsts
+  pure ()
 
 run :: Environment -> Ast0.Ast -> Ast0.Ast
 run environment = uncofree . runIndexed environment . index0

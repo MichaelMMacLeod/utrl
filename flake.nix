@@ -53,6 +53,7 @@
             haskell-language-server
             hlint
             ormolu
+            diffutils # used when running golden tests
             (vscode-with-extensions.override {
               vscode = vscodium;
               vscodeExtensions = with vscode-extensions; [

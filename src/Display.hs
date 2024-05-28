@@ -7,6 +7,7 @@ module Display
     displayC2,
     displayExpr,
     displayP0,
+    display0Text,
   )
 where
 
@@ -22,6 +23,8 @@ import qualified AstP0
 import Data.Functor.Foldable (ListF (..), cata)
 import Data.List (intercalate)
 import Utils (Cata)
+import Data.Text (Text, pack)
+import qualified Data.Text as T
 
 displayP0 :: AstP0.Ast -> String
 displayP0 = display0 . cata go
@@ -74,6 +77,14 @@ displayExpr = cata go
           Expr.Sub -> lhs ++ " - " ++ rhs
           Expr.LessThan -> lhs ++ " < " ++ rhs
           Expr.ArrayAccess -> lhs ++ "[" ++ rhs ++ "]"
+
+display0Text :: Ast0.Ast -> Text
+display0Text = cata go
+  where
+    go :: Cata Ast0.Ast Text
+    go = \case
+      Ast0.SymbolF s -> pack s
+      Ast0.CompoundF xs -> "(" <> T.unwords xs <> ")"
 
 display0 :: Ast0.Ast -> String
 display0 = cata $ \case

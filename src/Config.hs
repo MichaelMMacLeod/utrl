@@ -1,14 +1,29 @@
-module Config (Config (..), runConfig, main) where
+module Config
+  ( Config (..),
+    run,
+    main,
+    runConfigAndPrintOutput,
+    runConfig,
+    readFileUtf8,
+  )
+where
 
-import Control.Monad.Extra (when)
+import Ast0 qualified
+import Data.ByteString (ByteString, hPut)
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Encoding (encodeUtf8)
 import Data.Text.IO qualified as T
-import Data.Text.IO qualified as Text
-import Display (display0)
-import Environment (createEnvironment, dumpEnvironmentStmts)
-import Error (errorMessages)
-import Interpret (compileAndRun)
+import Display (display0Text)
+import Error (CompileResult, errorMessages)
+import GHC.IO.Encoding (utf8)
+import GHC.IO.Handle (hSetEncoding)
+import GHC.IO.Handle.FD (stderr, stdout, withFile)
+import GHC.IO.IOMode (IOMode (ReadMode))
+import Interpret (compileAndRun, compileWithoutRunning)
 import Options.Applicative
   ( Parser,
+    auto,
     execParser,
     fullDesc,
     help,
@@ -17,21 +32,20 @@ import Options.Applicative
     long,
     progDesc,
     strOption,
-    switch,
     (<**>),
   )
+import Options.Applicative.Builder (option)
 import Options.Applicative.Types (ParserInfo)
 import Read qualified
-import System.Exit (exitFailure)
+import ReadTypes (SrcLocked)
 
 data Config = Config
-  { rules :: !FilePath,
-    input :: !FilePath,
-    dumpStmts :: Bool
+  { rules :: FilePath,
+    input :: Maybe FilePath
   }
 
 main :: IO ()
-main = runConfig =<< execParser opts
+main = execParser opts >>= runConfigAndPrintOutput
 
 opts :: ParserInfo Config
 opts =
@@ -48,36 +62,51 @@ parseConfig =
       ( long "rules"
           <> help "Rules file"
       )
-    <*> strOption
+    <*> option
+      auto
       ( long "input"
           <> help "Program input"
       )
-    <*> switch
-      ( long "dump-stmts"
-          <> help "output assembly statements for debugging"
-      )
 
-runConfig :: Config -> IO ()
+readFileUtf8 :: FilePath -> IO Text
+readFileUtf8 filePath = withFile filePath ReadMode $ \h -> do
+  hSetEncoding h utf8
+  T.hGetContents h
+
+readAsts :: FilePath -> Text -> Either ByteString [SrcLocked Ast0.Ast]
+readAsts path contents = encodeErrors path contents (Read.read (Just path) contents)
+
+encodeErrors :: FilePath -> Text -> CompileResult a -> Either ByteString a
+encodeErrors path contents result = case result of
+  Right a -> pure a
+  Left errors ->
+    Left . encodeUtf8 $ errorMessages (Just path) contents errors
+
+run :: (FilePath, Text) -> Maybe (FilePath, Text) -> Either ByteString ByteString
+run (defsFile, defsText) input = do
+  defsAsts <- readAsts defsFile defsText
+  case input of
+    Nothing -> do
+      encodeErrors defsFile defsText (compileWithoutRunning defsAsts)
+      pure ""
+    Just (inputFile, inputText) -> do
+      inputAsts <- readAsts inputFile inputText
+      outputAsts <- encodeErrors defsFile defsText (compileAndRun defsAsts inputAsts)
+      pure . encodeUtf8 . T.unlines $ map display0Text outputAsts
+
+runConfig :: Config -> IO (Either ByteString ByteString)
 runConfig c = do
-  rules <- Text.readFile c.rules
-  ruleAsts <- case Read.read (Just c.rules) rules of
-    Left errors -> do
-      T.putStr $ errorMessages (Just c.rules) rules errors
-      exitFailure
-    Right asts -> pure asts
-  input <- Text.readFile c.input
-  inputAsts <- case Read.read (Just c.input) input of
-    Left errors -> do
-      T.putStr $ errorMessages (Just c.input) input errors
-      exitFailure
-    Right asts -> pure asts
-  when (Config.dumpStmts c) $
-    do
-      let e = createEnvironment ruleAsts
-      case e of
-        Left _ -> pure ()
-        Right t -> putStrLn $ dumpEnvironmentStmts t
-  case compileAndRun ruleAsts inputAsts of
-    Left e -> T.putStr $ errorMessages (Just (Config.rules c)) rules e
-    Right output -> do
-      putStrLn $ unlines $ map display0 output
+  defsText <- readFileUtf8 c.rules
+  input <- case c.input of
+    Nothing -> pure Nothing
+    Just inputFile -> do
+      inputText <- readFileUtf8 inputFile
+      pure $ Just (inputFile, inputText)
+  pure $ run (c.rules, defsText) input
+
+runConfigAndPrintOutput :: Config -> IO ()
+runConfigAndPrintOutput c = do
+  eitherOutput <- runConfig c
+  case eitherOutput of
+    Left output -> hPut stderr output
+    Right output -> hPut stdout output

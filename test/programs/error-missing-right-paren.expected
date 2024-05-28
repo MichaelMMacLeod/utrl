@@ -1,5 +1,5 @@
 error[E001]: bad syntax
-test/programs/error-missing-right-paren:1:9
+./test/programs/error-missing-right-paren.defs:1:9
    |
  1 | (def A B
    |         ^ unexpected end of input

@@ -1,19 +1,9 @@
 module Main (main) where
 
-import qualified ConstructorTests
-import qualified MiscTests
-import qualified ReadTests
-import Test.Tasty (TestTree, defaultMain, testGroup)
+import GoldenTests (goldenTests)
+import Test.Tasty (defaultMain)
 
 main :: IO ()
-main = defaultMain tests
-
-tests :: TestTree
-tests =
-  testGroup
-    "tests"
-    [ 
-      -- ReadTests.tests,
-      -- ConstructorTests.tests,
-      -- MiscTests.tests
-    ]
+main = do
+  golds <- goldenTests
+  defaultMain golds

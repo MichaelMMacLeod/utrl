@@ -51,10 +51,10 @@ extra-doc-files:    CHANGELOG.md
 -- extra-source-files:
 
 common options
-  ghc-options: 
-    -Wall 
+  ghc-options:
+    -Wall
     -Werror=incomplete-patterns
-    -threaded 
+    -threaded
 
 common language
   default-language: GHC2021
@@ -125,6 +125,7 @@ library
     , text
     , array
     , optparse-applicative
+    , bytestring
 
   -- Directories containing source files.
   hs-source-dirs: src
@@ -136,7 +137,7 @@ executable rw
     , extensions
 
   -- .hs or .lhs file containing the Main module.
-  main-is:          Main.hs
+  main-is: Main.hs
 
   -- Modules included in this executable, other than Main.
   -- other-modules:
@@ -145,13 +146,9 @@ executable rw
   build-depends:
       base
     , rw
-    , unordered-containers
-    , optparse-applicative
-    , text
-    , extra
 
   -- Directories containing source files.
-  hs-source-dirs:   app
+  hs-source-dirs: app
 
 test-suite rw-test
   import:
@@ -197,4 +194,5 @@ test-suite rw-test
     , extra
     , fgl
     , text
+    , bytestring
 
