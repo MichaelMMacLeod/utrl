@@ -54,7 +54,12 @@ analyzeEllipsesCounts variableBindings ast = cata go ast 0
     requiredEllipses = length . filter AstC0.isBetween
 
 -- | Finds errors relating to the use of variables under the same ellipsis that
--- weren't matched under the same ellipsis
+-- weren't matched under the same ellipsis.
+--
+-- For example, '(def ((x ..) (y ..)) ((x y) ..))' is detected as erroneous here. The
+-- problem with this example is that the number of terms matched to 'x' may be different
+-- from the number of terms matched to 'y', so it is not in general possible to create
+-- '(x y) ..'.
 analyzeEllipsesCaptures :: SrcLocked Ast1.Ast -> SrcLocked AstC0.Ast -> [ErrorMessage]
 analyzeEllipsesCaptures pattern = fixup . cata go
   where
