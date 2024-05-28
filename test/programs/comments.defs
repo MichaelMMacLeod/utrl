@@ -1,0 +1,23 @@
+(def a /* this is a comment */ b)
+// comments can appear anywhere
+(def /*1*/ (a /*2*/) /*3*/
+  (b (c (d /*4*/) e) f)
+  // Really, anywhere!
+  // ... and can contain parentheses ), even unbalanced ones
+  )
+// (
+/* a definition: */ (def A B)
+// )
+// this definition is commented out: (def A B)
+/* and so is this one: (def A B) */
+/*
+comments
+can
+be
+multi
+line
+*/
+/* and can contain /* nested comments
+ *  /* woah! */ */
+ * (lookin' at u, c-style comments)
+ */

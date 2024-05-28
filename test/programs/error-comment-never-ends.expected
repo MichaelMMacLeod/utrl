@@ -1,0 +1,6 @@
+error[E001]: bad syntax
+./test/programs/error-comment-never-ends.defs:16:32
+    |
+ 16 |                             on!
+    |                                ^ unexpected end of input
+    |                                  expecting "*/" or "/*"
