@@ -1,0 +1,14 @@
+error[E003]: variables matched under different ellipses used with same ellipsis
+./test/programs/error-captures-2-level-inside.defs:1:24
+   |
+ 1 | (def (capture (($x ..) ..) (($y ..) ..))
+   |                        ^^ $x matched under this ellipsis
+./test/programs/error-captures-2-level-inside.defs:1:37
+   |
+ 1 | (def (capture (($x ..) ..) (($y ..) ..))
+   |                                     ^^ $y matched under this ellipsis
+./test/programs/error-captures-2-level-inside.defs:2:25
+   |
+ 2 |   (result ($x .. $y ..) ..))
+   |                         ^^ both used with this ellipsis
+help: variables matched under different ellipses can't be used with the same ellipsis
