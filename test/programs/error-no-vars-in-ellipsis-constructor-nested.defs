@@ -1,0 +1,2 @@
+(def pattern
+  ((no vars here) .. ..))

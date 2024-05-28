@@ -1,0 +1,2 @@
+(def (copy ((no vars here) ..) ..)
+  constructor)

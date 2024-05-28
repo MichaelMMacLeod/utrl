@@ -20,9 +20,9 @@ import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as C
 import Control.Comonad.Trans.Cofree (CofreeF ((:<)), ComonadCofree (unwrap))
 import Data.Foldable (Foldable (foldl'), find)
-import Data.Functor.Foldable (cata, Corecursive (..))
+import Data.Functor.Foldable (Corecursive (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
-import Data.List.Extra ((!?), snoc)
+import Data.List.Extra (snoc, (!?))
 import Data.Sequence (Seq (..), fromList, singleton)
 import Debug.Trace (trace)
 import Display qualified
@@ -59,9 +59,10 @@ run environment = uncofree . runIndexed environment . index0
 runIndexed :: Environment -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
 runIndexed e input =
   let results = iterateMaybe (applyOneDefinitionBFS e) input
-   in foldl' (\_ y -> trace (Display.display0 $ uncofree y) y) input results
+   in --  in foldl' (\_ y -> trace (Display.display0 $ uncofree y) y) input results
 
---  in last results
+      last results
+
 -- last (trace (unlines $ map (Display.display0 . uncofree) results) results)
 
 -- | Recursively searches through 'ast' from the top to bottom in a breadth-first-search order,

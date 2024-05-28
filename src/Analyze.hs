@@ -153,7 +153,9 @@ analyzeEllipsesCapturesWithoutVariables = fixup . para go
         hasVariableList <- sequence results
         Right $ or hasVariableList
       Ast1.EllipsesF x -> do
-        let (originalInputSpan C.:< _originalInput) = fst x
+        let -- accessing 'originalInputSpan' is the only reason we need 
+            -- to use 'para' instead of 'cata'
+            (originalInputSpan C.:< _originalInput) = fst x
             result :: Either [ErrorMessage] HasVariable
             result = snd x
         hasVariable <- result
