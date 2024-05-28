@@ -1,3 +1,5 @@
+{-# LANGUAGE ApplicativeDo #-}
+
 module Config
   ( Config (..),
     run,
@@ -30,8 +32,10 @@ import Options.Applicative
     helper,
     info,
     long,
+    metavar,
     progDesc,
     strOption,
+    value,
     (<**>),
   )
 import Options.Applicative.Builder (option)
@@ -56,17 +60,25 @@ opts =
     )
 
 parseConfig :: Parser Config
-parseConfig =
-  Config
-    <$> strOption
-      ( long "rules"
-          <> help "Rules file"
+parseConfig = do
+  rules <-
+    strOption
+      ( long "defs"
+          <> help "File containing definitions to compile"
+          <> metavar "FILE"
       )
-    <*> option
+  input <-
+    option
       auto
       ( long "input"
-          <> help "Program input"
+          <> help
+            ( "File to process using compiled definitions. If no file "
+                <> "is provided, simply check the definitions for errors."
+            )
+          <> value Nothing
+          <> metavar "FILE"
       )
+  pure Config {rules, input}
 
 readFileUtf8 :: FilePath -> IO Text
 readFileUtf8 filePath = withFile filePath ReadMode $ \h -> do
