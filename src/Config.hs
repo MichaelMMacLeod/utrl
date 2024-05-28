@@ -33,6 +33,7 @@ import Options.Applicative
     info,
     long,
     metavar,
+    optional,
     progDesc,
     strOption,
     value,
@@ -68,16 +69,15 @@ parseConfig = do
           <> metavar "FILE"
       )
   input <-
-    option
-      auto
-      ( long "input"
-          <> help
-            ( "File to process using compiled definitions. If no file "
-                <> "is provided, simply check the definitions for errors."
-            )
-          <> value Nothing
-          <> metavar "FILE"
-      )
+    optional $
+      strOption
+        ( long "input"
+            <> help
+              ( "File to process using compiled definitions. If no file "
+                  <> "is provided, simply check the definitions for errors."
+              )
+            <> metavar "FILE"
+        )
   pure Config {rules, input}
 
 readFileUtf8 :: FilePath -> IO Text
