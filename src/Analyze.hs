@@ -53,10 +53,10 @@ analyzeEllipsesCounts :: VariableBindings -> SrcLocked AstC0.Ast -> [ErrorMessag
 analyzeEllipsesCounts variableBindings ast = cata go ast 0
   where
     go :: Cata (SrcLocked AstC0.Ast) (Int -> [ErrorMessage])
-    go cofree actualEllipsesCount = case cofree of
-      _ :< AstC0.SymbolF _ -> []
-      _ :< AstC0.CompoundF xs -> concatMap ($ actualEllipsesCount) xs
-      constructorVarSpan :< AstC0.VariableF x s ->
+    go (span :< ast) actualEllipsesCount = case ast of
+      AstC0.SymbolF _ -> []
+      AstC0.CompoundF xs -> concatMap ($ actualEllipsesCount) xs
+      AstC0.VariableF x s ->
         let requiredCount = requiredEllipses x
             (_, patternVarSpan) = fromJust $ variableBindings H.!? s
             errorMessage =
@@ -64,9 +64,9 @@ analyzeEllipsesCounts variableBindings ast = cata go ast 0
                 requiredCount
                 actualEllipsesCount
                 patternVarSpan
-                constructorVarSpan
+                span
          in [errorMessage | requiredCount /= actualEllipsesCount]
-      _ :< AstC0.EllipsesF x -> x $ actualEllipsesCount + 1
+      AstC0.EllipsesF x -> x $ actualEllipsesCount + 1
     requiredEllipses :: AstC0.Index -> Int
     requiredEllipses = length . filter AstC0.isBetween
 
