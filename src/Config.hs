@@ -25,7 +25,6 @@ import GHC.IO.IOMode (IOMode (ReadMode))
 import Interpret (compileAndRun, compileWithoutRunning)
 import Options.Applicative
   ( Parser,
-    auto,
     execParser,
     fullDesc,
     help,
@@ -36,10 +35,8 @@ import Options.Applicative
     optional,
     progDesc,
     strOption,
-    value,
     (<**>),
   )
-import Options.Applicative.Builder (option)
 import Options.Applicative.Types (ParserInfo)
 import Read qualified
 import ReadTypes (SrcLocked)

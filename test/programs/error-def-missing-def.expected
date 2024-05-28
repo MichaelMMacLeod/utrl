@@ -1,0 +1,6 @@
+error[E012]: definition does not start with 'def'
+./test/programs/error-def-missing-def.defs:1:2
+   |
+ 1 | (DEF A B)
+   |  ^^^ this term should be 'def'
+help: definitions look like this: '(def <pattern> <constructor>)'

@@ -1,5 +1,6 @@
 module Environment (createEnvironment, Environment (..), dumpEnvironmentStmts) where
 
+import Analyze (analyzeDefinitionSyntax)
 import Ast0 qualified
 import AstC2 qualified
 import Compile
@@ -27,6 +28,9 @@ data Environment = Environment
 
 createEnvironment :: [SrcLocked Ast0.Ast] -> CompileResult Environment
 createEnvironment asts = do
+  case concatMap analyzeDefinitionSyntax asts of
+    [] -> Right ()
+    errors -> Left errors
   definitions <- mapM compile0ToDefinition asts
   compiledDefinitions <- mapM compileDefinition definitions
   errOnOverlappingPatterns compiledDefinitions

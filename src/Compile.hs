@@ -14,7 +14,7 @@ module Compile
   )
 where
 
-import Analyze (analyzeEllipsesCaptures, analyzeEllipsesCapturesWithoutVariables, analyzeEllipsesCounts)
+import Analyze (analyzeEllipsesCaptures, analyzeEllipsesCapturesWithoutVariables, analyzeEllipsesCounts, analyzeDefinitionSyntax)
 import Ast0 qualified
 import Ast1 qualified
 import AstC0 qualified

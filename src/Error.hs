@@ -15,6 +15,9 @@ module Error
     mkFilePathName,
     badEllipsesCapturesErrorMessage,
     noVariablesInEllipsisErrorMessage,
+    expectedDefinitionGotSymbolErrorMessage,
+    definitionHasWrongNumberOfTermsErrorMessage,
+    definitionDoesNotStartWithDefErrorMessage,
   )
 where
 
@@ -72,6 +75,9 @@ errorCode = \case
   VariableUsedMoreThanOnceInPattern -> 7
   OverlappingPatterns -> 8
   NoVariablesInEllipsis -> 9
+  ExpectedDefinitionGotSymbol -> 10
+  DefinitionHasWrongNumberOfTerms -> 11
+  DefinitionDoesNotStartWithDef -> 12
 
 type FileContents = Text
 
@@ -320,10 +326,57 @@ noVariablesInEllipsisErrorMessage ellipsisSpan termWithNoVariablesSpan =
           Annotation
             { span = termWithNoVariablesSpan,
               annotation = "the term preceding the ellipsis"
-
             }
         ],
       help = Just "there must be at least one variable in the term preceding an ellipsis"
+    }
+
+badDefinitionHelp :: Maybe Text
+badDefinitionHelp = Just "definitions look like this: '(def <pattern> <constructor>)'"
+
+expectedDefinitionGotSymbolErrorMessage :: Span Int -> ErrorMessage
+expectedDefinitionGotSymbolErrorMessage symbolSpan =
+  ErrorMessageInfo
+    { errorType = ExpectedDefinitionGotSymbol,
+      message = "expected definition, found symbol",
+      annotations =
+        [ Annotation
+            { span = symbolSpan,
+              annotation = "this should be a definition"
+            }
+        ],
+      help = badDefinitionHelp
+    }
+
+definitionHasWrongNumberOfTermsErrorMessage :: Span Int -> Int -> ErrorMessage
+definitionHasWrongNumberOfTermsErrorMessage defSpan actualNumberOfTerms =
+  ErrorMessageInfo
+    { errorType = DefinitionHasWrongNumberOfTerms,
+      message = case actualNumberOfTerms of
+        n | n < 3 -> "definition has too few terms"
+        n | n > 3 -> "definition has too many terms"
+        _ -> error "unreachable: correct number of terms",
+      annotations =
+        [ Annotation
+            { span = defSpan,
+              annotation = "has " <> tshow actualNumberOfTerms <> " terms, but should have 3"
+            }
+        ],
+      help = badDefinitionHelp
+    }
+
+definitionDoesNotStartWithDefErrorMessage :: Span Int -> ErrorMessage
+definitionDoesNotStartWithDefErrorMessage otherThanDefSpan =
+  ErrorMessageInfo
+    { errorType = DefinitionDoesNotStartWithDef,
+      message = "definition does not start with 'def'",
+      annotations =
+        [ Annotation
+            { span = otherThanDefSpan,
+              annotation = "this term should be 'def'"
+            }
+        ],
+      help = badDefinitionHelp
     }
 
 -- Copied from megaparsec 9.6.1 as our version here isn't high enough yet for

@@ -1,0 +1,6 @@
+error[E011]: definition has too many terms
+./test/programs/error-def-4-terms.defs:1:1
+   |
+ 1 | (def a b c)
+   | ^^^^^^^^^^^ has 4 terms, but should have 3
+help: definitions look like this: '(def <pattern> <constructor>)'

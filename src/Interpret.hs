@@ -19,13 +19,11 @@ import AstC2Value qualified as Value
 import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as C
 import Control.Comonad.Trans.Cofree (CofreeF ((:<)), ComonadCofree (unwrap))
-import Data.Foldable (Foldable (foldl'), find)
+import Data.Foldable (find)
 import Data.Functor.Foldable (Corecursive (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.List.Extra (snoc, (!?))
 import Data.Sequence (Seq (..), fromList, singleton)
-import Debug.Trace (trace)
-import Display qualified
 import Environment (Environment (..), createEnvironment)
 import Error (CompileResult)
 import InterpretMemory (Memory (Memory))

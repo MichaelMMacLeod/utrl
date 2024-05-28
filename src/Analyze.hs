@@ -1,15 +1,17 @@
 {-
-The functions in this file perform semantic analysis on various stages of compilation,
-returning informative error messages should errors be found.
+The functions in this file perform syntactic and semantic analysis at various stages
+of compilation, returning informative error messages should errors be found.
 -}
 
 module Analyze
   ( analyzeEllipsesCounts,
     analyzeEllipsesCaptures,
     analyzeEllipsesCapturesWithoutVariables,
+    analyzeDefinitionSyntax,
   )
 where
 
+import Ast0 qualified
 import Ast1 qualified
 import AstC0 qualified
 import CompileTypes (VariableBindings)
@@ -21,6 +23,9 @@ import Data.Maybe (catMaybes, fromJust, listToMaybe)
 import Error
   ( badEllipsesCapturesErrorMessage,
     badEllipsesCountErrorMessage,
+    definitionDoesNotStartWithDefErrorMessage,
+    definitionHasWrongNumberOfTermsErrorMessage,
+    expectedDefinitionGotSymbolErrorMessage,
     noVariablesInEllipsisErrorMessage,
   )
 import ErrorTypes (ErrorMessage, Span)
@@ -30,9 +35,10 @@ import Utils
     Cata,
     Para,
     getPatternSpanAtC0Index,
+    isDollarSignVar,
     popBetweenTail,
     popTrailingC1Index,
-    pushBetweenTail, isDollarSignVar,
+    pushBetweenTail,
   )
 import Prelude hiding (span)
 
@@ -153,7 +159,7 @@ analyzeEllipsesCapturesWithoutVariables = fixup . para go
         hasVariableList <- sequence results
         Right $ or hasVariableList
       Ast1.EllipsesF x -> do
-        let -- accessing 'originalInputSpan' is the only reason we need 
+        let -- accessing 'originalInputSpan' is the only reason we need
             -- to use 'para' instead of 'cata'
             (originalInputSpan C.:< _originalInput) = fst x
             result :: Either [ErrorMessage] HasVariable
@@ -162,3 +168,21 @@ analyzeEllipsesCapturesWithoutVariables = fixup . para go
         if hasVariable
           then Right True
           else Left [noVariablesInEllipsisErrorMessage span originalInputSpan]
+
+-- | Finds problems relating to definitions either (1) being symbols, not definitions;
+-- (2) not having 3 terms; (3) not starting with the symbol 'def'.
+analyzeDefinitionSyntax :: SrcLocked Ast0.Ast -> [ErrorMessage]
+analyzeDefinitionSyntax (span C.:< definition) = case definition of
+  Ast0.SymbolF s ->
+    [expectedDefinitionGotSymbolErrorMessage span]
+  Ast0.CompoundF xs ->
+    if length xs /= 3
+      then [definitionHasWrongNumberOfTermsErrorMessage span $ length xs]
+      else
+        let notDefSymbol :: SrcLocked Ast0.Ast -> Maybe (Span Int)
+            notDefSymbol (_ C.:< Ast0.SymbolF "def") = Nothing
+            notDefSymbol (otherThanDefSpan C.:< _) = Just otherThanDefSpan
+         in case notDefSymbol $ head xs of
+              Nothing -> []
+              Just otherThanDefSpan ->
+                [definitionDoesNotStartWithDefErrorMessage otherThanDefSpan]

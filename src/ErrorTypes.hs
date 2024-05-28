@@ -20,6 +20,9 @@ data ErrorType
   | VariableUsedMoreThanOnceInPattern
   | OverlappingPatterns
   | NoVariablesInEllipsis
+  | ExpectedDefinitionGotSymbol
+  | DefinitionHasWrongNumberOfTerms
+  | DefinitionDoesNotStartWithDef
   deriving (Eq, Show)
 
 type ErrorMessage = ErrorMessageInfo Int

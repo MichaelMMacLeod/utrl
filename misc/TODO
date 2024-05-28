@@ -1,4 +1,19 @@
 - Profile interpreter to determine possible places to improve performance
+
+  - Possible better way to compile ellipses:
+
+    (def ($y .. (a b $x .. c d e))
+      ($x .. $y ..))
+    ---->
+    $y = $input
+    $x = $y.pop_end(1)
+    $x.pop_end(3)
+    $x.pop_front(2)
+    $result = $x.append($y)
+
+    Compound terms could be stored as a mutable doubly-linked-list (with pointers to the start and end nodes) of double-ended queues, to enable O(1) push/pop from both ends as well as
+    O(1) appending via the linked list.
+
 - Add optimization passes on pattern graph
 - Actually compile patterns to stmts as well (currently only constructors are compiled)
 - Output webassemby/native code instead of running compiled code in haskell interpreter
