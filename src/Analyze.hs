@@ -10,6 +10,7 @@ module Analyze
     analyzeEllipsesCapturesWithoutVariables,
     analyzeDefinitionSyntax,
     analyzePatternForMoreThan1EllipsisPerTerm,
+    analyzeVariablesUsedMoreThanOnceInPattern,
   )
 where
 
@@ -31,6 +32,7 @@ import Error
     expectedDefinitionGotSymbolErrorMessage,
     moreThanOneEllipsisInSingleTermOfPatternErrorMessage,
     noVariablesInEllipsisErrorMessage,
+    variableUsedMoreThanOnceInPatternErrorMessage,
   )
 import ErrorTypes (ErrorMessage, Span)
 import ReadTypes (SrcLocked)
@@ -225,3 +227,25 @@ analyzePatternForMoreThan1EllipsisPerTerm = para go
                 errors = concatMap snd badInputResultPairs
              in errors
       Ast1.EllipsesF (_input, result) -> result
+
+-- | Finds errors relating to the use of a variable twice or more in the pattern
+-- of a definition.
+analyzeVariablesUsedMoreThanOnceInPattern :: SrcLocked Ast1.Ast -> [ErrorMessage]
+analyzeVariablesUsedMoreThanOnceInPattern = report . cata findVarSpans
+  where
+    report :: H.HashMap String [Span Int] -> [ErrorMessage]
+    report uses =
+      let spansOfVarsWithMoreThanOneUse :: [[Span Int]]
+          spansOfVarsWithMoreThanOneUse = filter ((> 1) . length) $ H.elems uses
+       in map
+            variableUsedMoreThanOnceInPatternErrorMessage
+            spansOfVarsWithMoreThanOneUse
+
+    findVarSpans :: Cata (SrcLocked Ast1.Ast) (H.HashMap String [Span Int])
+    findVarSpans (span :< ast) = case ast of
+      Ast1.SymbolF s ->
+        if isDollarSignVar s
+          then H.insert s [span] H.empty
+          else H.empty
+      Ast1.CompoundF xs -> foldl' (H.unionWith (++)) H.empty xs
+      Ast1.EllipsesF x -> x

@@ -14,7 +14,7 @@ module Compile
   )
 where
 
-import Analyze (analyzeDefinitionSyntax, analyzeEllipsesCaptures, analyzeEllipsesCapturesWithoutVariables, analyzeEllipsesCounts, analyzePatternForMoreThan1EllipsisPerTerm)
+import Analyze (analyzeDefinitionSyntax, analyzeEllipsesCaptures, analyzeEllipsesCapturesWithoutVariables, analyzeEllipsesCounts, analyzePatternForMoreThan1EllipsisPerTerm, analyzeVariablesUsedMoreThanOnceInPattern)
 import Ast0 qualified
 import Ast1 qualified
 import AstC0 qualified
@@ -200,6 +200,7 @@ compile0ToDefinition def@(_ C.:< Ast0.CompoundF xs) = do
   let pattern = xs !! 1
       constructor = xs !! 2
       pattern1 = compile0to1 pattern
+  errorsToEither $ analyzeVariablesUsedMoreThanOnceInPattern pattern1
   errorsToEither $ analyzePatternForMoreThan1EllipsisPerTerm pattern1
   patternP0 <- compile1toP0 pattern1
   variables <- p0VariableBindings patternP0

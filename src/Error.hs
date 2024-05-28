@@ -19,6 +19,7 @@ module Error
     definitionHasWrongNumberOfTermsErrorMessage,
     definitionDoesNotStartWithDefErrorMessage,
     moreThanOneEllipsisInSingleTermOfPatternErrorMessage,
+    variableUsedMoreThanOnceInPatternErrorMessage,
   )
 where
 
@@ -399,6 +400,22 @@ moreThanOneEllipsisInSingleTermOfPatternErrorMessage termWithEllipsesSpan extraE
       Annotation
         { span = ellipsisSpan,
           annotation = "ellipsis #" <> tshow ellipsisNumber
+        }
+
+variableUsedMoreThanOnceInPatternErrorMessage :: [Span Int] -> ErrorMessage
+variableUsedMoreThanOnceInPatternErrorMessage varUseSpans =
+  ErrorMessageInfo
+    { errorType = VariableUsedMoreThanOnceInPattern,
+      message = "variable occurs more than once in pattern",
+      annotations = zipWith mkAnnotation [1 ..] varUseSpans,
+      help = Just "a variable may occur at most once in a definition's pattern"
+    }
+  where
+    mkAnnotation :: Int -> Span Int -> Annotation Int
+    mkAnnotation useNumber span =
+      Annotation
+        { span,
+          annotation = "use #" <> tshow useNumber
         }
 
 -- Copied from megaparsec 9.6.1 as our version here isn't high enough yet for

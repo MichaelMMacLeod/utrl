@@ -1,0 +1,10 @@
+error[E007]: variable occurs more than once in pattern
+./test/programs/error-var-pattern-use-2.defs:1:13
+   |
+ 1 | (def (twice $x $x) constructor)
+   |             ^^ use #1
+./test/programs/error-var-pattern-use-2.defs:1:16
+   |
+ 1 | (def (twice $x $x) constructor)
+   |                ^^ use #2
+help: a variable may occur at most once in a definition's pattern

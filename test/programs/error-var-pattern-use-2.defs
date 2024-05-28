@@ -1,0 +1,1 @@
+(def (twice $x $x) constructor)
