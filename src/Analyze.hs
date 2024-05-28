@@ -179,7 +179,7 @@ analyzeEllipsesCapturesWithoutVariables = fixup . para go
 -- (2) not having 3 terms; (3) not starting with the symbol 'def'.
 analyzeDefinitionSyntax :: SrcLocked Ast0.Ast -> [ErrorMessage]
 analyzeDefinitionSyntax (span C.:< definition) = case definition of
-  Ast0.SymbolF s ->
+  Ast0.SymbolF _s ->
     [expectedDefinitionGotSymbolErrorMessage span]
   Ast0.CompoundF xs ->
     if length xs /= 3
