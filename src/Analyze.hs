@@ -132,17 +132,14 @@ analyzeEllipsesCaptures pattern = fixup . cata go
               Just between ->
                 [ Assignment
                     { variableName,
-                      variableSpan = span,
                       index = (c0', between)
                     }
                 ]
 
 data Assignment = Assignment
   { variableName :: String,
-    variableSpan :: Span Int,
     index :: (AstC0.Index, Between)
   }
-  deriving (Show)
 
 type HasVariable = Bool
 
