@@ -18,6 +18,7 @@ module Error
     expectedDefinitionGotSymbolErrorMessage,
     definitionHasWrongNumberOfTermsErrorMessage,
     definitionDoesNotStartWithDefErrorMessage,
+    moreThanOneEllipsisInSingleTermOfPatternErrorMessage,
   )
 where
 
@@ -378,6 +379,27 @@ definitionDoesNotStartWithDefErrorMessage otherThanDefSpan =
         ],
       help = badDefinitionHelp
     }
+
+moreThanOneEllipsisInSingleTermOfPatternErrorMessage :: Span Int -> [Span Int] -> ErrorMessage
+moreThanOneEllipsisInSingleTermOfPatternErrorMessage termWithEllipsesSpan extraEllipsesSpans =
+  ErrorMessageInfo
+    { errorType = MoreThanOneEllipsisInSingleCompoundTermOfPattern,
+      message = "too many ellipses in single term of pattern",
+      annotations =
+        Annotation
+          { span = termWithEllipsesSpan,
+            annotation = "this term has more than one ellipsis"
+          }
+          : zipWith mkExtraEllipsisSpanAnnotation [2 ..] extraEllipsesSpans,
+      help = Just "each term in a definitions's pattern term may have at most one ellipsis"
+    }
+  where
+    mkExtraEllipsisSpanAnnotation :: Int -> Span Int -> Annotation Int
+    mkExtraEllipsisSpanAnnotation ellipsisNumber ellipsisSpan =
+      Annotation
+        { span = ellipsisSpan,
+          annotation = "ellipsis #" <> tshow ellipsisNumber
+        }
 
 -- Copied from megaparsec 9.6.1 as our version here isn't high enough yet for
 -- this to be defined.

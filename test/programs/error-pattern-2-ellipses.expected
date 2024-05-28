@@ -1,0 +1,10 @@
+error[E006]: too many ellipses in single term of pattern
+./test/programs/error-pattern-2-ellipses.defs:1:12
+   |
+ 1 | (def (this ($pattern .. has serious $problems .. (I think)))
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this term has more than one ellipsis
+./test/programs/error-pattern-2-ellipses.defs:1:47
+   |
+ 1 | (def (this ($pattern .. has serious $problems .. (I think)))
+   |                                               ^^ ellipsis #2
+help: each term in a definitions's pattern term may have at most one ellipsis

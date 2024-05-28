@@ -2,12 +2,14 @@
 The functions in this file perform syntactic and semantic analysis at various stages
 of compilation, returning informative error messages should errors be found.
 -}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Analyze
   ( analyzeEllipsesCounts,
     analyzeEllipsesCaptures,
     analyzeEllipsesCapturesWithoutVariables,
     analyzeDefinitionSyntax,
+    analyzePatternForMoreThan1EllipsisPerTerm,
   )
 where
 
@@ -17,15 +19,17 @@ import AstC0 qualified
 import CompileTypes (VariableBindings)
 import Control.Comonad.Cofree qualified as C
 import Control.Comonad.Trans.Cofree (CofreeF (..))
+import Data.Foldable.Extra (Foldable (foldl'))
 import Data.Functor.Foldable (Recursive (..))
 import Data.HashMap.Strict qualified as H
-import Data.Maybe (catMaybes, fromJust, listToMaybe)
+import Data.Maybe (catMaybes, fromJust, listToMaybe, mapMaybe)
 import Error
   ( badEllipsesCapturesErrorMessage,
     badEllipsesCountErrorMessage,
     definitionDoesNotStartWithDefErrorMessage,
     definitionHasWrongNumberOfTermsErrorMessage,
     expectedDefinitionGotSymbolErrorMessage,
+    moreThanOneEllipsisInSingleTermOfPatternErrorMessage,
     noVariablesInEllipsisErrorMessage,
   )
 import ErrorTypes (ErrorMessage, Span)
@@ -186,3 +190,38 @@ analyzeDefinitionSyntax (span C.:< definition) = case definition of
               Nothing -> []
               Just otherThanDefSpan ->
                 [definitionDoesNotStartWithDefErrorMessage otherThanDefSpan]
+
+-- | Finds errors relating to the use of more than one ellipsis per term in a definition's
+-- pattern. For exmaple '($a .. $b ..)' is detected here.
+analyzePatternForMoreThan1EllipsisPerTerm :: SrcLocked Ast1.Ast -> [ErrorMessage]
+analyzePatternForMoreThan1EllipsisPerTerm = para go
+  where
+    go :: Para (SrcLocked Ast1.Ast) [ErrorMessage]
+    go (span :< ast) = case ast of
+      Ast1.SymbolF _s -> []
+      Ast1.CompoundF inputResultPairs -> do
+        let badInputResultPairs = filter (not . null . snd) inputResultPairs
+        if null badInputResultPairs
+          then
+            let inputs :: [SrcLocked Ast1.Ast]
+                inputs = map fst inputResultPairs
+
+                ellipsisSpan :: SrcLocked Ast1.Ast -> Maybe (Span Int)
+                ellipsisSpan (span C.:< ast) = case ast of
+                  Ast1.EllipsesF _ -> Just span
+                  _ -> Nothing
+
+                ellipsesInputSpans :: [Span Int]
+                ellipsesInputSpans = mapMaybe ellipsisSpan inputs
+
+                errorMessage :: ErrorMessage
+                errorMessage =
+                  moreThanOneEllipsisInSingleTermOfPatternErrorMessage
+                    span
+                    $ drop 1 ellipsesInputSpans
+             in ([errorMessage | length ellipsesInputSpans > 1])
+          else
+            let errors :: [ErrorMessage]
+                errors = concatMap snd badInputResultPairs
+             in errors
+      Ast1.EllipsesF (_input, result) -> result

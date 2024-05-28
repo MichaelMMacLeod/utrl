@@ -14,7 +14,7 @@ module Compile
   )
 where
 
-import Analyze (analyzeEllipsesCaptures, analyzeEllipsesCapturesWithoutVariables, analyzeEllipsesCounts, analyzeDefinitionSyntax)
+import Analyze (analyzeDefinitionSyntax, analyzeEllipsesCaptures, analyzeEllipsesCapturesWithoutVariables, analyzeEllipsesCounts, analyzePatternForMoreThan1EllipsisPerTerm)
 import Ast0 qualified
 import Ast1 qualified
 import AstC0 qualified
@@ -49,10 +49,9 @@ import Data.Maybe (fromJust)
 import Error
   ( CompileResult,
     ErrorType (..),
-    addLength,
     genericErrorInfo,
   )
-import ErrorTypes (Span)
+import ErrorTypes (ErrorMessage, Span)
 import GHC.Generics (Generic)
 import Predicate
   ( IndexedPredicate (..),
@@ -189,29 +188,22 @@ removeEllipses = cata go
 -- predicateListsOverlap :: [IndexedPredicate] -> [IndexedPredicate] -> Bool
 -- predicateListsOverlap preds1 preds2 = _
 
+errorsToEither :: [ErrorMessage] -> CompileResult ()
+errorsToEither = \case
+  [] -> Right ()
+  errors -> Left errors
+
 compile0ToDefinition :: SrcLocked Ast0.Ast -> CompileResult Definition
 compile0ToDefinition (_ C.:< Ast0.SymbolF _) = Left (genericErrorInfo InvalidRuleDefinition)
-compile0ToDefinition (_ C.:< Ast0.CompoundF xs) =
-  -- rules must have exactly 3 subterms:
-  --  1   2 3
-  -- (def a b)
-  if length xs /= 3
-    then Left (genericErrorInfo InvalidRuleDefinition)
-    else
-      let xs' :: [SrcLocked Ast0.Ast]
-          xs' = xs
-          startsWithDefSymbol :: [SrcLocked Ast0.Ast] -> Bool
-          startsWithDefSymbol ((_ C.:< Ast0.SymbolF "def") : _) = True
-          startsWithDefSymbol _ = False
-       in if startsWithDefSymbol xs'
-            then
-              let pat = compile0to1 $ xs' !! 1
-                  constr = xs' !! 2
-               in do
-                    pat' <- compile1toP0 pat
-                    vars <- p0VariableBindings pat'
-                    Right Definition {variables = vars, pattern = xs' !! 1, constructor = constr}
-            else Left (genericErrorInfo InvalidRuleDefinition)
+compile0ToDefinition def@(_ C.:< Ast0.CompoundF xs) = do
+  errorsToEither $ analyzeDefinitionSyntax def
+  let pattern = xs !! 1
+      constructor = xs !! 2
+      pattern1 = compile0to1 pattern
+  errorsToEither $ analyzePatternForMoreThan1EllipsisPerTerm pattern1
+  patternP0 <- compile1toP0 pattern1
+  variables <- p0VariableBindings patternP0
+  pure Definition {variables, pattern, constructor}
 
 -- Returns the union of all hashmaps in the input list, or Nothing if there
 -- exists at least one key present in more than of the hashmaps.

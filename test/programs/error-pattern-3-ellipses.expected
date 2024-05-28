@@ -1,0 +1,14 @@
+error[E006]: too many ellipses in single term of pattern
+./test/programs/error-pattern-3-ellipses.defs:1:6
+   |
+ 1 | (def ($x .. $y .. $z ..) constructor)
+   |      ^^^^^^^^^^^^^^^^^^^ this term has more than one ellipsis
+./test/programs/error-pattern-3-ellipses.defs:1:16
+   |
+ 1 | (def ($x .. $y .. $z ..) constructor)
+   |                ^^ ellipsis #2
+./test/programs/error-pattern-3-ellipses.defs:1:22
+   |
+ 1 | (def ($x .. $y .. $z ..) constructor)
+   |                      ^^ ellipsis #3
+help: each term in a definitions's pattern term may have at most one ellipsis
