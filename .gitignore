@@ -5,3 +5,4 @@ dist-newstyle/
 *.hi
 *.o
 app/Main
+*.tix
