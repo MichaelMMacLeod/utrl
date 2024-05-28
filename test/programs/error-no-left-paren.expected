@@ -1,0 +1,6 @@
+error[E001]: bad syntax
+./test/programs/error-no-left-paren.defs:1:7
+   |
+ 1 | ABCDE ) foo
+   |       ^ unexpected ')'
+   |         expecting '(' or end of input

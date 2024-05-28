@@ -1,0 +1,2 @@
+(def (capture ($x ..) ($y ..))
+  (result ($x $y) ..))

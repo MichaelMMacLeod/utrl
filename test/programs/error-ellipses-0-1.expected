@@ -1,0 +1,10 @@
+error[E002]: too many ellipses
+./test/programs/error-ellipses-0-1.defs:1:6
+   |
+ 1 | (def $x ($x ..))
+   |      ^^ matched with 0 ellipses in pattern
+./test/programs/error-ellipses-0-1.defs:1:10
+   |
+ 1 | (def $x ($x ..))
+   |          ^^ used with 1 ellipsis in constructor
+help: variables must be used with the same number of ellipses they were matched with

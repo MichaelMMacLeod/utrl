@@ -1,0 +1,10 @@
+error[E002]: too many ellipses
+./test/programs/error-ellipses-2-3.defs:1:27
+   |
+ 1 | (def (flatten (list (list $x ..) ..))
+   |                           ^^ matched with 2 ellipses in pattern
+./test/programs/error-ellipses-2-3.defs:2:9
+   |
+ 2 |   (list $x .. .. ..))
+   |         ^^ used with 3 ellipses in constructor
+help: variables must be used with the same number of ellipses they were matched with
