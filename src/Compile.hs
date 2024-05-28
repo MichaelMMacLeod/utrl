@@ -14,7 +14,7 @@ module Compile
   )
 where
 
-import Analyze (analyzeEllipsesCaptures, analyzeEllipsesCounts)
+import Analyze (analyzeEllipsesCaptures, analyzeEllipsesCapturesWithoutVariables, analyzeEllipsesCounts)
 import Ast0 qualified
 import Ast1 qualified
 import AstC0 qualified
@@ -74,7 +74,7 @@ compileConstructor :: SrcLocked Ast1.Ast -> Definition -> CompileResult (SrcLock
 compileConstructor pattern definition = do
   let ast1 = compile0to1 definition.constructor
       astC0 = compile1toC0 definition.variables ast1
-  (astC1, nextUnusedVar) <- compileC0ToC1 pattern definition.variables astC0
+  (astC1, nextUnusedVar) <- compileC0ToC1 pattern definition.variables ast1 astC0
   let namedC2Stmts = compileC1ToC2 nextUnusedVar astC1
       offsetC2Stmts = resolveC2NamedLabels namedC2Stmts
   pure offsetC2Stmts
@@ -285,11 +285,19 @@ data C0ToC1Data = C0ToC1Data
     remainingAssignment :: Maybe (Var, AstC0.Index, Between)
   }
 
-compileC0ToC1 :: SrcLocked Ast1.Ast -> VariableBindings -> SrcLocked AstC0.Ast -> CompileResult (SrcLocked AstC1.Ast, Var)
-compileC0ToC1 pattern variableBindings ast =
+compileC0ToC1 ::
+  SrcLocked Ast1.Ast ->
+  VariableBindings ->
+  SrcLocked Ast1.Ast ->
+  SrcLocked AstC0.Ast ->
+  CompileResult (SrcLocked AstC1.Ast, Var)
+compileC0ToC1 pattern variableBindings oldConstructorAst ast =
   let captureErrors = analyzeEllipsesCaptures pattern ast
       countErrors = analyzeEllipsesCounts variableBindings ast
-      errors = captureErrors ++ countErrors
+      noVarsErrorsPattern = analyzeEllipsesCapturesWithoutVariables pattern
+      noVarsErrorsConstructor = analyzeEllipsesCapturesWithoutVariables oldConstructorAst
+      errors =
+        captureErrors ++ countErrors ++ noVarsErrorsPattern ++ noVarsErrorsConstructor
    in case errors of
         [] -> do
           d <- cata traverseC0ToC1 ast firstUnusedVar

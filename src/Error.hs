@@ -14,6 +14,7 @@ module Error
     addLength,
     mkFilePathName,
     badEllipsesCapturesErrorMessage,
+    noVariablesInEllipsisErrorMessage,
   )
 where
 
@@ -70,6 +71,7 @@ errorCode = \case
   MoreThanOneEllipsisInSingleCompoundTermOfPattern -> 6
   VariableUsedMoreThanOnceInPattern -> 7
   OverlappingPatterns -> 8
+  NoVariablesInEllipsis -> 9
 
 type FileContents = Text
 
@@ -118,9 +120,9 @@ resolveSpans posState spans =
     sortedSpans = sortBy compareSpan spans
 
     compareSpan :: Span Int -> Span Int -> Ordering
-    compareSpan s1 s2 = 
-      -- You'd think the order would be s1.location and then s2.location, but we 
-      -- reverse it here so that the earliest span comes last. This is because 'cata' 
+    compareSpan s1 s2 =
+      -- You'd think the order would be s1.location and then s2.location, but we
+      -- reverse it here so that the earliest span comes last. This is because 'cata'
       -- is a right-fold, i.e., it processes the last element in the list first.
       compareInt s2.location s1.location
 
@@ -304,6 +306,25 @@ badEllipsesCapturesErrorMessage
           ],
         help = Just "variables matched under different ellipses can't be used with the same ellipsis"
       }
+
+noVariablesInEllipsisErrorMessage :: Span Int -> Span Int -> ErrorMessage
+noVariablesInEllipsisErrorMessage ellipsisSpan termWithNoVariablesSpan =
+  ErrorMessageInfo
+    { errorType = NoVariablesInEllipsis,
+      message = "no variables in term preceding ellipsis",
+      annotations =
+        [ Annotation
+            { span = ellipsisSpan,
+              annotation = "the ellipsis"
+            },
+          Annotation
+            { span = termWithNoVariablesSpan,
+              annotation = "the term preceding the ellipsis"
+
+            }
+        ],
+      help = Just "there must be at least one variable in the term preceding an ellipsis"
+    }
 
 -- Copied from megaparsec 9.6.1 as our version here isn't high enough yet for
 -- this to be defined.

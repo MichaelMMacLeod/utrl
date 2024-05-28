@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
-
 {-
 The functions in this file perform semantic analysis on various stages of compilation,
 returning informative error messages should errors be found.
@@ -8,34 +6,41 @@ returning informative error messages should errors be found.
 module Analyze
   ( analyzeEllipsesCounts,
     analyzeEllipsesCaptures,
+    analyzeEllipsesCapturesWithoutVariables,
   )
 where
 
 import Ast1 qualified
 import AstC0 qualified
 import CompileTypes (VariableBindings)
+import Control.Comonad.Cofree qualified as C
 import Control.Comonad.Trans.Cofree (CofreeF (..))
 import Data.Functor.Foldable (Recursive (..))
 import Data.HashMap.Strict qualified as H
 import Data.Maybe (catMaybes, fromJust, listToMaybe)
-import Error (badEllipsesCapturesErrorMessage, badEllipsesCountErrorMessage)
-import ErrorTypes (ErrorMessage, ErrorMessageInfo, Span)
+import Error
+  ( badEllipsesCapturesErrorMessage,
+    badEllipsesCountErrorMessage,
+    noVariablesInEllipsisErrorMessage,
+  )
+import ErrorTypes (ErrorMessage, Span)
 import ReadTypes (SrcLocked)
 import Utils
   ( Between,
     Cata,
+    Para,
     getPatternSpanAtC0Index,
     popBetweenTail,
     popTrailingC1Index,
-    pushBetweenTail,
+    pushBetweenTail, isDollarSignVar,
   )
 import Prelude hiding (span)
 
--- | Finds errors relating to the use of too few or too many ellipses
+-- | Finds errors relating to the use of too few or too many ellipses on variables
 analyzeEllipsesCounts :: VariableBindings -> SrcLocked AstC0.Ast -> [ErrorMessage]
 analyzeEllipsesCounts variableBindings ast = cata go ast 0
   where
-    go :: Cata (SrcLocked AstC0.Ast) (Int -> [ErrorMessageInfo Int])
+    go :: Cata (SrcLocked AstC0.Ast) (Int -> [ErrorMessage])
     go cofree actualEllipsesCount = case cofree of
       _ :< AstC0.SymbolF _ -> []
       _ :< AstC0.CompoundF xs -> concatMap ($ actualEllipsesCount) xs
@@ -126,3 +131,32 @@ data Assignment = Assignment
     index :: (AstC0.Index, Between)
   }
   deriving (Show)
+
+type HasVariable = Bool
+
+-- | Finds errors of ellipses capturing no variables
+analyzeEllipsesCapturesWithoutVariables :: SrcLocked Ast1.Ast -> [ErrorMessage]
+analyzeEllipsesCapturesWithoutVariables = fixup . para go
+  where
+    fixup = \case
+      Left errors -> errors
+      Right _ -> []
+    -- 'para' is used here instead of 'cata' solely to get access to the
+    -- source location (span) of the term containing no variables inside
+    -- an ellipsis, should one be found to exist.
+    go :: Para (SrcLocked Ast1.Ast) (Either [ErrorMessage] HasVariable)
+    go (span :< ast) = case ast of
+      Ast1.SymbolF s -> Right $ isDollarSignVar s
+      Ast1.CompoundF inputResultPairs -> do
+        let results :: [Either [ErrorMessage] HasVariable]
+            results = map snd inputResultPairs
+        hasVariableList <- sequence results
+        Right $ or hasVariableList
+      Ast1.EllipsesF x -> do
+        let (originalInputSpan C.:< _originalInput) = fst x
+            result :: Either [ErrorMessage] HasVariable
+            result = snd x
+        hasVariable <- result
+        if hasVariable
+          then Right True
+          else Left [noVariablesInEllipsisErrorMessage span originalInputSpan]

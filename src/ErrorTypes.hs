@@ -19,6 +19,7 @@ data ErrorType
   | MoreThanOneEllipsisInSingleCompoundTermOfPattern
   | VariableUsedMoreThanOnceInPattern
   | OverlappingPatterns
+  | NoVariablesInEllipsis
   deriving (Eq, Show)
 
 type ErrorMessage = ErrorMessageInfo Int

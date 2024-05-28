@@ -1,0 +1,10 @@
+error[E009]: no variables in term preceding ellipsis
+./test/programs/error-no-vars-in-ellipsis-constructor.defs:2:19
+   |
+ 2 |   ((no vars here) ..))
+   |                   ^^ the ellipsis
+./test/programs/error-no-vars-in-ellipsis-constructor.defs:2:4
+   |
+ 2 |   ((no vars here) ..))
+   |    ^^^^^^^^^^^^^^ the term preceding the ellipsis
+help: there must be at least one variable in the term preceding an ellipsis
