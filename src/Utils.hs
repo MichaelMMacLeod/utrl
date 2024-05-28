@@ -133,8 +133,5 @@ getPatternSpanAtC0Index = cata go
                   x indexTail
                 AstC0.Between n _ -> do
                   x <- xs !? n
-                  x index
-            Ast1.EllipsesF x ->
-              case indexHead of
-                AstC0.Between _ _ -> x indexTail
-                _ -> Nothing
+                  x indexTail
+            Ast1.EllipsesF x -> x index
