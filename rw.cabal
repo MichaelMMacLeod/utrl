@@ -157,11 +157,7 @@ test-suite rw-test
     , extensions
 
   -- Modules included in this executable, other than Main.
-  other-modules:
-      ReadTests
-    , ConstructorTests
-    , MiscTests
-    , GoldenTests
+  other-modules: GoldenTests
  
   default-extensions:
       DeriveFunctor
