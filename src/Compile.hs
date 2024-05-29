@@ -3,7 +3,6 @@
 module Compile
   ( compileConstructor,
     compile0ToDefinition,
-    ruleDefinitionPredicates,
     compile0to1,
     compile1toP0,
     compile1toC0,
@@ -11,10 +10,19 @@ module Compile
     compileC0ToC1,
     findOverlappingPatterns,
     errOnOverlappingPatterns,
+    errorsToEither,
   )
 where
 
-import Analyze (analyzeDefinitionSyntax, analyzeEllipsesCaptures, analyzeEllipsesCapturesWithoutVariables, analyzeEllipsesCounts, analyzePatternForMoreThan1EllipsisPerTerm, analyzeVariablesUsedMoreThanOnceInPattern)
+import Analyze
+  ( analyzeDefinitionSyntax,
+    analyzeEllipsesCaptures,
+    analyzeEllipsesCapturesWithoutVariables,
+    analyzeEllipsesCounts,
+    analyzePatternForMoreThan1EllipsisPerTerm,
+    analyzeVariablesUsedMoreThanOnceInPattern,
+    ruleDefinitionPredicates,
+  )
 import Ast0 qualified
 import Ast1 qualified
 import AstC0 qualified
@@ -53,10 +61,7 @@ import Error
   )
 import ErrorTypes (ErrorMessage, Span)
 import GHC.Generics (Generic)
-import Predicate
-  ( IndexedPredicate (..),
-    Predicate (LengthEqualTo, LengthGreaterThanOrEqualTo, SymbolEqualTo),
-  )
+import Predicate (IndexedPredicate (..))
 import ReadTypes (SrcLocked)
 import Utils (Between (..), Cata, Para, isDollarSignVar, popBetweenTail, popTrailingC1Index)
 import Var (Var)
@@ -65,9 +70,16 @@ compileDefinition :: Definition -> CompileResult CompiledDefinition
 compileDefinition definition = do
   let pattern1 = compile0to1 definition.pattern
   patternP0 <- compile1toP0 pattern1
-  predicates <- ruleDefinitionPredicates definition.variables patternP0
+  variables <- p0VariableBindings patternP0
+  let predicates = ruleDefinitionPredicates definition.variables patternP0
   constructor <- compileConstructor pattern1 definition
-  Right CompiledDefinition {predicates, pattern = patternP0, constructor}
+  Right
+    CompiledDefinition
+      { variables,
+        predicates,
+        pattern = patternP0,
+        constructor
+      }
 
 compileConstructor :: SrcLocked Ast1.Ast -> Definition -> CompileResult (SrcLocked (AstC2.Ast Int))
 compileConstructor pattern definition = do
@@ -176,15 +188,6 @@ findOverlappingPatterns predicatesPatternPairs = Nothing -- TODO!
 --     pairs = [(a, b) | a <- removedEllipses, b <- removedEllipses]
 --  in cata go pairs
 
-removeEllipses :: AstP0.Ast -> Ast0.Ast
-removeEllipses = cata go
-  where
-    go :: Cata AstP0.Ast Ast0.Ast
-    go = \case
-      AstP0.SymbolF s -> Ast0.Symbol s
-      AstP0.CompoundWithoutEllipsesF xs -> Ast0.Compound xs
-      AstP0.CompoundWithEllipsesF b e a -> Ast0.Compound $ b ++ [e] ++ a
-
 -- predicateListsOverlap :: [IndexedPredicate] -> [IndexedPredicate] -> Bool
 -- predicateListsOverlap preds1 preds2 = _
 
@@ -216,40 +219,6 @@ unionNonIntersectingHashMaps hs =
    in if keyCountBeforeUnion == keyCountAfterUnion
         then Just union
         else Nothing
-
--- Returns a list of conditions that must hold for a given rule's pattern to
--- match a term.
---
--- For example, in the following rule:
---
---   (def xs (flatten (list (list xs ..) ..)) -> (list xs .. ..))
--- Data.HashMap
--- the following conditions must hold if the rule is to match a given term:
---
--- - Index [] is a compound term of length == 2
--- - Index [0] == "flatten"
--- - Index [1] is a compound term of length >= 1
--- - Index [1,0] == "list"
--- - Indices [1,1..length] are compound terms of length >= 1
--- - Indices [1,1..length,0] == "list"
-ruleDefinitionPredicates :: VariableBindings -> SrcLocked AstP0.Ast -> CompileResult [IndexedPredicate]
-ruleDefinitionPredicates vars pat = cata go (indexP0ByC0 pat)
-  where
-    go ::
-      Cata (Cofree AstP0.AstF (Span Int, AstC0.Index)) (CompileResult [IndexedPredicate])
-    go ((_l, index) :< ast) = case ast of
-      AstP0.SymbolF s ->
-        Right [IndexedPredicate (SymbolEqualTo s) index | not $ H.member s vars]
-      AstP0.CompoundWithoutEllipsesF xs -> do
-        xs' <- concat <$> sequence xs
-        let p = IndexedPredicate (LengthEqualTo (length xs)) index
-        pure $ p : xs'
-      AstP0.CompoundWithEllipsesF b e a -> do
-        b' <- concat <$> sequence b
-        e' <- e
-        a' <- concat <$> sequence a
-        let p = IndexedPredicate (LengthGreaterThanOrEqualTo $ length b + length a) index
-        pure $ p : (b' ++ e' ++ a')
 
 compile0to1 :: SrcLocked Ast0.Ast -> SrcLocked Ast1.Ast
 compile0to1 = cata $ \case

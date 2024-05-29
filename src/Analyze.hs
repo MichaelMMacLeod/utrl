@@ -11,35 +11,47 @@ module Analyze
     analyzeDefinitionSyntax,
     analyzePatternForMoreThan1EllipsisPerTerm,
     analyzeVariablesUsedMoreThanOnceInPattern,
+    ruleDefinitionPredicates,
+    analyzeOverlappingPatterns,
   )
 where
 
 import Ast0 qualified
 import Ast1 qualified
 import AstC0 qualified
+import AstP0 (indexP0ByC0)
+import AstP0 qualified
 import CompileTypes (VariableBindings)
+import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as C
 import Control.Comonad.Trans.Cofree (CofreeF (..))
+import Control.Monad (guard)
 import Data.Foldable.Extra (Foldable (foldl'))
 import Data.Functor.Foldable (Recursive (..))
 import Data.HashMap.Strict qualified as H
+import Data.List (sortBy)
 import Data.Maybe (catMaybes, fromJust, listToMaybe, mapMaybe)
 import Error
-  ( badEllipsesCapturesErrorMessage,
+  ( CompileResult,
+    badEllipsesCapturesErrorMessage,
     badEllipsesCountErrorMessage,
     definitionDoesNotStartWithDefErrorMessage,
     definitionHasWrongNumberOfTermsErrorMessage,
     expectedDefinitionGotSymbolErrorMessage,
     moreThanOneEllipsisInSingleTermOfPatternErrorMessage,
     noVariablesInEllipsisErrorMessage,
+    overlappingPatternsErrorMessage,
     variableUsedMoreThanOnceInPatternErrorMessage,
   )
-import ErrorTypes (ErrorMessage, Span)
+import ErrorTypes (ErrorMessage, Span, location)
+import GHC.Base (compareInt)
+import Predicate (IndexedPredicate (..), Predicate (..), applyPredicatesForOverlappingPatternAnalysis)
 import ReadTypes (SrcLocked)
 import Utils
   ( Between,
     Cata,
     Para,
+    compareSpan,
     getPatternSpanAtC0Index,
     isDollarSignVar,
     popBetweenTail,
@@ -246,3 +258,155 @@ analyzeVariablesUsedMoreThanOnceInPattern = report . cata findVarSpans
           else H.empty
       Ast1.CompoundF xs -> foldl' (H.unionWith (++)) H.empty xs
       Ast1.EllipsesF x -> x
+
+-- | Finds errors relating to the definition of two patterns that could
+-- possibly match the same term.
+--
+-- For example, both of these definitions could match '(A)'
+--
+-- > (def (A $x .. B) C)
+-- >
+-- > (def (A $x ..)   C)
+--
+-- The input to this fuction is the list of every pattern in a definition
+-- file.
+analyzeOverlappingPatterns :: [(VariableBindings, SrcLocked AstP0.Ast)] -> [ErrorMessage]
+analyzeOverlappingPatterns =
+  map mkErrorMessages . sortAndSimplify . mapMaybe analyze . createAnalysisInfo
+  where
+    mkErrorMessages :: OverlappingPatternSpans -> ErrorMessage
+    mkErrorMessages x = overlappingPatternsErrorMessage x.pattern1Span x.pattern2Span
+
+    sortAndSimplify :: [OverlappingPatternSpans] -> [OverlappingPatternSpans]
+    sortAndSimplify xs =
+      let simplifiedMap :: H.HashMap (Int, Int) OverlappingPatternSpans
+          simplifiedMap = foldl' insertBySpans H.empty xs
+
+          simplifiedList :: [OverlappingPatternSpans]
+          simplifiedList = H.elems simplifiedMap
+
+          sortedSimplifiedList :: [OverlappingPatternSpans]
+          sortedSimplifiedList =
+            sortBy
+              compareOverlappingPatternSpans
+              simplifiedList
+
+          compareOverlappingPatternSpans ::
+            OverlappingPatternSpans -> OverlappingPatternSpans -> Ordering
+          compareOverlappingPatternSpans o1 o2 =
+            case compareSpan o1.pattern1Span o2.pattern1Span of
+              EQ -> compareSpan o1.pattern2Span o2.pattern2Span
+              ordering -> ordering
+
+          insertBySpans ::
+            H.HashMap (Int, Int) OverlappingPatternSpans ->
+            OverlappingPatternSpans ->
+            H.HashMap (Int, Int) OverlappingPatternSpans
+          insertBySpans acc spans =
+            let x = min spans.pattern1Span.location spans.pattern2Span.location
+                y = max spans.pattern1Span.location spans.pattern2Span.location
+             in if H.member (x, y) acc
+                  then acc
+                  else H.insert (x, y) spans acc
+       in sortedSimplifiedList
+
+    analyze :: OverlappingPatternAnalysisInfo -> Maybe OverlappingPatternSpans
+    analyze info =
+      let overlappingPatternsDetected =
+            applyPredicatesForOverlappingPatternAnalysis
+              info.pattern1Predicates
+              info.pattern2WithEllipsesRemoved
+       in if overlappingPatternsDetected
+            then
+              Just
+                OverlappingPatternSpans
+                  { pattern1Span = info.pattern1Span,
+                    pattern2Span = info.pattern2Span
+                  }
+            else Nothing
+
+    createAnalysisInfo :: [(VariableBindings, SrcLocked AstP0.Ast)] -> [OverlappingPatternAnalysisInfo]
+    createAnalysisInfo patterns = do
+      let indexedPatterns :: [(Int, (VariableBindings, SrcLocked AstP0.Ast))]
+          indexedPatterns = zip [0 ..] patterns
+      (index1, (pattern1VariableBindings, pattern1@(pattern1Span C.:< _))) <- indexedPatterns
+      (index2, (_patternVariableBindings, pattern2@(pattern2Span C.:< _))) <- indexedPatterns
+      guard (index1 /= index2) -- every pattern overlaps itself
+      let pattern1Predicates = ruleDefinitionPredicates pattern1VariableBindings pattern1
+          pattern2WithEllipsesRemoved = removeEllipsesFromPattern pattern2
+      pure
+        OverlappingPatternAnalysisInfo
+          { pattern1Span,
+            pattern1Predicates,
+            pattern2Span,
+            pattern2WithEllipsesRemoved
+          }
+
+data OverlappingPatternAnalysisInfo = OverlappingPatternAnalysisInfo
+  { pattern1Span :: Span Int,
+    pattern1Predicates :: [IndexedPredicate],
+    pattern2Span :: Span Int,
+    pattern2WithEllipsesRemoved :: Ast0.Ast
+  }
+
+data OverlappingPatternSpans = OverlappingPatternSpans
+  { pattern1Span :: Span Int,
+    pattern2Span :: Span Int
+  }
+
+-- | Removes the ellipses, and any terms inside of ellipses, from a pattern.
+--
+-- This is used when checking if, for example, these two definitions could
+-- match the same term:
+--
+-- > (def (x $x ..) _)
+--
+-- > (def (x $x .. y) _)
+--
+-- To do this, we take the predicates corresponding to the first pattern
+-- and apply them to '(x y)', i.e., to the second definition's pattern
+-- with its ellipses (and the $x in the ellipses) removed. Then we do the
+-- same thing, but apply the second definition's predicates to the first's
+-- ellipses-removed-pattern.
+--
+-- In this case, these rule are overlapping, as both match the term '(x y)'.
+removeEllipsesFromPattern :: SrcLocked AstP0.Ast -> Ast0.Ast
+removeEllipsesFromPattern = cata go
+  where
+    go :: Cata (SrcLocked AstP0.Ast) Ast0.Ast
+    go (_ :< ast) = case ast of
+      AstP0.SymbolF s -> Ast0.Symbol s
+      AstP0.CompoundWithoutEllipsesF xs -> Ast0.Compound xs
+      AstP0.CompoundWithEllipsesF b e a -> Ast0.Compound $ b ++ [e] ++ a
+
+-- Returns a list of conditions that must hold for a given rule's pattern to
+-- match a term.
+--
+-- For example, in the following rule:
+--
+--   (def xs (flatten (list (list xs ..) ..)) -> (list xs .. ..))
+-- Data.HashMap
+-- the following conditions must hold if the rule is to match a given term:
+--
+-- - Index [] is a compound term of length == 2
+-- - Index [0] == "flatten"
+-- - Index [1] is a compound term of length >= 1
+-- - Index [1,0] == "list"
+-- - Indices [1,1..length] are compound terms of length >= 1
+-- - Indices [1,1..length,0] == "list"
+ruleDefinitionPredicates :: VariableBindings -> SrcLocked AstP0.Ast -> [IndexedPredicate]
+ruleDefinitionPredicates vars pat = cata go (indexP0ByC0 pat)
+  where
+    go :: Cata (Cofree AstP0.AstF (Span Int, AstC0.Index)) [IndexedPredicate]
+    go ((_l, index) :< ast) = case ast of
+      AstP0.SymbolF s ->
+        [IndexedPredicate (SymbolEqualTo s) index | not $ H.member s vars]
+      AstP0.CompoundWithoutEllipsesF xs ->
+        let xs' = concat xs
+            p = IndexedPredicate (LengthEqualTo (length xs)) index
+         in p : xs'
+      AstP0.CompoundWithEllipsesF b e a ->
+        let b' = concat b
+            a' = concat a
+            p = IndexedPredicate (LengthGreaterThanOrEqualTo $ length b + length a) index
+         in p : (b' ++ e ++ a')

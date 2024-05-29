@@ -15,13 +15,14 @@ import ReadTypes (SrcLocked)
 import ErrorTypes (Span)
 
 data Definition = Definition
-  { variables :: !VariableBindings,
-    pattern :: !(SrcLocked Ast0.Ast),
-    constructor :: !(SrcLocked Ast0.Ast)
+  { variables :: VariableBindings,
+    pattern :: SrcLocked Ast0.Ast,
+    constructor :: SrcLocked Ast0.Ast
   }
 
 data CompiledDefinition = CompiledDefinition
-  { predicates :: [IndexedPredicate],
+  { variables :: VariableBindings,
+    predicates :: [IndexedPredicate],
     pattern :: SrcLocked AstP0.Ast,
     constructor :: SrcLocked (AstC2.Ast Int)
   }

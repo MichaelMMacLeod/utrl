@@ -1,0 +1,10 @@
+error[E008]: overlapping patterns
+./test/programs/error-overlapping-patterns-simple.defs:1:6
+   |
+ 1 | (def A Y)
+   |      ^ this pattern may match the same term as ...
+./test/programs/error-overlapping-patterns-simple.defs:2:6
+   |
+ 2 | (def A Z)
+   |      ^ ... this other pattern
+help: patterns possibly matching the same term are not allowed

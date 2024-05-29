@@ -1,0 +1,21 @@
+error[E008]: overlapping patterns
+./test/programs/error-overlapping-patterns-multiple.defs:1:6
+   |
+ 1 | (def (a b $x ..) _)
+   |      ^^^^^^^^^^^ this pattern may match the same term as ...
+./test/programs/error-overlapping-patterns-multiple.defs:2:6
+   |
+ 2 | (def (a b $x .. c) _)
+   |      ^^^^^^^^^^^^^ ... this other pattern
+help: patterns possibly matching the same term are not allowed
+
+error[E008]: overlapping patterns
+./test/programs/error-overlapping-patterns-multiple.defs:1:6
+   |
+ 1 | (def (a b $x ..) _)
+   |      ^^^^^^^^^^^ this pattern may match the same term as ...
+./test/programs/error-overlapping-patterns-multiple.defs:3:6
+   |
+ 3 | (def (a b $x .. ($y ..) d) _)
+   |      ^^^^^^^^^^^^^^^^^^^^^ ... this other pattern
+help: patterns possibly matching the same term are not allowed

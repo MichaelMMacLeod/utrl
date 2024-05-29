@@ -1,0 +1,2 @@
+(def (a b ($x c $y) .. d) _)
+(def (a b ($x $y $z)   d) _)

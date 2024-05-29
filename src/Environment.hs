@@ -1,12 +1,12 @@
 module Environment (createEnvironment, Environment (..), dumpEnvironmentStmts) where
 
-import Analyze (analyzeDefinitionSyntax)
+import Analyze (analyzeDefinitionSyntax, analyzeOverlappingPatterns)
 import Ast0 qualified
 import AstC2 qualified
 import Compile
   ( compile0ToDefinition,
     compileDefinition,
-    errOnOverlappingPatterns,
+    errOnOverlappingPatterns, errorsToEither,
   )
 import CompileTypes
   ( CompiledDefinition (..),
@@ -28,11 +28,10 @@ data Environment = Environment
 
 createEnvironment :: [SrcLocked Ast0.Ast] -> CompileResult Environment
 createEnvironment asts = do
-  case concatMap analyzeDefinitionSyntax asts of
-    [] -> Right ()
-    errors -> Left errors
+  errorsToEither $ concatMap analyzeDefinitionSyntax asts
   definitions <- mapM compile0ToDefinition asts
   compiledDefinitions <- mapM compileDefinition definitions
+  errorsToEither (analyzeOverlappingPatterns $ map (\d -> (d.variables, d.pattern)) compiledDefinitions)
   errOnOverlappingPatterns compiledDefinitions
   let predicatesConstructorPairs :: [([IndexedPredicate], [AstC2.Stmt Int])]
       predicatesConstructorPairs =

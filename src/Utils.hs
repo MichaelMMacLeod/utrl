@@ -17,6 +17,8 @@ module Utils
     Between (..),
     getPatternSpanAtC0Index,
     pushBetweenTail,
+    compareSpan,
+    flipOrder,
   )
 where
 
@@ -29,7 +31,8 @@ import Data.Functor.Base (ListF (..))
 import Data.Functor.Foldable (Base, Corecursive (..), Recursive (..))
 import Data.List.Extra (snoc, (!?))
 import Data.Text (Text, pack)
-import ErrorTypes (Span)
+import ErrorTypes (Span, location)
+import GHC.Base (compareInt)
 import ReadTypes (SrcLocked)
 
 type Cata t a = Base t a -> a
@@ -135,3 +138,12 @@ getPatternSpanAtC0Index = cata go
                   x <- xs !? n
                   x indexTail
             Ast1.EllipsesF x -> x index
+
+compareSpan :: Span Int -> Span Int -> Ordering
+compareSpan s1 s2 = compareInt s1.location s2.location
+
+flipOrder :: Ordering -> Ordering
+flipOrder = \case
+  GT -> LT
+  LT -> GT
+  EQ -> EQ

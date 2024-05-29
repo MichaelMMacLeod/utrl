@@ -20,12 +20,13 @@ module Error
     definitionDoesNotStartWithDefErrorMessage,
     moreThanOneEllipsisInSingleTermOfPatternErrorMessage,
     variableUsedMoreThanOnceInPatternErrorMessage,
+    overlappingPatternsErrorMessage,
   )
 where
 
 import Data.Functor.Foldable (ListF (..), Recursive (..))
 import Data.HashMap.Strict qualified as H
-import Data.List (sortBy)
+import Data.List (sortBy, intersperse)
 import Data.List.NonEmpty.Extra (toList)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Text (Text, pack)
@@ -38,7 +39,6 @@ import ErrorTypes
     ErrorType (..),
     Span (..),
   )
-import GHC.Base (compareInt)
 import Text.Megaparsec
   ( ParseErrorBundle (..),
     PosState (..),
@@ -51,12 +51,12 @@ import Text.Megaparsec
   )
 import Text.Megaparsec.Error (ParseError)
 import Text.Megaparsec.Pos (unPos)
-import Utils (Cata, tshow)
+import Utils (Cata, compareSpan, flipOrder, tshow)
 import Prelude hiding (span)
 
 errorMessages :: Maybe FilePath -> FileContents -> [ErrorMessageInfo Int] -> Text
 errorMessages name contents errors =
-  T.concat . map formatErrorMessage $ errorBundleMessages bundle
+  T.concat . intersperse "\n" . map formatErrorMessage $ errorBundleMessages bundle
   where
     bundle = mkErrorBundle name' contents errors
     name' = mkFilePathName name
@@ -123,16 +123,10 @@ resolveSpans posState spans =
    in result
   where
     -- 'resolveSpan' can't backtrack through the file to find an earlier span, we have
-    -- no choice but to sort them so that they are in order.
+    -- no choice but to sort them so that they are in order. We flip the order because
+    -- 'cata' processes the end of the list first.
     sortedSpans :: [Span Int]
-    sortedSpans = sortBy compareSpan spans
-
-    compareSpan :: Span Int -> Span Int -> Ordering
-    compareSpan s1 s2 =
-      -- You'd think the order would be s1.location and then s2.location, but we
-      -- reverse it here so that the earliest span comes last. This is because 'cata'
-      -- is a right-fold, i.e., it processes the last element in the list first.
-      compareInt s2.location s1.location
+    sortedSpans = sortBy (\s1 s2 -> flipOrder $ compareSpan s1 s2) spans
 
     go :: Cata [Span Int] (PosState Text, H.HashMap (Span Int) (Span OffendingLine))
     go = \case
@@ -417,6 +411,24 @@ variableUsedMoreThanOnceInPatternErrorMessage varUseSpans =
         { span,
           annotation = "use #" <> tshow useNumber
         }
+
+overlappingPatternsErrorMessage :: Span Int -> Span Int -> ErrorMessage
+overlappingPatternsErrorMessage pattern1Span pattern2Span =
+  ErrorMessageInfo
+    { errorType = OverlappingPatterns,
+      message = "overlapping patterns",
+      annotations =
+        [ Annotation
+            { span = pattern1Span,
+              annotation = "this pattern may match the same term as ..."
+            },
+          Annotation
+            { span = pattern2Span,
+              annotation = "... this other pattern"
+            }
+        ],
+      help = Just "patterns possibly matching the same term are not allowed"
+    }
 
 -- Copied from megaparsec 9.6.1 as our version here isn't high enough yet for
 -- this to be defined.
