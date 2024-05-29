@@ -23,6 +23,7 @@ data ErrorType
   | ExpectedDefinitionGotSymbol
   | DefinitionHasWrongNumberOfTerms
   | DefinitionDoesNotStartWithDef
+  | VariableNotMatchedInPattern
   deriving (Eq, Show)
 
 type ErrorMessage = ErrorMessageInfo Int

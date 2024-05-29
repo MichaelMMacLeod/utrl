@@ -80,6 +80,7 @@ errorCode = \case
   ExpectedDefinitionGotSymbol -> 10
   DefinitionHasWrongNumberOfTerms -> 11
   DefinitionDoesNotStartWithDef -> 12
+  VariableNotMatchedInPattern -> 13
 
 type FileContents = Text
 
