@@ -15,6 +15,7 @@ module Analyze
     analyzeOverlappingPatterns,
     analyzeEllipsesAppliedToSymbols,
     unreachableBecauseOfAnalysisStep,
+    analyzeVariableNotMatchedInPattern,
   )
 where
 
@@ -24,6 +25,7 @@ import AstC0 qualified
 import AstP0 (indexP0ByC0)
 import AstP0 qualified
 import CompileTypes (VariableBindings)
+import Control.Comonad (extract)
 import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as C
 import Control.Comonad.Trans.Cofree (CofreeF (..))
@@ -33,6 +35,7 @@ import Data.Functor.Foldable (Recursive (..))
 import Data.HashMap.Strict qualified as H
 import Data.List (sortBy)
 import Data.Maybe (catMaybes, fromJust, listToMaybe, mapMaybe)
+import Data.Set qualified as S
 import Error
   ( badEllipsesCapturesErrorMessage,
     badEllipsesCountErrorMessage,
@@ -43,10 +46,15 @@ import Error
     moreThanOneEllipsisInSingleTermOfPatternErrorMessage,
     noVariablesInEllipsisErrorMessage,
     overlappingPatternsErrorMessage,
+    variableNotMatchedInPatternErrorMessage,
     variableUsedMoreThanOnceInPatternErrorMessage,
   )
 import ErrorTypes (ErrorMessage, Span, location)
-import Predicate (IndexedPredicate (..), Predicate (..), applyPredicatesForOverlappingPatternAnalysis)
+import Predicate
+  ( IndexedPredicate (..),
+    Predicate (..),
+    applyPredicatesForOverlappingPatternAnalysis,
+  )
 import ReadTypes (SrcLocked)
 import Utils
   ( Between,
@@ -60,6 +68,42 @@ import Utils
     pushBetweenTail,
   )
 import Prelude hiding (span)
+
+-- | Finds errors relating to the use of a '$variable' in the constructor that was
+-- not matched in the pattern, as in '(def (copy x) $x)'.
+analyzeVariableNotMatchedInPattern :: SrcLocked Ast1.Ast -> SrcLocked Ast1.Ast -> [ErrorMessage]
+analyzeVariableNotMatchedInPattern patternAst constructorAst =
+  let variablesMatchedInPattern :: S.Set String
+      variablesMatchedInPattern = cata goPattern patternAst
+
+      goPattern :: Cata (SrcLocked Ast1.Ast) (S.Set String)
+      goPattern (_span :< ast) = case ast of
+        Ast1.SymbolF s ->
+          if isDollarSignVar s
+            then S.singleton s
+            else S.empty
+        Ast1.CompoundF xs -> S.unions xs
+        Ast1.EllipsesF x -> x
+
+      variablesNotMatchedInPatternSpans :: [Span Int]
+      variablesNotMatchedInPatternSpans = cata goConstructor constructorAst
+
+      goConstructor :: Cata (SrcLocked Ast1.Ast) [Span Int]
+      goConstructor (span :< ast) = case ast of
+        Ast1.SymbolF s ->
+          let isVarNotMatchedInPattern =
+                isDollarSignVar s
+                  && not (S.member s variablesMatchedInPattern)
+           in [span | isVarNotMatchedInPattern]
+        Ast1.CompoundF xs -> concat xs
+        Ast1.EllipsesF x -> x
+
+      mkError :: Span Int -> ErrorMessage
+      mkError varNotMatchedInPatternSpan =
+        variableNotMatchedInPatternErrorMessage
+          varNotMatchedInPatternSpan
+          $ extract patternAst
+   in map mkError variablesNotMatchedInPatternSpans
 
 -- | Finds errors relating to the use of too few or too many ellipses on variables
 analyzeEllipsesCounts :: VariableBindings -> SrcLocked AstC0.Ast -> [ErrorMessage]
@@ -424,7 +468,7 @@ ruleDefinitionPredicates vars pat = cata go (indexP0ByC0 pat)
          in p : (b' ++ e ++ a')
 
 unreachableBecauseOfAnalysisStep :: String -> a
-unreachableBecauseOfAnalysisStep step = error $ "analysis step '" <> step <> "' contract broken" 
+unreachableBecauseOfAnalysisStep step = error $ "analysis step '" <> step <> "' contract broken"
 
 extractErrors :: Either [ErrorMessage] b -> [ErrorMessage]
 extractErrors = \case

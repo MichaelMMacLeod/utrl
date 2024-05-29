@@ -19,6 +19,7 @@ import Analyze
     analyzeEllipsesCapturesWithoutVariables,
     analyzeEllipsesCounts,
     analyzePatternForMoreThan1EllipsisPerTerm,
+    analyzeVariableNotMatchedInPattern,
     analyzeVariablesUsedMoreThanOnceInPattern,
     ruleDefinitionPredicates,
     unreachableBecauseOfAnalysisStep,
@@ -70,6 +71,8 @@ import Var (Var)
 compileDefinition :: Definition -> CompileResult CompiledDefinition
 compileDefinition definition = do
   let pattern1 = compile0to1 definition.pattern
+      constructor1 = compile0to1 definition.constructor
+  errorsToEither $ analyzeVariableNotMatchedInPattern pattern1 constructor1
   patternP0 <- compile1toP0 pattern1
   variables <- p0VariableBindings patternP0
   let predicates = ruleDefinitionPredicates definition.variables patternP0

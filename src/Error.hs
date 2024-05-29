@@ -21,6 +21,7 @@ module Error
     variableUsedMoreThanOnceInPatternErrorMessage,
     overlappingPatternsErrorMessage,
     ellipsisAppliedToSymbolErrorMessage,
+    variableNotMatchedInPatternErrorMessage,
   )
 where
 
@@ -434,6 +435,24 @@ overlappingPatternsErrorMessage pattern1Span pattern2Span =
             }
         ],
       help = Just "patterns possibly matching the same term are not allowed"
+    }
+
+variableNotMatchedInPatternErrorMessage :: Span Int -> Span Int -> ErrorMessage
+variableNotMatchedInPatternErrorMessage variableSpan patternSpan =
+  ErrorMessageInfo
+    { errorType = VariableNotMatchedInPattern,
+      message = "variable not matched in pattern",
+      annotations =
+        [ Annotation
+            { span = variableSpan,
+              annotation = "the variable"
+            },
+          Annotation
+            { span = patternSpan,
+              annotation = "the pattern"
+            }
+        ],
+      help = Just "variables cannot be used without first being matched"
     }
 
 -- Copied from megaparsec 9.6.1 as our version here isn't high enough yet for
