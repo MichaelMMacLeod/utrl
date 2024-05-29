@@ -7,4 +7,4 @@ error[E006]: too many ellipses in single term of pattern
    |
  1 | (def (this ($pattern .. has serious $problems .. (I think)))
    |                                               ^^ ellipsis #2
-help: each term in a definitions's pattern term may have at most one ellipsis
+help: each term in a definitions's pattern may have at most one ellipsis

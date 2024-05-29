@@ -11,4 +11,4 @@ error[E006]: too many ellipses in single term of pattern
    |
  1 | (def ($x .. $y .. $z ..) constructor)
    |                      ^^ ellipsis #3
-help: each term in a definitions's pattern term may have at most one ellipsis
+help: each term in a definitions's pattern may have at most one ellipsis

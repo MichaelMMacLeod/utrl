@@ -386,7 +386,7 @@ moreThanOneEllipsisInSingleTermOfPatternErrorMessage termWithEllipsesSpan extraE
             annotation = "this term has more than one ellipsis"
           }
           : zipWith mkExtraEllipsisSpanAnnotation [2 ..] extraEllipsesSpans,
-      help = Just "each term in a definitions's pattern term may have at most one ellipsis"
+      help = Just "each term in a definitions's pattern may have at most one ellipsis"
     }
   where
     mkExtraEllipsisSpanAnnotation :: Int -> Span Int -> Annotation Int
