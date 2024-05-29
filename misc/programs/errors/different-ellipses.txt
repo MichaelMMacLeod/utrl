@@ -1,2 +1,0 @@
-(def (capture (multiple ($x ..) ($y ..)) ..)
-  (both (multiple ($x .. $y ..) ..)))

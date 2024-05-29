@@ -1,7 +1,0 @@
-(equal
-  (mul 4 (add 2 3))
-  (foldr add 0
-    (take 4
-      (zip-with add
-        (repeat 2)
-        (repeat 3)))))
