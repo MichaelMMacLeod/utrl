@@ -2,10 +2,8 @@ module Read (Read.read, read') where
 
 import Ast0 qualified
 import Control.Comonad.Cofree (Cofree (..))
-import Control.Comonad.Trans.Cofree (CofreeF)
 import Data.Char (isSpace)
 import Data.Either.Extra (fromRight')
-import Data.Functor.Foldable (Base)
 import Data.Text (Text)
 import Data.Void (Void)
 import Error
@@ -18,7 +16,6 @@ import ErrorTypes (Span (..))
 import ReadTypes (SrcLocked)
 import Text.Megaparsec
   ( Parsec,
-    between,
     eof,
     getOffset,
     many,

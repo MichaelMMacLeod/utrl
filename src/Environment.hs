@@ -6,7 +6,7 @@ import AstC2 qualified
 import Compile
   ( compile0ToDefinition,
     compileDefinition,
-    errOnOverlappingPatterns, errorsToEither,
+    errorsToEither,
   )
 import CompileTypes
   ( CompiledDefinition (..),
@@ -32,7 +32,6 @@ createEnvironment asts = do
   definitions <- mapM compile0ToDefinition asts
   compiledDefinitions <- mapM compileDefinition definitions
   errorsToEither (analyzeOverlappingPatterns $ map (\d -> (d.variables, d.pattern)) compiledDefinitions)
-  errOnOverlappingPatterns compiledDefinitions
   let predicatesConstructorPairs :: [([IndexedPredicate], [AstC2.Stmt Int])]
       predicatesConstructorPairs =
         map (\d -> (d.predicates, uncofree d.constructor)) compiledDefinitions

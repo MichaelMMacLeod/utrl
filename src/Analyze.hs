@@ -32,8 +32,7 @@ import Data.HashMap.Strict qualified as H
 import Data.List (sortBy)
 import Data.Maybe (catMaybes, fromJust, listToMaybe, mapMaybe)
 import Error
-  ( CompileResult,
-    badEllipsesCapturesErrorMessage,
+  ( badEllipsesCapturesErrorMessage,
     badEllipsesCountErrorMessage,
     definitionDoesNotStartWithDefErrorMessage,
     definitionHasWrongNumberOfTermsErrorMessage,
@@ -44,7 +43,6 @@ import Error
     variableUsedMoreThanOnceInPatternErrorMessage,
   )
 import ErrorTypes (ErrorMessage, Span, location)
-import GHC.Base (compareInt)
 import Predicate (IndexedPredicate (..), Predicate (..), applyPredicatesForOverlappingPatternAnalysis)
 import ReadTypes (SrcLocked)
 import Utils
@@ -262,7 +260,7 @@ analyzeVariablesUsedMoreThanOnceInPattern = report . cata findVarSpans
 -- | Finds errors relating to the definition of two patterns that could
 -- possibly match the same term.
 --
--- For example, both of these definitions could match '(A)'
+-- For example, both of these definitions could match '(A B)'
 --
 -- > (def (A $x .. B) C)
 -- >

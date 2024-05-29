@@ -8,8 +8,6 @@ module Compile
     compile1toC0,
     compileDefinition,
     compileC0ToC1,
-    findOverlappingPatterns,
-    errOnOverlappingPatterns,
     errorsToEither,
   )
 where
@@ -61,7 +59,6 @@ import Error
   )
 import ErrorTypes (ErrorMessage, Span)
 import GHC.Generics (Generic)
-import Predicate (IndexedPredicate (..))
 import ReadTypes (SrcLocked)
 import Utils (Between (..), Cata, Para, isDollarSignVar, popBetweenTail, popTrailingC1Index)
 import Var (Var)
@@ -148,48 +145,6 @@ p0VariableBindings = cata go . indexP0ByC0
         a' <- sequence a
         let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
         maybeToEither (genericErrorInfo VariableUsedMoreThanOnceInPattern) combined
-
--- errOnOverlappingPatterns :: [([IndexedPredicate], SrcLocked AstP0.Ast)] -> CompileResult ()
-errOnOverlappingPatterns :: [CompiledDefinition] -> CompileResult ()
-errOnOverlappingPatterns predicatesPatternPairs = Right ()
-
--- case findOverlappingPatterns predicatesPatternPairs of
---   Nothing -> Right ()
---   Just pair -> Left (genericErrorInfo (OverlappingPatterns {- pair -}))
-
-findOverlappingPatterns :: [([IndexedPredicate], SrcLocked AstP0.Ast)] -> Maybe (SrcLocked AstP0.Ast, SrcLocked AstP0.Ast)
-findOverlappingPatterns predicatesPatternPairs = Nothing -- TODO!
--- let removedEllipses =
---       zipWith
---         ( \i (preds, p0Ast) ->
---             (i, preds, p0Ast, removeEllipses p0Ast)
---         )
---         [0 ..]
---         predicatesPatternPairs
---     go ::
---       Cata
---         [ ( (Int, [IndexedPredicate], AstP0.Ast, Ast0.Ast),
---             (Int, [IndexedPredicate], AstP0.Ast, Ast0.Ast)
---           )
---         ]
---         (Maybe (AstP0.Ast, AstP0.Ast))
---     go = \case
---       Nil -> Nothing
---       Cons ((i, preds, astP0, _ast0), (i', _preds', astP0', ast0')) answer ->
---         case answer of
---           Just answer -> Just answer
---           Nothing ->
---             if i == i'
---               then Nothing
---               else
---                 if applyPredicates preds ast0'
---                   then Just (astP0, astP0')
---                   else Nothing
---     pairs = [(a, b) | a <- removedEllipses, b <- removedEllipses]
---  in cata go pairs
-
--- predicateListsOverlap :: [IndexedPredicate] -> [IndexedPredicate] -> Bool
--- predicateListsOverlap preds1 preds2 = _
 
 errorsToEither :: [ErrorMessage] -> CompileResult ()
 errorsToEither = \case
