@@ -21,6 +21,7 @@ import Analyze
     analyzePatternForMoreThan1EllipsisPerTerm,
     analyzeVariablesUsedMoreThanOnceInPattern,
     ruleDefinitionPredicates,
+    unreachableBecauseOfAnalysisStep,
   )
 import Ast0 qualified
 import Ast1 qualified
@@ -47,21 +48,23 @@ import Control.Monad.State.Strict
     withState,
   )
 import Data.Bifunctor qualified
-import Data.Either.Extra (maybeToEither)
 import Data.Functor.Foldable (ListF (..), Recursive (..))
 import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
 import Data.Hashable (Hashable)
 import Data.Maybe (fromJust)
-import Error
-  ( CompileResult,
-    ErrorType (..),
-    genericErrorInfo,
-  )
+import Error (CompileResult)
 import ErrorTypes (ErrorMessage, Span)
 import GHC.Generics (Generic)
 import ReadTypes (SrcLocked)
-import Utils (Between (..), Cata, Para, isDollarSignVar, popBetweenTail, popTrailingC1Index)
+import Utils
+  ( Between (..),
+    Cata,
+    Para,
+    isDollarSignVar,
+    popBetweenTail,
+    popTrailingC1Index,
+  )
 import Var (Var)
 
 compileDefinition :: Definition -> CompileResult CompiledDefinition
@@ -125,9 +128,7 @@ compile1toP0 = para go
                 Nothing ->
                   Right $ span C.:< AstP0.CompoundWithoutEllipsesF (map snd inputXsPairs)
                 Just (b, e, a) ->
-                  if any wasEllipses a
-                    then Left $ genericErrorInfo MoreThanOneEllipsisInSingleCompoundTermOfPattern
-                    else Right $ span C.:< AstP0.CompoundWithEllipsesF (map snd b) (snd e) (map snd a)
+                  Right $ span C.:< AstP0.CompoundWithEllipsesF (map snd b) (snd e) (map snd a)
       Ast1.EllipsesF x -> extract x
 
 p0VariableBindings :: SrcLocked AstP0.Ast -> CompileResult VariableBindings
@@ -140,16 +141,12 @@ p0VariableBindings = cata go . indexP0ByC0
           if isDollarSignVar s
             then H.singleton s (index, l)
             else H.empty
-      AstP0.CompoundWithoutEllipsesF xs -> do
-        xs' <- sequence xs
-        let combined = unionNonIntersectingHashMaps xs'
-        maybeToEither (genericErrorInfo VariableUsedMoreThanOnceInPattern) combined
+      AstP0.CompoundWithoutEllipsesF xs -> H.unions <$> sequence xs
       AstP0.CompoundWithEllipsesF b e a -> do
         b' <- sequence b
         e' <- e
         a' <- sequence a
-        let combined = unionNonIntersectingHashMaps $ e' : (b' ++ a')
-        maybeToEither (genericErrorInfo VariableUsedMoreThanOnceInPattern) combined
+        pure . H.unions $ e' : (b' ++ a')
 
 errorsToEither :: [ErrorMessage] -> CompileResult ()
 errorsToEither = \case
@@ -157,7 +154,7 @@ errorsToEither = \case
   errors -> Left errors
 
 compile0ToDefinition :: SrcLocked Ast0.Ast -> CompileResult Definition
-compile0ToDefinition (_ C.:< Ast0.SymbolF _) = Left (genericErrorInfo InvalidRuleDefinition)
+compile0ToDefinition (_ C.:< Ast0.SymbolF _) = unreachableBecauseOfAnalysisStep "analyzeDefinitionSyntax"
 compile0ToDefinition def@(_ C.:< Ast0.CompoundF xs) = do
   errorsToEither $ analyzeDefinitionSyntax def
   let pattern = xs !! 1
@@ -168,17 +165,6 @@ compile0ToDefinition def@(_ C.:< Ast0.CompoundF xs) = do
   patternP0 <- compile1toP0 pattern1
   variables <- p0VariableBindings patternP0
   pure Definition {variables, pattern, constructor}
-
--- Returns the union of all hashmaps in the input list, or Nothing if there
--- exists at least one key present in more than of the hashmaps.
-unionNonIntersectingHashMaps :: (Hashable k) => [H.HashMap k v] -> Maybe (H.HashMap k v)
-unionNonIntersectingHashMaps hs =
-  let keyCountBeforeUnion = sum $ map (length . H.keys) hs
-      union = H.unions hs
-      keyCountAfterUnion = length $ H.keys union
-   in if keyCountBeforeUnion == keyCountAfterUnion
-        then Just union
-        else Nothing
 
 compile0to1 :: SrcLocked Ast0.Ast -> SrcLocked Ast1.Ast
 compile0to1 = cata go
@@ -269,7 +255,7 @@ traverseC0ToC1 (l :< a) nextUnusedVar = case a of
   AstC0.EllipsesF x -> do
     C0ToC1Data ast nextUnusedVar remainingAssignment <- x nextUnusedVar
     case remainingAssignment of
-      Nothing -> Left (genericErrorInfo BadEllipsesCount {- too many -})
+      Nothing -> unreachableBecauseOfAnalysisStep "analyzeEllipsesCounts"
       Just (var, c0, Between {zeroPlus, lenMinus}) ->
         let (c0', c1) = popTrailingC1Index c0
             loopAst =
@@ -338,7 +324,7 @@ traverseC0ToC1 (l :< a) nextUnusedVar = case a of
           compatibleRemainingAssignment (Just t) (Just u) =
             if t == u
               then Right $ Just u
-              else Left (genericErrorInfo VarsNotCapturedUnderSameEllipsisInConstructor)
+              else unreachableBecauseOfAnalysisStep "analyzeEllipsesCaptures"
 
 data C1ToC2InputData = C1ToC2InputData
   { _c2iNextUnusedVar :: Var,

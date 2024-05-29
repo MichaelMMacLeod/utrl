@@ -15,7 +15,6 @@ data ErrorType
   | BadEllipsesCount
   | VarsNotCapturedUnderSameEllipsisInConstructor
   | EllipsisAppliedToSymbol
-  | InvalidRuleDefinition
   | MoreThanOneEllipsisInSingleCompoundTermOfPattern
   | VariableUsedMoreThanOnceInPattern
   | OverlappingPatterns

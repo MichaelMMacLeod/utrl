@@ -14,6 +14,7 @@ module Analyze
     ruleDefinitionPredicates,
     analyzeOverlappingPatterns,
     analyzeEllipsesAppliedToSymbols,
+    unreachableBecauseOfAnalysisStep,
   )
 where
 
@@ -421,6 +422,9 @@ ruleDefinitionPredicates vars pat = cata go (indexP0ByC0 pat)
             a' = concat a
             p = IndexedPredicate (LengthGreaterThanOrEqualTo $ length b + length a) index
          in p : (b' ++ e ++ a')
+
+unreachableBecauseOfAnalysisStep :: String -> a
+unreachableBecauseOfAnalysisStep step = error $ "analysis step '" <> step <> "' contract broken" 
 
 extractErrors :: Either [ErrorMessage] b -> [ErrorMessage]
 extractErrors = \case

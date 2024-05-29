@@ -7,7 +7,6 @@ module Error
     FileContents,
     OffendingLine (..),
     parseErrorMessage,
-    genericErrorInfo,
     badEllipsesCountErrorMessage,
     formatErrorMessage,
     errorMessages,
@@ -73,7 +72,6 @@ errorCode = \case
   BadEllipsesCount -> 2
   VarsNotCapturedUnderSameEllipsisInConstructor -> 3
   EllipsisAppliedToSymbol -> 4
-  InvalidRuleDefinition -> 5
   MoreThanOneEllipsisInSingleCompoundTermOfPattern -> 6
   VariableUsedMoreThanOnceInPattern -> 7
   OverlappingPatterns -> 8
@@ -216,16 +214,6 @@ formatAnnotationBlock (Annotation {span, annotation}) =
                     indentation = 3 + columnZeroIndexed
                  in T.unlines $ l : indentedOthers
    in T.unlines $ map T.stripEnd [line1, line2, line3]
-
-genericErrorInfo :: ErrorType -> [ErrorMessageInfo Int]
-genericErrorInfo errorType =
-  [ ErrorMessageInfo
-      { errorType = InvalidRuleDefinition,
-        message = "error message not yet implemented for " <> tshow errorType,
-        annotations = [],
-        help = Nothing
-      }
-  ]
 
 parseErrorMessage :: ParseErrorBundle Text Void -> ErrorMessage
 parseErrorMessage (ParseErrorBundle {bundleErrors}) =
