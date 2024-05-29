@@ -21,12 +21,13 @@ module Error
     moreThanOneEllipsisInSingleTermOfPatternErrorMessage,
     variableUsedMoreThanOnceInPatternErrorMessage,
     overlappingPatternsErrorMessage,
+    ellipsisAppliedToSymbolErrorMessage,
   )
 where
 
 import Data.Functor.Foldable (ListF (..), Recursive (..))
 import Data.HashMap.Strict qualified as H
-import Data.List (sortBy, intersperse)
+import Data.List (intersperse, sortBy)
 import Data.List.NonEmpty.Extra (toList)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Text (Text, pack)
@@ -71,7 +72,7 @@ errorCode = \case
   ParsingError -> 1
   BadEllipsesCount -> 2
   VarsNotCapturedUnderSameEllipsisInConstructor -> 3
-  EllipsisAppliedToSymbolInConstructor -> 4
+  EllipsisAppliedToSymbol -> 4
   InvalidRuleDefinition -> 5
   MoreThanOneEllipsisInSingleCompoundTermOfPattern -> 6
   VariableUsedMoreThanOnceInPattern -> 7
@@ -276,6 +277,22 @@ badEllipsesCountErrorMessage requiredCount actualCount patternVar constructorVar
     numDotDotWords = \case
       1 -> "1 ellipsis"
       n -> tshow n <> " ellipses"
+
+ellipsisAppliedToSymbolErrorMessage :: String -> Span Int -> ErrorMessage
+ellipsisAppliedToSymbolErrorMessage symbolName symbolSpan =
+  ErrorMessageInfo
+    { errorType = EllipsisAppliedToSymbol,
+      message = "ellipsis following symbol",
+      annotations =
+        [ Annotation
+            { span = symbolSpan,
+              annotation =
+                "this symbol doesn't begin with a dollar-sign ('$'),\n"
+                  <> "so it is not considered a variable"
+            }
+        ],
+      help = Just $ "perhaps you meant '$" <> pack symbolName <> "'?"
+    }
 
 badEllipsesCapturesErrorMessage ::
   String ->

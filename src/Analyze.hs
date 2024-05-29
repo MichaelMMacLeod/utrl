@@ -13,6 +13,7 @@ module Analyze
     analyzeVariablesUsedMoreThanOnceInPattern,
     ruleDefinitionPredicates,
     analyzeOverlappingPatterns,
+    analyzeEllipsesAppliedToSymbols,
   )
 where
 
@@ -36,6 +37,7 @@ import Error
     badEllipsesCountErrorMessage,
     definitionDoesNotStartWithDefErrorMessage,
     definitionHasWrongNumberOfTermsErrorMessage,
+    ellipsisAppliedToSymbolErrorMessage,
     expectedDefinitionGotSymbolErrorMessage,
     moreThanOneEllipsisInSingleTermOfPatternErrorMessage,
     noVariablesInEllipsisErrorMessage,
@@ -88,11 +90,8 @@ analyzeEllipsesCounts variableBindings ast = cata go ast 0
 -- from the number of terms matched to 'y', so it is not in general possible to create
 -- '(x y) ..'.
 analyzeEllipsesCaptures :: SrcLocked Ast1.Ast -> SrcLocked AstC0.Ast -> [ErrorMessage]
-analyzeEllipsesCaptures pattern = fixup . cata go
+analyzeEllipsesCaptures pattern = extractErrors . cata go
   where
-    fixup = \case
-      Left errors -> errors
-      Right _ -> []
     go :: Cata (SrcLocked AstC0.Ast) (Either [ErrorMessage] [Assignment])
     go (span :< ast) = case ast of
       AstC0.SymbolF _ -> Right []
@@ -153,13 +152,27 @@ data Assignment = Assignment
 
 type HasVariable = Bool
 
+-- | Finds errors of ellipses applied to symbols. We detect this case
+-- specifically so that a nice error message can be emitted suggesting
+-- to prefix the symbol with a dollar-sign as to make it a variable.
+analyzeEllipsesAppliedToSymbols :: SrcLocked Ast1.Ast -> [ErrorMessage]
+analyzeEllipsesAppliedToSymbols = para go
+  where
+    go :: Para (SrcLocked Ast1.Ast) [ErrorMessage]
+    go (_span :< ast) = case ast of
+      Ast1.SymbolF _s -> []
+      Ast1.CompoundF inputResultPairs -> concatMap snd inputResultPairs
+      Ast1.EllipsesF (inputSpan C.:< input, result) -> case input of
+        Ast1.SymbolF s
+          | not $ isDollarSignVar s ->
+              let error = ellipsisAppliedToSymbolErrorMessage s inputSpan
+               in error : result
+        _ -> result
+
 -- | Finds errors of ellipses capturing no variables
 analyzeEllipsesCapturesWithoutVariables :: SrcLocked Ast1.Ast -> [ErrorMessage]
-analyzeEllipsesCapturesWithoutVariables = fixup . para go
+analyzeEllipsesCapturesWithoutVariables = extractErrors . para go
   where
-    fixup = \case
-      Left errors -> errors
-      Right _ -> []
     -- 'para' is used here instead of 'cata' solely to get access to the
     -- source location (span) of the term containing no variables inside
     -- an ellipsis, should one be found to exist.
@@ -408,3 +421,8 @@ ruleDefinitionPredicates vars pat = cata go (indexP0ByC0 pat)
             a' = concat a
             p = IndexedPredicate (LengthGreaterThanOrEqualTo $ length b + length a) index
          in p : (b' ++ e ++ a')
+
+extractErrors :: Either [ErrorMessage] b -> [ErrorMessage]
+extractErrors = \case
+  Left errors -> errors
+  Right _ -> []

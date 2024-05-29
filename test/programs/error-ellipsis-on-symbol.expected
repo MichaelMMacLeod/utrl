@@ -1,0 +1,15 @@
+error[E004]: ellipsis following symbol
+./test/programs/error-ellipsis-on-symbol.defs:1:18
+   |
+ 1 | (def (copy (list x ..))
+   |                  ^ this symbol doesn't begin with a dollar-sign ('$'),
+   |                    so it is not considered a variable
+help: perhaps you meant '$x'?
+
+error[E004]: ellipsis following symbol
+./test/programs/error-ellipsis-on-symbol.defs:2:9
+   |
+ 2 |   (list x ..))
+   |         ^ this symbol doesn't begin with a dollar-sign ('$'),
+   |           so it is not considered a variable
+help: perhaps you meant '$x'?

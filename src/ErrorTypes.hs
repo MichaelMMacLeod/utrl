@@ -14,7 +14,7 @@ data ErrorType
   = ParsingError
   | BadEllipsesCount
   | VarsNotCapturedUnderSameEllipsisInConstructor
-  | EllipsisAppliedToSymbolInConstructor
+  | EllipsisAppliedToSymbol
   | InvalidRuleDefinition
   | MoreThanOneEllipsisInSingleCompoundTermOfPattern
   | VariableUsedMoreThanOnceInPattern

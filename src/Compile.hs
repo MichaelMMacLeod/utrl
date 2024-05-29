@@ -14,6 +14,7 @@ where
 
 import Analyze
   ( analyzeDefinitionSyntax,
+    analyzeEllipsesAppliedToSymbols,
     analyzeEllipsesCaptures,
     analyzeEllipsesCapturesWithoutVariables,
     analyzeEllipsesCounts,
@@ -82,6 +83,10 @@ compileConstructor :: SrcLocked Ast1.Ast -> Definition -> CompileResult (SrcLock
 compileConstructor pattern definition = do
   let ast1 = compile0to1 definition.constructor
       astC0 = compile1toC0 definition.variables ast1
+  errorsToEither
+    ( analyzeEllipsesAppliedToSymbols pattern
+        <> analyzeEllipsesAppliedToSymbols ast1
+    )
   (astC1, nextUnusedVar) <- compileC0ToC1 pattern definition.variables ast1 astC0
   let namedC2Stmts = compileC1ToC2 nextUnusedVar astC1
       offsetC2Stmts = resolveC2NamedLabels namedC2Stmts
@@ -102,9 +107,9 @@ compile1toP0 :: SrcLocked Ast1.Ast -> CompileResult (SrcLocked AstP0.Ast)
 compile1toP0 = para go
   where
     go :: Para (SrcLocked Ast1.Ast) (CompileResult (SrcLocked AstP0.Ast))
-    go = \case
-      l :< Ast1.SymbolF s -> Right $ l C.:< AstP0.SymbolF s
-      l :< Ast1.CompoundF inputXsPairs ->
+    go (span :< ast) = case ast of
+      Ast1.SymbolF s -> Right $ span C.:< AstP0.SymbolF s
+      Ast1.CompoundF inputXsPairs ->
         let input :: [SrcLocked Ast1.Ast]
             input = map fst inputXsPairs
             xs :: [CompileResult (SrcLocked AstP0.Ast)]
@@ -118,12 +123,12 @@ compile1toP0 = para go
               let inputXsPairsSplit = splitBeforeAndAfter wasEllipses inputXsPairs
               case inputXsPairsSplit of
                 Nothing ->
-                  Right $ l C.:< AstP0.CompoundWithoutEllipsesF (map snd inputXsPairs)
+                  Right $ span C.:< AstP0.CompoundWithoutEllipsesF (map snd inputXsPairs)
                 Just (b, e, a) ->
                   if any wasEllipses a
                     then Left $ genericErrorInfo MoreThanOneEllipsisInSingleCompoundTermOfPattern
-                    else Right $ l C.:< AstP0.CompoundWithEllipsesF (map snd b) (snd e) (map snd a)
-      l :< Ast1.EllipsesF x -> extract x
+                    else Right $ span C.:< AstP0.CompoundWithEllipsesF (map snd b) (snd e) (map snd a)
+      Ast1.EllipsesF x -> extract x
 
 p0VariableBindings :: SrcLocked AstP0.Ast -> CompileResult VariableBindings
 p0VariableBindings = cata go . indexP0ByC0
@@ -176,25 +181,30 @@ unionNonIntersectingHashMaps hs =
         else Nothing
 
 compile0to1 :: SrcLocked Ast0.Ast -> SrcLocked Ast1.Ast
-compile0to1 = cata $ \case
-  l :< Ast0.SymbolF s -> l C.:< Ast1.SymbolF s
-  l :< Ast0.CompoundF xs -> l C.:< Ast1.CompoundF (go xs)
-    where
-      go :: [SrcLocked Ast1.Ast] -> [SrcLocked Ast1.Ast]
-      go ((l1 C.:< y) : (l2 C.:< Ast1.SymbolF "..") : ys) = go (y' : ys)
+compile0to1 = cata go
+  where
+    go (span :< ast) = case ast of
+      Ast0.SymbolF s -> span C.:< Ast1.SymbolF s
+      Ast0.CompoundF xs -> span C.:< Ast1.CompoundF (nestEllipses xs)
         where
-          y' :: SrcLocked Ast1.Ast
-          y' = l2 C.:< Ast1.EllipsesF (l1 C.:< y)
-      go (y : ys) = y : go ys
-      go [] = []
+          nestEllipses :: [SrcLocked Ast1.Ast] -> [SrcLocked Ast1.Ast]
+          nestEllipses ((span1 C.:< y) : (span2 C.:< Ast1.SymbolF "..") : ys) = nestEllipses (y' : ys)
+            where
+              y' :: SrcLocked Ast1.Ast
+              y' = span2 C.:< Ast1.EllipsesF (span1 C.:< y)
+          nestEllipses (y : ys) = y : nestEllipses ys
+          nestEllipses [] = []
 
 compile1toC0 :: VariableBindings -> SrcLocked Ast1.Ast -> SrcLocked AstC0.Ast
-compile1toC0 vars = cata $ \case
-  l :< Ast1.SymbolF s -> case H.lookup s vars of
-    Nothing -> l C.:< AstC0.SymbolF s
-    Just (index, _l) -> l C.:< AstC0.VariableF index s
-  l :< Ast1.CompoundF xs -> l C.:< AstC0.CompoundF xs
-  l :< Ast1.EllipsesF x -> l C.:< AstC0.EllipsesF x
+compile1toC0 variableBindings = cata go
+  where
+    go :: Cata (SrcLocked Ast1.Ast) (SrcLocked AstC0.Ast)
+    go (span :< ast) = case ast of
+      Ast1.SymbolF s -> case H.lookup s variableBindings of
+        Nothing -> span C.:< AstC0.SymbolF s
+        Just (index, _varSpan) -> span C.:< AstC0.VariableF index s
+      Ast1.CompoundF xs -> span C.:< AstC0.CompoundF xs
+      Ast1.EllipsesF x -> span C.:< AstC0.EllipsesF x
 
 data C0ToC1Data = C0ToC1Data
   { ast :: !(SrcLocked AstC1.Ast),
@@ -420,10 +430,10 @@ compileC1ToC2 nextUnusedVar ast = evalState (para go ast) initialState
     -- We use 'para' instead of 'cata' because in the 'CompoundF' case, we
     -- need to be able to count the number of non-loops in the subterms.
     go :: Para (SrcLocked AstC1.Ast) (State C1ToC2InputData (SrcLocked (AstC2.Ast NamedLabel)))
-    go = \case
-      l :< AstC1.SymbolF s -> do
-        pure $ mapSrcLock l [AstC2.Push $ C2Expr.Symbol s]
-      l :< AstC1.CompoundF inputXsPairs -> do
+    go (span :< ast) = case ast of
+      AstC1.SymbolF s -> do
+        pure $ mapSrcLock span [AstC2.Push $ C2Expr.Symbol s]
+      AstC1.CompoundF inputXsPairs -> do
         lengthCountVar <- newLengthCountVar
         let resetLengthCountVarInX ::
               (SrcLocked AstC1.Ast, State C1ToC2InputData (SrcLocked [AstC2.Stmt NamedLabel])) ->
@@ -435,7 +445,7 @@ compileC1ToC2 nextUnusedVar ast = evalState (para go ast) initialState
             q1 = mapM snd inputXsPairs'
 
             q2 :: State C1ToC2InputData (SrcLocked [AstC2.Stmt NamedLabel])
-            q2 = cofreeConcat l <$> q1
+            q2 = cofreeConcat span <$> q1
         xs <- q2
         let inputs :: [SrcLocked AstC1.Ast]
             inputs = map fst inputXsPairs'
@@ -450,17 +460,17 @@ compileC1ToC2 nextUnusedVar ast = evalState (para go ast) initialState
             buildCompoundTerm =
               AstC2.Build $ C2Expr.Var lengthCountVar
         pure
-          ( mapSrcLock l [initLengthCountVar]
+          ( mapSrcLock span [initLengthCountVar]
               `cofreeAppend` xs
-              `cofreeAppend` mapSrcLock l [buildCompoundTerm]
+              `cofreeAppend` mapSrcLock span [buildCompoundTerm]
           )
-      l :< AstC1.AssignmentF (var, index, loc) inputXPair -> do
+      AstC1.AssignmentF (var, index, loc) inputXPair -> do
         x <- snd inputXPair
-        let assignmentStmts = indexAssignStmts l var loc index
+        let assignmentStmts = indexAssignStmts span var loc index
         pure $ assignmentStmts `cofreeAppend` x
-      l :< AstC1.CopyF v -> do
-        pure $ mapSrcLock l [AstC2.Push $ C2Expr.Var v]
-      l :< AstC1.LoopF var src start end inputXPair -> do
+      AstC1.CopyF v -> do
+        pure $ mapSrcLock span [AstC2.Push $ C2Expr.Var v]
+      AstC1.LoopF var src start end inputXPair -> do
         --        #0 = start              ; #0 is 'loopCounterVar'
         --        #1 = #src.length - end  ; #1 is 'loopEndVar'
         --        jump BOT
@@ -541,7 +551,7 @@ compileC1ToC2 nextUnusedVar ast = evalState (para go ast) initialState
                   }
             srcLockedPrologue =
               mapSrcLock
-                l
+                span
                 [ assignLoopCountVar,
                   assignLoopEndVar,
                   jumpBot,
@@ -549,7 +559,7 @@ compileC1ToC2 nextUnusedVar ast = evalState (para go ast) initialState
                 ]
             srcLockedEpilogue =
               mapSrcLock
-                l
+                span
                 [ incremeentLoopCountVar,
                   incremenetLengthCountVar,
                   jumpTop
