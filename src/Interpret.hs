@@ -16,6 +16,7 @@ import AstC2ExprVar (Var)
 import AstC2Jump qualified
 import AstC2Value (Value)
 import AstC2Value qualified as Value
+import Cfg (Cfg (..), mkCfg)
 import CompileTypes (mkStorage)
 import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as C
@@ -25,7 +26,6 @@ import Data.Functor.Foldable (Corecursive (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.List.Extra (snoc, (!?))
 import Data.Sequence (Seq (..), fromList, singleton)
-import Environment (Environment (..), createEnvironment)
 import Error (CompileResult)
 import InterpretMemory (Memory (Memory))
 import InterpretMemory qualified as Memory
@@ -43,19 +43,19 @@ compileAndRun ::
   [SrcLocked Ast0.Ast] ->
   CompileResult [Ast0.Ast]
 compileAndRun defAsts inputAsts = do
-  environment <- createEnvironment $ mkStorage defAsts
-  let results = map (run environment . uncofree) inputAsts
+  cfg <- mkCfg $ mkStorage defAsts
+  let results = map (run cfg . uncofree) inputAsts
   pure results
 
 compileWithoutRunning :: [SrcLocked Ast0.Ast] -> CompileResult ()
 compileWithoutRunning defAsts = do
-  _environment <- createEnvironment $ mkStorage defAsts
+  _cfg <- mkCfg $ mkStorage defAsts
   pure ()
 
-run :: Environment -> Ast0.Ast -> Ast0.Ast
-run environment = uncofree . runIndexed environment . index0
+run :: Cfg -> Ast0.Ast -> Ast0.Ast
+run cfg = uncofree . runIndexed cfg . index0
 
-runIndexed :: Environment -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
+runIndexed :: Cfg -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
 runIndexed e input =
   let results = iterateMaybe (applyOneDefinitionBFS e) input
    in --  in foldl' (\_ y -> trace (Display.display0 $ uncofree y) y) input results
@@ -65,10 +65,10 @@ runIndexed e input =
 -- last (trace (unlines $ map (Display.display0 . uncofree) results) results)
 
 -- | Recursively searches through 'ast' from the top to bottom in a breadth-first-search order,
--- applying and returning the result of the first matching definition from 'environment'. Returns
+-- applying and returning the result of the first matching definition from 'cfg'. Returns
 -- 'Nothing' if no such definition exists.
-applyOneDefinitionBFS :: Environment -> Cofree Ast0.AstF [Int] -> Maybe (Cofree Ast0.AstF [Int])
-applyOneDefinitionBFS environment ast = go $ singleton $ Matcher (_start environment) ast
+applyOneDefinitionBFS :: Cfg -> Cofree Ast0.AstF [Int] -> Maybe (Cofree Ast0.AstF [Int])
+applyOneDefinitionBFS cfg ast = go $ singleton $ Matcher cfg.start ast
   where
     go :: Seq Matcher -> Maybe (Cofree Ast0.AstF [Int])
     go matcherQueue =
@@ -76,7 +76,7 @@ applyOneDefinitionBFS environment ast = go $ singleton $ Matcher (_start environ
       case matcherQueue of
         Empty -> Nothing
         matcher :<| matcherQueue ->
-          case applyOneDefinition environment matcher of
+          case applyOneDefinition cfg matcher of
             Left subtermMatchers ->
               go $ matcherQueue <> subtermMatchers
             Right matcher ->
@@ -91,18 +91,18 @@ applyOneDefinitionBFS environment ast = go $ singleton $ Matcher (_start environ
 -- ast in the input matcher. Otherwise, if no definition applies to the ast. returns a list
 -- of matchers holding subterms of the ast so they may be later tried in a breadth-first
 -- search order.
-applyOneDefinition :: Environment -> Matcher -> Either (Seq Matcher) Matcher
-applyOneDefinition environment matcher =
-  let neighbors = lsuc environment._graph matcher._node
+applyOneDefinition :: Cfg -> Matcher -> Either (Seq Matcher) Matcher
+applyOneDefinition cfg matcher =
+  let neighbors = lsuc cfg.graph matcher._node
       maybeNextNode = fst <$> find (\(_, preds) -> applyPredicates preds (uncofree matcher._ast)) neighbors
    in case maybeNextNode of
         Just nextNode ->
-          let constructor = snd $ labNode' $ context environment._graph nextNode
+          let constructor = snd $ labNode' $ context cfg.graph nextNode
               nextAst = runConstructor constructor $ uncofree matcher._ast
-              nextNodeNeighbors = lsuc environment._graph nextNode
+              nextNodeNeighbors = lsuc cfg.graph nextNode
               newNode =
                 if null nextNodeNeighbors
-                  then _start environment
+                  then cfg.start
                   else nextNode
               currentIndex = case matcher._ast of
                 index C.:< _ -> index
@@ -111,7 +111,7 @@ applyOneDefinition environment matcher =
           Ast0.SymbolF _ -> []
           Ast0.CompoundF xs ->
             flip map xs $ \x ->
-              Matcher (_start environment) x
+              Matcher cfg.start x
 
 runConstructor :: AstC2.Ast Int -> Ast0.Ast -> Ast0.Ast
 runConstructor constructor input =

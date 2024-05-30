@@ -1,4 +1,4 @@
-module Environment (createEnvironment, Environment (..), dumpEnvironmentStmts) where
+module Cfg (mkCfg, Cfg (..), dumpCfgStmts) where
 
 import AstC2 qualified
 import Compile (requestConstructorC2, requestPredicates)
@@ -11,8 +11,8 @@ import Error (CompileResult)
 import Predicate (IndexedPredicate)
 import Utils (uncofree)
 
-createEnvironment :: Storage -> CompileResult Environment
-createEnvironment (Storage definitionStorages) = do
+mkCfg :: Storage -> CompileResult Cfg
+mkCfg (Storage definitionStorages) = do
   constructorDefStoragePairs <- mapM requestConstructorC2 definitionStorages
   let constructorC2s = map fst constructorDefStoragePairs
       definitionStorages' = map snd constructorDefStoragePairs
@@ -30,13 +30,13 @@ createEnvironment (Storage definitionStorages) = do
 
       gr :: Gr (AstC2.Ast Int) [IndexedPredicate]
       gr = mkGraph lnodes ledges
-  Right $ Environment gr start
+  Right $ Cfg gr start
 
-data Environment = Environment
-  { _graph :: !(Gr (AstC2.Ast Int) [IndexedPredicate]),
-    _start :: !Node
+data Cfg = Cfg
+  { graph :: !(Gr (AstC2.Ast Int) [IndexedPredicate]),
+    start :: !Node
   }
   deriving (Show, Eq)
 
-dumpEnvironmentStmts :: Environment -> String
-dumpEnvironmentStmts = intercalate "\n\n" . map (Display.displayC2 . snd) . labNodes . _graph
+dumpCfgStmts :: Cfg -> String
+dumpCfgStmts = intercalate "\n\n" . map (Display.displayC2 . snd) . labNodes . graph

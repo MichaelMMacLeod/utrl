@@ -1,5 +1,5 @@
 {
-  description = "Lean4 development environment";
+  description = "Haskell development environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

@@ -89,11 +89,11 @@ library
     , AstC2Jump
     , AstC2Value
     , AstP0
+    , Cfg
     , Compile
     , CompileTypes
     , Config
     , Display
-    , Environment
     , Error
     , ErrorTypes
     , Interpret
