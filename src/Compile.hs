@@ -1,14 +1,11 @@
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
-
 module Compile
-  ( compileConstructor,
-    compile0ToDefinition,
-    compile0to1,
+  ( compile0to1,
     compile1toP0,
     compile1toC0,
-    compileDefinition,
     compileC0ToC1,
     errorsToEither,
+    requestConstructorC2,
+    requestPredicates,
   )
 where
 
@@ -17,7 +14,6 @@ import Analyze
     analyzeEllipsesAppliedToSymbols,
     analyzeEllipsesCaptures,
     analyzeEllipsesCapturesWithoutVariables,
-    analyzeEllipsesCounts,
     analyzePatternForMoreThan1EllipsisPerTerm,
     analyzeVariableNotMatchedInPattern,
     analyzeVariablesUsedMoreThanOnceInPattern,
@@ -36,16 +32,20 @@ import AstC2Expr qualified as C2Expr
 import AstC2Jump qualified
 import AstP0 (indexP0ByC0)
 import AstP0 qualified
-import CompileTypes (CompiledDefinition (..), Definition (..), VariableBindings)
+import CompileTypes
+  ( CompileRequest,
+    DefinitionStorage (..),
+    VariableBindings,
+  )
 import Control.Comonad (Comonad (..))
 import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as C
 import Control.Comonad.Trans.Cofree (CofreeF (..))
 import Control.Monad.State.Strict
   ( State,
-    evalState,
     gets,
     modify,
+    runState,
     withState,
   )
 import Data.Bifunctor qualified
@@ -57,6 +57,7 @@ import Data.Maybe (fromJust)
 import Error (CompileResult)
 import ErrorTypes (ErrorMessage, Span)
 import GHC.Generics (Generic)
+import Predicate (IndexedPredicate)
 import ReadTypes (SrcLocked)
 import Utils
   ( Between (..),
@@ -68,35 +69,142 @@ import Utils
   )
 import Var (Var)
 
-compileDefinition :: Definition -> CompileResult CompiledDefinition
-compileDefinition definition = do
-  let pattern1 = compile0to1 definition.pattern
-      constructor1 = compile0to1 definition.constructor
-  errorsToEither $ analyzeVariableNotMatchedInPattern pattern1 constructor1
-  patternP0 <- compile1toP0 pattern1
-  variables <- p0VariableBindings patternP0
-  let predicates = ruleDefinitionPredicates definition.variables patternP0
-  constructor <- compileConstructor pattern1 definition
-  Right
-    CompiledDefinition
-      { variables,
-        predicates,
-        pattern = patternP0,
-        constructor
-      }
+requestConstructor0 :: CompileRequest (SrcLocked Ast0.Ast)
+requestConstructor0 ds =
+  case ds.constructor0 of
+    Just constructor0 -> Right (constructor0, ds)
+    Nothing -> do
+      errorsToEither $ analyzeDefinitionSyntax ds.definition
+      let (constructor0, pattern0) = case ds.definition of
+            _ C.:< Ast0.CompoundF [_defSymbol, pattern0, constructor0] ->
+              (constructor0, pattern0)
+            _ -> unreachableBecauseOfAnalysisStep "analyzeDefinitionSyntax"
+          ds' = ds {constructor0 = Just constructor0, pattern0 = Just pattern0}
+      Right (constructor0, ds')
 
-compileConstructor :: SrcLocked Ast1.Ast -> Definition -> CompileResult (SrcLocked (AstC2.Ast Int))
-compileConstructor pattern definition = do
-  let ast1 = compile0to1 definition.constructor
-      astC0 = compile1toC0 definition.variables ast1
-  errorsToEither
-    ( analyzeEllipsesAppliedToSymbols pattern
-        <> analyzeEllipsesAppliedToSymbols ast1
-    )
-  (astC1, nextUnusedVar) <- compileC0ToC1 pattern definition.variables ast1 astC0
-  let namedC2Stmts = compileC1ToC2 nextUnusedVar astC1
-      offsetC2Stmts = resolveC2NamedLabels namedC2Stmts
-  pure offsetC2Stmts
+requestPattern0 :: CompileRequest (SrcLocked Ast0.Ast)
+requestPattern0 ds =
+  case ds.pattern0 of
+    Just pattern0 -> Right (pattern0, ds)
+    Nothing -> do
+      (_constructor0, ds) <- requestConstructor0 ds
+      Right (fromJust ds.pattern0, ds)
+
+requestConstructor1 :: CompileRequest (SrcLocked Ast1.Ast)
+requestConstructor1 ds =
+  case ds.constructor1 of
+    Just constructor1 -> Right (constructor1, ds)
+    Nothing -> do
+      (constructor0, ds) <- requestConstructor0 ds
+      (pattern0, ds) <- requestPattern0 ds
+      let constructor1 = compile0to1 constructor0
+          pattern1 = compile0to1 pattern0
+          errors =
+            analyzePatternForMoreThan1EllipsisPerTerm pattern1
+              <> analyzeEllipsesAppliedToSymbols pattern1
+              <> analyzeEllipsesAppliedToSymbols constructor1
+              <> analyzeVariableNotMatchedInPattern pattern1 constructor1
+              <> analyzeEllipsesCapturesWithoutVariables pattern1
+              <> analyzeEllipsesCapturesWithoutVariables constructor1
+              <> analyzeVariablesUsedMoreThanOnceInPattern pattern1
+      errorsToEither errors
+      let ds' =
+            ds
+              { constructor1 = Just constructor1,
+                pattern1 = Just pattern1
+              }
+      Right (constructor1, ds')
+
+requestPattern1 :: CompileRequest (SrcLocked Ast1.Ast)
+requestPattern1 ds =
+  case ds.pattern1 of
+    Just pattern1 -> Right (pattern1, ds)
+    Nothing -> do
+      (_constructor1, ds) <- requestConstructor1 ds
+      Right (fromJust ds.pattern1, ds)
+
+requestPatternP0 :: CompileRequest (SrcLocked AstP0.Ast)
+requestPatternP0 ds =
+  case ds.patternP0 of
+    Just patternP0 -> Right (patternP0, ds)
+    Nothing -> do
+      (pattern1, ds) <- requestPattern1 ds
+      let patternP0 = compile1toP0 pattern1
+          ds' = ds {patternP0 = Just patternP0}
+      Right (patternP0, ds')
+
+requestVariableBindings :: CompileRequest VariableBindings
+requestVariableBindings ds =
+  case ds.variableBindings of
+    Just variableBindings -> Right (variableBindings, ds)
+    Nothing -> do
+      (patternP0, ds) <- requestPatternP0 ds
+      let variableBindings = p0VariableBindings patternP0
+          ds' = ds {variableBindings = Just variableBindings}
+      Right (variableBindings, ds')
+
+requestConstructorC0 :: CompileRequest (SrcLocked AstC0.Ast)
+requestConstructorC0 ds =
+  case ds.constructorC0 of
+    Just constructorC0 -> Right (constructorC0, ds)
+    Nothing -> do
+      ((constructor1, variableBindings), ds2) <- request2 requestConstructor1 requestVariableBindings ds
+      let constructorC0 = compile1toC0 variableBindings constructor1
+      (pattern1, ds3) <- requestPattern1 ds2
+      errorsToEither $ analyzeEllipsesCaptures pattern1 constructorC0
+      let ds' = ds3 {constructorC0 = Just constructorC0}
+      Right (constructorC0, ds')
+
+requestConstructorC1 :: CompileRequest (SrcLocked AstC1.Ast)
+requestConstructorC1 ds =
+  case ds.constructorC1 of
+    Just constructorC1 -> Right (constructorC1, ds)
+    Nothing -> do
+      (constructorC0, ds) <- requestConstructorC0 ds
+      let (constructorC1, nextUnusedVar) = compileC0ToC1 constructorC0
+          ds' = ds {constructorC1 = Just constructorC1, nextUnusedVar}
+      Right (constructorC1, ds')
+
+requestConstructorC2 :: CompileRequest (SrcLocked (AstC2.Ast Int))
+requestConstructorC2 ds =
+  case ds.constructorC2 of
+    Just constructorC2 -> Right (constructorC2, ds)
+    Nothing -> do
+      (constructorC1, ds) <- requestConstructorC1 ds
+      let (constructorC2WithNamedLabels, nextUnusedVar) =
+            compileC1ToC2 ds.nextUnusedVar constructorC1
+          constructorC2WithOffsetLabels =
+            resolveC2NamedLabels constructorC2WithNamedLabels
+          ds' =
+            ds
+              { constructorC2 = Just constructorC2WithOffsetLabels,
+                nextUnusedVar
+              }
+      Right (constructorC2WithOffsetLabels, ds')
+
+requestPredicates :: CompileRequest [IndexedPredicate]
+requestPredicates ds =
+  case ds.predicates of
+    Just predicates -> Right (predicates, ds)
+    Nothing -> do
+      (variableBindings, ds) <- requestVariableBindings ds
+      (patternP0, ds) <- requestPatternP0 ds
+      let predicates = ruleDefinitionPredicates variableBindings patternP0
+          ds' = ds {predicates = Just predicates} :: DefinitionStorage
+      Right (predicates, ds')
+
+-- Perform two requests at once, trying both even if one fails. This makes it
+-- a bit easier to report multiple errors to the user without just stopping
+-- after the first one.
+request2 :: CompileRequest a -> CompileRequest b -> CompileRequest (a, b)
+request2 req1 req2 ds =
+  case req1 ds of
+    Left errors1 -> case req2 ds of
+      Left errors2 -> Left (errors1 <> errors2)
+      Right _a2 -> Left errors1
+    Right (a1, ds) -> case req2 ds of
+      Left errors2 -> Left errors2
+      Right (a2, ds) -> Right ((a1, a2), ds)
 
 -- Finds the first element in a list that satisfies a predicate,
 -- returning the elements before it, itself, and the elements that
@@ -109,65 +217,40 @@ splitBeforeAndAfter p = go []
       | otherwise = go (x : acc) xs
     go _ [] = Nothing
 
-compile1toP0 :: SrcLocked Ast1.Ast -> CompileResult (SrcLocked AstP0.Ast)
+compile1toP0 :: SrcLocked Ast1.Ast -> SrcLocked AstP0.Ast
 compile1toP0 = para go
   where
-    go :: Para (SrcLocked Ast1.Ast) (CompileResult (SrcLocked AstP0.Ast))
+    go :: Para (SrcLocked Ast1.Ast) (SrcLocked AstP0.Ast)
     go (span :< ast) = case ast of
-      Ast1.SymbolF s -> Right $ span C.:< AstP0.SymbolF s
+      Ast1.SymbolF s -> span C.:< AstP0.SymbolF s
       Ast1.CompoundF inputXsPairs ->
-        let input :: [SrcLocked Ast1.Ast]
-            input = map fst inputXsPairs
-            xs :: [CompileResult (SrcLocked AstP0.Ast)]
-            xs = map snd inputXsPairs
-            wasEllipses :: (SrcLocked Ast1.Ast, SrcLocked AstP0.Ast) -> Bool
+        let wasEllipses :: (SrcLocked Ast1.Ast, SrcLocked AstP0.Ast) -> Bool
             wasEllipses = \case
               (_ C.:< Ast1.EllipsesF _, _) -> True
               _ -> False
-         in do
-              inputXsPairs <- zip input <$> sequence xs
-              let inputXsPairsSplit = splitBeforeAndAfter wasEllipses inputXsPairs
-              case inputXsPairsSplit of
-                Nothing ->
-                  Right $ span C.:< AstP0.CompoundWithoutEllipsesF (map snd inputXsPairs)
-                Just (b, e, a) ->
-                  Right $ span C.:< AstP0.CompoundWithEllipsesF (map snd b) (snd e) (map snd a)
+         in case splitBeforeAndAfter wasEllipses inputXsPairs of
+              Nothing ->
+                span C.:< AstP0.CompoundWithoutEllipsesF (map snd inputXsPairs)
+              Just (b, e, a) ->
+                span C.:< AstP0.CompoundWithEllipsesF (map snd b) (snd e) (map snd a)
       Ast1.EllipsesF x -> extract x
 
-p0VariableBindings :: SrcLocked AstP0.Ast -> CompileResult VariableBindings
+p0VariableBindings :: SrcLocked AstP0.Ast -> VariableBindings
 p0VariableBindings = cata go . indexP0ByC0
   where
-    go :: Cata (Cofree AstP0.AstF (Span Int, AstC0.Index)) (CompileResult VariableBindings)
+    go :: Cata (Cofree AstP0.AstF (Span Int, AstC0.Index)) VariableBindings
     go ((l, index) :< ast) = case ast of
       AstP0.SymbolF s ->
-        Right $
-          if isDollarSignVar s
-            then H.singleton s (index, l)
-            else H.empty
-      AstP0.CompoundWithoutEllipsesF xs -> H.unions <$> sequence xs
-      AstP0.CompoundWithEllipsesF b e a -> do
-        b' <- sequence b
-        e' <- e
-        a' <- sequence a
-        pure . H.unions $ e' : (b' ++ a')
+        if isDollarSignVar s
+          then H.singleton s (index, l)
+          else H.empty
+      AstP0.CompoundWithoutEllipsesF xs -> H.unions xs
+      AstP0.CompoundWithEllipsesF b e a -> H.unions $ e : (b <> a)
 
 errorsToEither :: [ErrorMessage] -> CompileResult ()
 errorsToEither = \case
   [] -> Right ()
   errors -> Left errors
-
-compile0ToDefinition :: SrcLocked Ast0.Ast -> CompileResult Definition
-compile0ToDefinition (_ C.:< Ast0.SymbolF _) = unreachableBecauseOfAnalysisStep "analyzeDefinitionSyntax"
-compile0ToDefinition def@(_ C.:< Ast0.CompoundF xs) = do
-  errorsToEither $ analyzeDefinitionSyntax def
-  let pattern = xs !! 1
-      constructor = xs !! 2
-      pattern1 = compile0to1 pattern
-  errorsToEither $ analyzeVariablesUsedMoreThanOnceInPattern pattern1
-  errorsToEither $ analyzePatternForMoreThan1EllipsisPerTerm pattern1
-  patternP0 <- compile1toP0 pattern1
-  variables <- p0VariableBindings patternP0
-  pure Definition {variables, pattern, constructor}
 
 compile0to1 :: SrcLocked Ast0.Ast -> SrcLocked Ast1.Ast
 compile0to1 = cata go
@@ -201,132 +284,115 @@ data C0ToC1Data = C0ToC1Data
     remainingAssignment :: Maybe (Var, AstC0.Index, Between)
   }
 
-compileC0ToC1 ::
-  SrcLocked Ast1.Ast ->
-  VariableBindings ->
-  SrcLocked Ast1.Ast ->
-  SrcLocked AstC0.Ast ->
-  CompileResult (SrcLocked AstC1.Ast, Var)
-compileC0ToC1 pattern variableBindings oldConstructorAst ast =
-  let captureErrors = analyzeEllipsesCaptures pattern ast
-      countErrors = analyzeEllipsesCounts variableBindings ast
-      noVarsErrorsPattern = analyzeEllipsesCapturesWithoutVariables pattern
-      noVarsErrorsConstructor = analyzeEllipsesCapturesWithoutVariables oldConstructorAst
-      errors =
-        captureErrors ++ countErrors ++ noVarsErrorsPattern ++ noVarsErrorsConstructor
-   in case errors of
-        [] -> do
-          d <- cata traverseC0ToC1 ast firstUnusedVar
-          case d.remainingAssignment of
-            Just _ -> error "unreachable due to analyzeEllipsesCounts"
-            Nothing -> Right (d.ast, d.nextUnusedVar)
-          where
-            firstUnusedVar :: Var
-            firstUnusedVar = 0
-        errors -> Left errors
+compileC0ToC1 :: SrcLocked AstC0.Ast -> (SrcLocked AstC1.Ast, Var)
+compileC0ToC1 ast =
+  let firstUnusedVar :: Var
+      firstUnusedVar = 0
+      d = cata traverseC0ToC1 ast firstUnusedVar
+   in case d.remainingAssignment of
+        Just _ -> error "unreachable due to analyzeEllipsesCounts"
+        Nothing -> (d.ast, d.nextUnusedVar)
 
-traverseC0ToC1 :: Cata (SrcLocked AstC0.Ast) (Var -> CompileResult C0ToC1Data)
+traverseC0ToC1 :: Cata (SrcLocked AstC0.Ast) (Var -> C0ToC1Data)
 traverseC0ToC1 (l :< a) nextUnusedVar = case a of
   AstC0.SymbolF s ->
-    Right $
-      C0ToC1Data
-        { ast = l C.:< AstC1.SymbolF s,
-          nextUnusedVar = nextUnusedVar,
-          remainingAssignment = Nothing
-        }
+    C0ToC1Data
+      { ast = l C.:< AstC1.SymbolF s,
+        nextUnusedVar = nextUnusedVar,
+        remainingAssignment = Nothing
+      }
   AstC0.VariableF i _s ->
     let (c0, c1) = popTrailingC1Index i
         copyAst = l C.:< AstC1.CopyF nextUnusedVar
-     in Right $
-          C0ToC1Data
-            { ast =
-                if null c1
-                  then copyAst
-                  else
-                    let location = if null c0 then TopLevel else NotTopLevel
-                     in l C.:< AstC1.AssignmentF (nextUnusedVar, c1, location) copyAst,
-              nextUnusedVar = nextUnusedVar + 1,
-              remainingAssignment =
-                if null c0
-                  then Nothing
-                  else Just $
-                    case popBetweenTail c0 of
-                      (c0', Just between) ->
-                        (nextUnusedVar, c0', between)
-                      _ -> error "unreachable"
-            }
-  AstC0.EllipsesF x -> do
-    C0ToC1Data ast nextUnusedVar remainingAssignment <- x nextUnusedVar
-    case remainingAssignment of
-      Nothing -> unreachableBecauseOfAnalysisStep "analyzeEllipsesCounts"
-      Just (var, c0, Between {zeroPlus, lenMinus}) ->
-        let (c0', c1) = popTrailingC1Index c0
-            loopAst =
-              l
-                C.:< AstC1.LoopF
-                  { AstC1.varF = var,
-                    AstC1.srcF = nextUnusedVar + 1,
-                    AstC1.startF = zeroPlus,
-                    AstC1.endF = lenMinus,
-                    AstC1.bodyF = ast
+     in C0ToC1Data
+          { ast =
+              if null c1
+                then copyAst
+                else
+                  let location = if null c0 then TopLevel else NotTopLevel
+                   in l C.:< AstC1.AssignmentF (nextUnusedVar, c1, location) copyAst,
+            nextUnusedVar = nextUnusedVar + 1,
+            remainingAssignment =
+              if null c0
+                then Nothing
+                else Just $
+                  case popBetweenTail c0 of
+                    (c0', Just between) ->
+                      (nextUnusedVar, c0', between)
+                    _ -> error "unreachable"
+          }
+  AstC0.EllipsesF x ->
+    let C0ToC1Data ast nextUnusedVar' remainingAssignment = x nextUnusedVar
+     in case remainingAssignment of
+          Nothing -> unreachableBecauseOfAnalysisStep "analyzeEllipsesCounts"
+          Just (var, c0, Between {zeroPlus, lenMinus}) ->
+            let (c0', c1) = popTrailingC1Index c0
+                loopAst =
+                  l
+                    C.:< AstC1.LoopF
+                      { AstC1.varF = var,
+                        AstC1.srcF = nextUnusedVar' + 1,
+                        AstC1.startF = zeroPlus,
+                        AstC1.endF = lenMinus,
+                        AstC1.bodyF = ast
+                      }
+             in C0ToC1Data
+                  { ast =
+                      if null c1
+                        then
+                          if null c0'
+                            then l C.:< AstC1.AssignmentF (nextUnusedVar' + 1, c1, TopLevel) loopAst
+                            else loopAst
+                        else
+                          let location = if null c0' then TopLevel else NotTopLevel
+                           in l C.:< AstC1.AssignmentF (nextUnusedVar' + 1, c1, location) loopAst,
+                    nextUnusedVar = nextUnusedVar' + 2,
+                    remainingAssignment =
+                      if null c0'
+                        then Nothing
+                        else Just $
+                          case popBetweenTail c0' of
+                            (c0', Just between) ->
+                              (nextUnusedVar + 1, c0', between)
+                            _ -> error "unreachable"
                   }
-         in Right $
-              C0ToC1Data
-                { ast =
-                    if null c1
-                      then
-                        if null c0'
-                          then l C.:< AstC1.AssignmentF (nextUnusedVar + 1, c1, TopLevel) loopAst
-                          else loopAst
-                      else
-                        let location = if null c0' then TopLevel else NotTopLevel
-                         in l C.:< AstC1.AssignmentF (nextUnusedVar + 1, c1, location) loopAst,
-                  nextUnusedVar = nextUnusedVar + 2,
-                  remainingAssignment =
-                    if null c0'
-                      then Nothing
-                      else Just $
-                        case popBetweenTail c0' of
-                          (c0', Just between) ->
-                            (nextUnusedVar + 1, c0', between)
-                          _ -> error "unreachable"
-                }
   AstC0.CompoundF xs -> cata mergeXS xs nextUnusedVar
     where
-      mergeXS :: Cata [Var -> CompileResult C0ToC1Data] (Var -> CompileResult C0ToC1Data)
+      mergeXS :: Cata [Var -> C0ToC1Data] (Var -> C0ToC1Data)
       mergeXS Nil nextUnusedVar =
-        Right $
-          C0ToC1Data
-            { ast = l C.:< AstC1.CompoundF [],
-              nextUnusedVar = nextUnusedVar,
-              remainingAssignment = Nothing
-            }
-      mergeXS (Cons x xs) nextUnusedVar = do
-        C0ToC1Data astX nextUnusedVar remainingAssignmentX <- x nextUnusedVar
-        C0ToC1Data ast nextUnusedVar remainingAssignment <- xs nextUnusedVar
-        remainingAssignment <- compatibleRemainingAssignment remainingAssignmentX remainingAssignment
-        let compoundInternals =
-              case ast of
+        C0ToC1Data
+          { ast = l C.:< AstC1.CompoundF [],
+            nextUnusedVar,
+            remainingAssignment = Nothing
+          }
+      mergeXS (Cons x xs) nextUnusedVar =
+        let xData = x nextUnusedVar
+            xsData = xs xData.nextUnusedVar
+            remainingAssignment'' =
+              compatibleRemainingAssignment
+                xData.remainingAssignment
+                xsData.remainingAssignment
+            compoundInternals =
+              case xsData.ast of
                 _l C.:< AstC1.CompoundF compoundInternals -> compoundInternals
                 _ -> error "unreachable"
-        let ast = l C.:< AstC1.CompoundF (astX : compoundInternals)
-        pure $
-          C0ToC1Data
-            { ast = ast,
-              nextUnusedVar = nextUnusedVar,
-              remainingAssignment = remainingAssignment
-            }
+            ast' = l C.:< AstC1.CompoundF (xData.ast : compoundInternals)
+         in C0ToC1Data
+              { ast = ast',
+                nextUnusedVar = xsData.nextUnusedVar,
+                remainingAssignment = remainingAssignment''
+              }
         where
           compatibleRemainingAssignment ::
             Maybe (Var, AstC0.Index, Between) ->
             Maybe (Var, AstC0.Index, Between) ->
-            CompileResult (Maybe (Var, AstC0.Index, Between))
-          compatibleRemainingAssignment Nothing Nothing = Right Nothing
-          compatibleRemainingAssignment (Just t) Nothing = Right $ Just t
-          compatibleRemainingAssignment Nothing (Just t) = Right $ Just t
+            Maybe (Var, AstC0.Index, Between)
+          compatibleRemainingAssignment Nothing Nothing = Nothing
+          compatibleRemainingAssignment (Just t) Nothing = Just t
+          compatibleRemainingAssignment Nothing (Just t) = Just t
           compatibleRemainingAssignment (Just t) (Just u) =
             if t == u
-              then Right $ Just u
+              then Just u
               else unreachableBecauseOfAnalysisStep "analyzeEllipsesCaptures"
 
 data C1ToC2InputData = C1ToC2InputData
@@ -402,9 +468,17 @@ cofreeAppend (l1 C.:< Cons x xs) cf = l1 C.:< Cons x (cofreeAppend xs cf)
 cofreeConcat :: b -> [Cofree (ListF a) b] -> Cofree (ListF a) b
 cofreeConcat l = foldr cofreeAppend (l C.:< Nil)
 
-compileC1ToC2 :: Var -> SrcLocked AstC1.Ast -> SrcLocked (AstC2.Ast NamedLabel)
-compileC1ToC2 nextUnusedVar ast = evalState (para go ast) initialState
+compileC1ToC2 :: Var -> SrcLocked AstC1.Ast -> (SrcLocked (AstC2.Ast NamedLabel), Var)
+compileC1ToC2 nextUnusedVar ast = runStateAndReturnResults (para go ast) initialState
   where
+    runStateAndReturnResults ::
+      State C1ToC2InputData (SrcLocked (AstC2.Ast NamedLabel)) ->
+      C1ToC2InputData ->
+      (SrcLocked (AstC2.Ast NamedLabel), Var)
+    runStateAndReturnResults state initialState =
+      let (astC2, c1ToC2InputData) = runState state initialState
+       in (astC2, c1ToC2InputData._c2iNextUnusedVar)
+
     initialState :: C1ToC2InputData
     initialState =
       C1ToC2InputData
@@ -420,8 +494,7 @@ compileC1ToC2 nextUnusedVar ast = evalState (para go ast) initialState
     -- need to be able to count the number of non-loops in the subterms.
     go :: Para (SrcLocked AstC1.Ast) (State C1ToC2InputData (SrcLocked (AstC2.Ast NamedLabel)))
     go (span :< ast) = case ast of
-      AstC1.SymbolF s -> do
-        pure $ mapSrcLock span [AstC2.Push $ C2Expr.Symbol s]
+      AstC1.SymbolF s -> pure $ mapSrcLock span [AstC2.Push $ C2Expr.Symbol s]
       AstC1.CompoundF inputXsPairs -> do
         lengthCountVar <- newLengthCountVar
         let resetLengthCountVarInX ::
@@ -457,8 +530,7 @@ compileC1ToC2 nextUnusedVar ast = evalState (para go ast) initialState
         x <- snd inputXPair
         let assignmentStmts = indexAssignStmts span var loc index
         pure $ assignmentStmts `cofreeAppend` x
-      AstC1.CopyF v -> do
-        pure $ mapSrcLock span [AstC2.Push $ C2Expr.Var v]
+      AstC1.CopyF v -> pure $ mapSrcLock span [AstC2.Push $ C2Expr.Var v]
       AstC1.LoopF var src start end inputXPair -> do
         --        #0 = start              ; #0 is 'loopCounterVar'
         --        #1 = #src.length - end  ; #1 is 'loopEndVar'

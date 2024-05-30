@@ -46,6 +46,9 @@
             drv
           ];
 
+          enableLibraryProfiling = true;
+          enableExecutableProfiling = true;
+
           nativeBuildInputs = with haskellPackages; [
             jq
             cabal-install

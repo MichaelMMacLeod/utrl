@@ -130,7 +130,7 @@ analyzeEllipsesCounts variableBindings ast = cata go ast 0
 -- | Finds errors relating to the use of variables under the same ellipsis that
 -- weren't matched under the same ellipsis.
 --
--- For example, '(def ((x ..) (y ..)) ((x y) ..))' is detected as erroneous here. The
+-- For example, '(def (($x ..) ($y ..)) (($x $y) ..))' is detected as erroneous here. The
 -- problem with this example is that the number of terms matched to 'x' may be different
 -- from the number of terms matched to 'y', so it is not in general possible to create
 -- '(x y) ..'.

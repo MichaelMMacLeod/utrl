@@ -16,6 +16,7 @@ import AstC2ExprVar (Var)
 import AstC2Jump qualified
 import AstC2Value (Value)
 import AstC2Value qualified as Value
+import CompileTypes (mkStorage)
 import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as C
 import Control.Comonad.Trans.Cofree (CofreeF ((:<)), ComonadCofree (unwrap))
@@ -41,14 +42,14 @@ compileAndRun ::
   [SrcLocked Ast0.Ast] ->
   [SrcLocked Ast0.Ast] ->
   CompileResult [Ast0.Ast]
-compileAndRun ruleAsts inputAsts = do
-  environment <- createEnvironment ruleAsts
+compileAndRun defAsts inputAsts = do
+  environment <- createEnvironment $ mkStorage defAsts
   let results = map (run environment . uncofree) inputAsts
   pure results
 
 compileWithoutRunning :: [SrcLocked Ast0.Ast] -> CompileResult ()
 compileWithoutRunning defAsts = do
-  _environment <- createEnvironment defAsts
+  _environment <- createEnvironment $ mkStorage defAsts
   pure ()
 
 run :: Environment -> Ast0.Ast -> Ast0.Ast
