@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module Compile
   ( compile0to1,
     compile1toP0,

@@ -1,7 +1,7 @@
 module Environment (createEnvironment, Environment (..), dumpEnvironmentStmts) where
 
 import AstC2 qualified
-import Compile (requestConstructorC2, requestPredicates, errorsToEither)
+import Compile (requestConstructorC2, requestPredicates)
 import CompileTypes (Storage (..))
 import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)
@@ -10,7 +10,6 @@ import Display qualified
 import Error (CompileResult)
 import Predicate (IndexedPredicate)
 import Utils (uncofree)
-import Analyze (analyzeOverlappingPatterns)
 
 createEnvironment :: Storage -> CompileResult Environment
 createEnvironment (Storage definitionStorages) = do
@@ -18,7 +17,6 @@ createEnvironment (Storage definitionStorages) = do
   let constructorC2s = map fst constructorDefStoragePairs
       definitionStorages' = map snd constructorDefStoragePairs
   predicatesDefStoragePairs <- mapM requestPredicates definitionStorages'
-  -- errorsToEither $ analyzeOverlappingPatterns
   let predicates = map fst predicatesDefStoragePairs
 
       start :: Int
