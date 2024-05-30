@@ -93,24 +93,21 @@ applyOneDefinitionBFS environment ast = go $ singleton $ Matcher (_start environ
 -- search order.
 applyOneDefinition :: Environment -> Matcher -> Either (Seq Matcher) Matcher
 applyOneDefinition environment matcher =
-  let currentNode = _node matcher
-      currentAst = _ast matcher
-      currentIndex = case currentAst of
-        index C.:< _ -> index
-      graph = _graph environment
-      neighbors = lsuc graph currentNode
-      maybeNextNode = fst <$> find (\(_, preds) -> applyPredicates preds (uncofree currentAst)) neighbors
+  let neighbors = lsuc environment._graph matcher._node
+      maybeNextNode = fst <$> find (\(_, preds) -> applyPredicates preds (uncofree matcher._ast)) neighbors
    in case maybeNextNode of
         Just nextNode ->
-          let constructor = snd $ labNode' $ context graph nextNode
-              nextAst = runConstructor constructor $ uncofree currentAst
-              nextNodeNeighbors = lsuc graph nextNode
+          let constructor = snd $ labNode' $ context environment._graph nextNode
+              nextAst = runConstructor constructor $ uncofree matcher._ast
+              nextNodeNeighbors = lsuc environment._graph nextNode
               newNode =
                 if null nextNodeNeighbors
                   then _start environment
                   else nextNode
+              currentIndex = case matcher._ast of
+                index C.:< _ -> index
            in Right $ Matcher newNode (index0WithBase currentIndex nextAst)
-        Nothing -> Left $ fromList $ case unwrap currentAst of
+        Nothing -> Left $ fromList $ case unwrap matcher._ast of
           Ast0.SymbolF _ -> []
           Ast0.CompoundF xs ->
             flip map xs $ \x ->
