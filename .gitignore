@@ -6,3 +6,4 @@ dist-newstyle/
 *.o
 app/Main
 *.tix
+cabal.project.local*
