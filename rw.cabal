@@ -136,6 +136,9 @@ executable rw
     , language
     , extensions
 
+  ghc-options:
+    -rtsopts
+
   -- .hs or .lhs file containing the Main module.
   main-is: Main.hs
 
