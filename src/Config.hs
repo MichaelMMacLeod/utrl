@@ -42,7 +42,7 @@ import Read qualified
 import ReadTypes (SrcLocked)
 
 data Config = Config
-  { rules :: FilePath,
+  { definitions :: FilePath,
     input :: Maybe FilePath
   }
 
@@ -59,7 +59,7 @@ opts =
 
 parseConfig :: Parser Config
 parseConfig = do
-  rules <-
+  definitions <-
     strOption
       ( long "defs"
           <> help "File containing definitions to compile"
@@ -75,7 +75,7 @@ parseConfig = do
               )
             <> metavar "FILE"
         )
-  pure Config {rules, input}
+  pure Config {definitions, input}
 
 readFileUtf8 :: FilePath -> IO Text
 readFileUtf8 filePath = withFile filePath ReadMode $ \h -> do
@@ -105,13 +105,13 @@ run (defsFile, defsText) input = do
 
 runConfig :: Config -> IO (Either ByteString ByteString)
 runConfig c = do
-  defsText <- readFileUtf8 c.rules
+  defsText <- readFileUtf8 c.definitions
   input <- case c.input of
     Nothing -> pure Nothing
     Just inputFile -> do
       inputText <- readFileUtf8 inputFile
       pure $ Just (inputFile, inputText)
-  pure $ run (c.rules, defsText) input
+  pure $ run (c.definitions, defsText) input
 
 runConfigAndPrintOutput :: Config -> IO ()
 runConfigAndPrintOutput c = do
