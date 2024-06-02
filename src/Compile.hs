@@ -101,15 +101,17 @@ requestConstructor1 ds =
       (pattern0, ds) <- requestPattern0 ds
       let constructor1 = compile0to1 constructor0
           pattern1 = compile0to1 pattern0
-          errors =
-            analyzePatternForMoreThan1EllipsisPerTerm pattern1
-              <> analyzeEllipsesAppliedToSymbols pattern1
-              <> analyzeEllipsesAppliedToSymbols constructor1
-              <> analyzeVariableNotMatchedInPattern pattern1 constructor1
-              <> analyzeEllipsesCapturesWithoutVariables pattern1
-              <> analyzeEllipsesCapturesWithoutVariables constructor1
-              <> analyzeVariablesUsedMoreThanOnceInPattern pattern1
-      errorsToEither errors
+      errorsToEither
+        ( analyzePatternForMoreThan1EllipsisPerTerm pattern1
+            <> analyzeEllipsesAppliedToSymbols pattern1
+            <> analyzeEllipsesAppliedToSymbols constructor1
+            <> analyzeVariableNotMatchedInPattern pattern1 constructor1
+        )
+      errorsToEither
+        ( analyzeEllipsesCapturesWithoutVariables pattern1
+            <> analyzeEllipsesCapturesWithoutVariables constructor1
+            <> analyzeVariablesUsedMoreThanOnceInPattern pattern1
+        )
       let ds' =
             ds
               { constructor1 = Just constructor1,
