@@ -1,5 +1,9 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+
 module Ast0 (Ast (..), AstF (..)) where
 
+import Control.DeepSeq (NFData)
 import Data.Functor.Foldable
   ( Base,
     Corecursive,
@@ -7,11 +11,12 @@ import Data.Functor.Foldable
     embed,
     project,
   )
+import GHC.Generics (Generic)
 
 data Ast
   = Symbol String
   | Compound [Ast]
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic, NFData)
 
 data AstF r
   = SymbolF String

@@ -21,7 +21,7 @@ import CompileTypes (mkStorage)
 import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Cofree qualified as C
 import Control.Comonad.Trans.Cofree (CofreeF ((:<)), ComonadCofree (unwrap))
-import Data.Foldable (find)
+import Data.Foldable (find, Foldable (foldl'))
 import Data.Functor.Foldable (Corecursive (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.List.Extra (snoc, (!?))
@@ -32,6 +32,9 @@ import InterpretMemory qualified as Memory
 import Predicate (applyPredicates)
 import ReadTypes (SrcLocked)
 import Utils (Cata, iterateMaybe, setNth, uncofree)
+import Debug.Trace (trace)
+import qualified Display
+import Control.DeepSeq (deepseq)
 
 data Matcher = Matcher
   { _node :: !Node,
@@ -58,9 +61,9 @@ run cfg = uncofree . runIndexed cfg . index0
 runIndexed :: Cfg -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
 runIndexed e input =
   let results = iterateMaybe (applyOneDefinitionBFS e) input
-   in --  in foldl' (\_ y -> trace (Display.display0 $ uncofree y) y) input results
+    in foldl' (\_ y -> deepseq (uncofree y :: Ast0.Ast) y) input results
 
-      last results
+      -- last results
 
 -- last (trace (unlines $ map (Display.display0 . uncofree) results) results)
 

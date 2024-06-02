@@ -126,6 +126,7 @@ library
     , array
     , optparse-applicative
     , bytestring
+    , deepseq
 
   -- Directories containing source files.
   hs-source-dirs: src
