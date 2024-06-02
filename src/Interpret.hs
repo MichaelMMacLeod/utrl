@@ -18,13 +18,11 @@ import AstC2Value (Value)
 import AstC2Value qualified as Value
 import Cfg (Cfg (..), mkCfg)
 import CompileTypes (mkStorage)
-import Control.Comonad.Cofree (Cofree)
-import Control.Comonad.Cofree qualified as C
-import Control.Comonad.Trans.Cofree (CofreeF ((:<)), ComonadCofree (unwrap))
-import Data.Foldable (find, Foldable (foldl'))
-import Data.Functor.Foldable (Corecursive (..), cata)
+import Control.DeepSeq (deepseq)
+import Data.Foldable (Foldable (foldl'), find)
+import Data.Functor.Foldable (cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
-import Data.List.Extra (snoc, (!?))
+import Data.List.Extra ((!?))
 import Data.Sequence (Seq (..), fromList, singleton)
 import Error (CompileResult)
 import InterpretMemory (Memory (Memory))
@@ -32,13 +30,11 @@ import InterpretMemory qualified as Memory
 import Predicate (applyPredicates)
 import ReadTypes (SrcLocked)
 import Utils (Cata, iterateMaybe, setNth, uncofree)
-import Debug.Trace (trace)
-import qualified Display
-import Control.DeepSeq (deepseq)
 
 data Matcher = Matcher
   { _node :: !Node,
-    _ast :: !(Cofree Ast0.AstF [Int])
+    _ast :: !Ast0.Ast,
+    index :: [Int]
   }
 
 compileAndRun ::
@@ -56,24 +52,21 @@ compileWithoutRunning defAsts = do
   pure ()
 
 run :: Cfg -> Ast0.Ast -> Ast0.Ast
-run cfg = uncofree . runIndexed cfg . index0
-
-runIndexed :: Cfg -> Cofree Ast0.AstF [Int] -> Cofree Ast0.AstF [Int]
-runIndexed e input =
+run e input =
   let results = iterateMaybe (applyOneDefinitionBFS e) input
-    in foldl' (\_ y -> deepseq (uncofree y :: Ast0.Ast) y) input results
+   in foldl' (\_ y -> deepseq y y) input results
 
-      -- last results
+-- last results
 
 -- last (trace (unlines $ map (Display.display0 . uncofree) results) results)
 
 -- | Recursively searches through 'ast' from the top to bottom in a breadth-first-search order,
 -- applying and returning the result of the first matching definition from 'cfg'. Returns
 -- 'Nothing' if no such definition exists.
-applyOneDefinitionBFS :: Cfg -> Cofree Ast0.AstF [Int] -> Maybe (Cofree Ast0.AstF [Int])
-applyOneDefinitionBFS cfg ast = go $ singleton $ Matcher cfg.start ast
+applyOneDefinitionBFS :: Cfg -> Ast0.Ast -> Maybe Ast0.Ast
+applyOneDefinitionBFS cfg ast = go $ singleton $ Matcher cfg.start ast []
   where
-    go :: Seq Matcher -> Maybe (Cofree Ast0.AstF [Int])
+    go :: Seq Matcher -> Maybe Ast0.Ast
     go matcherQueue =
       -- trace (show $ fmap ((\x@(i :< _) -> (i, Display.display0 $ uncofree x)) . _ast) matcherQueue) $
       case matcherQueue of
@@ -84,11 +77,8 @@ applyOneDefinitionBFS cfg ast = go $ singleton $ Matcher cfg.start ast
               go $ matcherQueue <> subtermMatchers
             Right matcher ->
               case _ast matcher of
-                index C.:< replacementAst ->
-                  -- trace (show index ++ " " ++ Display.display0 (uncofree ast)) $
-                  Just $
-                    index0 $
-                      replace0At (uncofree ast) index (uncofree (index C.:< replacementAst))
+                replacementAst ->
+                  Just $ replace0At ast matcher.index replacementAst
 
 -- | Returns a single matcher holding the result of successfully applying a definition to the
 -- ast in the input matcher. Otherwise, if no definition applies to the ast. returns a list
@@ -97,24 +87,25 @@ applyOneDefinitionBFS cfg ast = go $ singleton $ Matcher cfg.start ast
 applyOneDefinition :: Cfg -> Matcher -> Either (Seq Matcher) Matcher
 applyOneDefinition cfg matcher =
   let neighbors = lsuc cfg.graph matcher._node
-      maybeNextNode = fst <$> find (\(_, preds) -> applyPredicates preds (uncofree matcher._ast)) neighbors
+      maybeNextNode = fst <$> find (\(_, preds) -> applyPredicates preds matcher._ast) neighbors
    in case maybeNextNode of
         Just nextNode ->
           let constructor = snd $ labNode' $ context cfg.graph nextNode
-              nextAst = runConstructor constructor $ uncofree matcher._ast
+              nextAst = runConstructor constructor matcher._ast
               nextNodeNeighbors = lsuc cfg.graph nextNode
               newNode =
                 if null nextNodeNeighbors
                   then cfg.start
                   else nextNode
-              currentIndex = case matcher._ast of
-                index C.:< _ -> index
-           in Right $ Matcher newNode (index0WithBase currentIndex nextAst)
-        Nothing -> Left $ fromList $ case unwrap matcher._ast of
-          Ast0.SymbolF _ -> []
-          Ast0.CompoundF xs ->
-            flip map xs $ \x ->
-              Matcher cfg.start x
+              currentIndex = matcher.index
+           in Right $ Matcher newNode nextAst currentIndex
+        Nothing -> Left $ fromList $ case matcher._ast of
+          Ast0.Symbol _ -> []
+          Ast0.Compound xs ->
+            zipWith m1 [0 ..] xs
+            where
+              m1 :: Int -> Ast0.Ast -> Matcher
+              m1 i x = Matcher cfg.start x $ matcher.index <> [i]
 
 runConstructor :: AstC2.Ast Int -> Ast0.Ast -> Ast0.Ast
 runConstructor constructor input =
@@ -216,27 +207,14 @@ evalExpr m = cata go
 evalVar :: Memory -> Var -> Value
 evalVar m v = Memory.variables m !! v
 
-index0 :: Ast0.Ast -> Cofree Ast0.AstF [Int]
-index0 ast = cata go ast []
-  where
-    go :: Ast0.AstF ([Int] -> Cofree Ast0.AstF [Int]) -> [Int] -> Cofree Ast0.AstF [Int]
-    go (Ast0.SymbolF s) index = index C.:< Ast0.SymbolF s
-    go (Ast0.CompoundF xs) index = index C.:< Ast0.CompoundF (zipWith (. snoc index) xs [0 ..])
-
-index0WithBase :: [Int] -> Ast0.Ast -> Cofree Ast0.AstF [Int]
-index0WithBase base ast = cata go ast base
-  where
-    go :: Ast0.AstF ([Int] -> Cofree Ast0.AstF [Int]) -> [Int] -> Cofree Ast0.AstF [Int]
-    go (Ast0.SymbolF s) index = index C.:< Ast0.SymbolF s
-    go (Ast0.CompoundF xs) index = index C.:< Ast0.CompoundF (zipWith (. snoc index) xs [0 ..])
-
--- Replaces the node at 'index' with 'replacement' in 'ast'. No
--- replacement is made if 'index' is invalid.
 replace0At :: Ast0.Ast -> [Int] -> Ast0.Ast -> Ast0.Ast
-replace0At ast index replacement = cata go (index0 ast)
-  where
-    go :: CofreeF Ast0.AstF [Int] Ast0.Ast -> Ast0.Ast
-    go (i :< t) =
-      if i == index
-        then replacement
-        else embed t
+replace0At ast index replacement = case index of
+  [] -> replacement
+  n : index -> case ast of
+    Ast0.Symbol _ -> error "replace0At: out of bounds index"
+    Ast0.Compound xs -> Ast0.Compound xs'
+      where
+        xs' = before ++ [x] ++ after
+        before = take n xs
+        after = drop (n + 1) xs
+        x = replace0At (xs !! n) index replacement
