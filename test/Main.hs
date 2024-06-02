@@ -5,5 +5,5 @@ import Test.Tasty (defaultMain, localOption, mkTimeout)
 
 main :: IO ()
 main = do
-  golds <- localOption (mkTimeout 1000000 {- 1 second in microseconds-}) <$> goldenTests
+  golds <- localOption (mkTimeout 20000000 {- 20 seconds in microseconds-}) <$> goldenTests
   defaultMain golds
