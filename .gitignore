@@ -7,3 +7,4 @@ dist-newstyle/
 app/Main
 *.tix
 cabal.project.local*
+*.prof
