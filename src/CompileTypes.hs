@@ -4,6 +4,9 @@ module CompileTypes
     DefinitionStorage (..),
     mkStorage,
     CompileRequest,
+    Stage (..),
+    mkRequest,
+    fromSuccess,
   )
 where
 
@@ -14,8 +17,7 @@ import AstC1 qualified
 import AstC2 qualified
 import AstP0 qualified
 import Data.HashMap.Strict qualified as H
-import Error (CompileResult)
-import ErrorTypes (Span)
+import ErrorTypes (ErrorMessage, Span)
 import Predicate (IndexedPredicate)
 import ReadTypes (SrcLocked)
 import Var (Var)
@@ -27,36 +29,54 @@ mkDefinitionStorage :: SrcLocked Ast0.Ast -> DefinitionStorage
 mkDefinitionStorage definition =
   DefinitionStorage
     { definition,
-      constructor0 = Nothing,
-      constructor1 = Nothing,
-      constructorC0 = Nothing,
-      constructorC1 = Nothing,
-      constructorC2 = Nothing,
-      pattern0 = Nothing,
-      pattern1 = Nothing,
-      patternP0 = Nothing,
-      predicates = Nothing,
-      variableBindings = Nothing,
+      constructor0 = Pending,
+      constructor1 = Pending,
+      constructorC0 = Pending,
+      constructorC1 = Pending,
+      constructorC2 = Pending,
+      pattern0 = Pending,
+      pattern1 = Pending,
+      patternP0 = Pending,
+      predicates = Pending,
+      variableBindings = Pending,
       nextUnusedVar = 0
     }
 
 newtype Storage = Storage [DefinitionStorage]
 
+data Stage s = Pending | Success s | Fail [ErrorMessage]
+
 data DefinitionStorage = DefinitionStorage
   { definition :: SrcLocked Ast0.Ast,
-    constructor0 :: Maybe (SrcLocked Ast0.Ast),
-    constructor1 :: Maybe (SrcLocked Ast1.Ast),
-    constructorC0 :: Maybe (SrcLocked AstC0.Ast),
-    constructorC1 :: Maybe (SrcLocked AstC1.Ast),
-    constructorC2 :: Maybe (SrcLocked (AstC2.Ast Int)),
-    pattern0 :: Maybe (SrcLocked Ast0.Ast),
-    pattern1 :: Maybe (SrcLocked Ast1.Ast),
-    patternP0 :: Maybe (SrcLocked AstP0.Ast),
-    predicates :: Maybe [IndexedPredicate],
-    variableBindings :: Maybe VariableBindings,
+    constructor0 :: Stage (SrcLocked Ast0.Ast),
+    constructor1 :: Stage (SrcLocked Ast1.Ast),
+    constructorC0 :: Stage (SrcLocked AstC0.Ast),
+    constructorC1 :: Stage (SrcLocked AstC1.Ast),
+    constructorC2 :: Stage (SrcLocked (AstC2.Ast Int)),
+    pattern0 :: Stage (SrcLocked Ast0.Ast),
+    pattern1 :: Stage (SrcLocked Ast1.Ast),
+    patternP0 :: Stage (SrcLocked AstP0.Ast),
+    predicates :: Stage [IndexedPredicate],
+    variableBindings :: Stage VariableBindings,
     nextUnusedVar :: Var
   }
 
-type CompileRequest a = DefinitionStorage -> CompileResult (a, DefinitionStorage)
+mkRequest ::
+  DefinitionStorage ->
+  (DefinitionStorage -> Stage s) ->
+  Either ([ErrorMessage], DefinitionStorage) (s, DefinitionStorage) ->
+  Either ([ErrorMessage], DefinitionStorage) (s, DefinitionStorage)
+mkRequest d getStage result = case getStage d of
+  Fail f -> Left (f, d)
+  Success s -> Right (s, d)
+  Pending -> result
+
+type CompileRequest s = DefinitionStorage -> Either ([ErrorMessage], DefinitionStorage) (s, DefinitionStorage)
+
+fromSuccess :: Stage s -> s
+fromSuccess stage = case stage of
+  Success s -> s
+  Pending -> error "fromScucess: Pending"
+  Fail _ -> error "fromSuccess: Fail"
 
 type VariableBindings = H.HashMap String (AstC0.Index, Span Int)

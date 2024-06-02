@@ -1,25 +1,75 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module Cfg (mkCfg, Cfg (..), dumpCfgStmts) where
 
+import Analyze (analyzeOverlappingPatterns)
 import AstC2 qualified
-import Compile (requestConstructorC2, requestPredicates)
-import CompileTypes (Storage (..))
+import Compile
+  ( errorsToEither,
+    requestConstructorC2,
+    requestPatternP0,
+    requestPredicates,
+    requestVariableBindings,
+  )
+import CompileTypes (CompileRequest, DefinitionStorage, Storage (..))
+import Data.Either.Extra (mapLeft)
+import Data.Functor.Base (ListF (..))
+import Data.Functor.Foldable (Recursive (..))
 import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)
 import Data.List (intercalate)
 import Display qualified
-import Error (CompileResult)
+import ErrorTypes (ErrorMessage)
 import Predicate (IndexedPredicate)
-import Utils (uncofree)
+import Utils (Cata, uncofree)
 
-mkCfg :: Storage -> CompileResult Cfg
+-- It's tempting to use 'mapM' to evaluate each compileRequest against every definition,
+-- but due to the way that 'mapM' works with 'Either', this would short-circuit at the
+-- first error, resulting in only errors from the first erroneous definition beind displayed.
+-- We want to see all the errors, so we can't just use 'mapM' here.
+gatherAllErrorsOrResults ::
+  CompileRequest s ->
+  [DefinitionStorage] ->
+  Either
+    [ErrorMessage]
+    [(s, DefinitionStorage)]
+gatherAllErrorsOrResults compileRequest definitionStorages =
+  cata go $ map (mapLeft fst . compileRequest) definitionStorages
+  where
+    go ::
+      Cata
+        [ Either
+            [ErrorMessage]
+            (s, DefinitionStorage)
+        ]
+        (Either [ErrorMessage] [(s, DefinitionStorage)])
+    go = \case
+      Nil -> Right []
+      Cons lr result ->
+        case lr of
+          Left errors -> case result of
+            Left resultErrors ->
+              Left $ errors <> resultErrors
+            Right _ ->
+              Left errors
+          Right successDsPair -> case result of
+            Left errors ->
+              Left errors
+            Right successDsPairs ->
+              Right $ successDsPair : successDsPairs
+
+mkCfg :: Storage -> Either [ErrorMessage] Cfg
 mkCfg (Storage definitionStorages) = do
-  constructorDefStoragePairs <- mapM requestConstructorC2 definitionStorages
-  let constructorC2s = map fst constructorDefStoragePairs
-      definitionStorages' = map snd constructorDefStoragePairs
-  predicatesDefStoragePairs <- mapM requestPredicates definitionStorages'
-  let predicates = map fst predicatesDefStoragePairs
-
-      start :: Int
+  (constructorC2s, definitionStorages) <-
+    unzip <$> gatherAllErrorsOrResults requestConstructorC2 definitionStorages
+  (predicates, definitionStorages) <-
+    unzip <$> gatherAllErrorsOrResults requestPredicates definitionStorages
+  (p0s, definitionStorages) <-
+    unzip <$> gatherAllErrorsOrResults requestPatternP0 definitionStorages
+  (variableBindings, _definitionStorages) <-
+    unzip <$> gatherAllErrorsOrResults requestVariableBindings definitionStorages
+  errorsToEither . analyzeOverlappingPatterns $ zip variableBindings p0s
+  let start :: Int
       start = 0
 
       lnodes :: [(Int, AstC2.Ast Int)]

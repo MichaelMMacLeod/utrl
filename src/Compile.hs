@@ -8,6 +8,8 @@ module Compile
     errorsToEither,
     requestConstructorC2,
     requestPredicates,
+    requestPatternP0,
+    requestVariableBindings,
   )
 where
 
@@ -16,6 +18,7 @@ import Analyze
     analyzeEllipsesAppliedToSymbols,
     analyzeEllipsesCaptures,
     analyzeEllipsesCapturesWithoutVariables,
+    analyzeEllipsesCounts,
     analyzePatternForMoreThan1EllipsisPerTerm,
     analyzeVariableNotMatchedInPattern,
     analyzeVariablesUsedMoreThanOnceInPattern,
@@ -37,7 +40,10 @@ import AstP0 qualified
 import CompileTypes
   ( CompileRequest,
     DefinitionStorage (..),
+    Stage (..),
     VariableBindings,
+    fromSuccess,
+    mkRequest,
   )
 import Control.Comonad (Comonad (..))
 import Control.Comonad.Cofree (Cofree)
@@ -72,143 +78,113 @@ import Utils
 import Var (Var)
 
 requestConstructor0 :: CompileRequest (SrcLocked Ast0.Ast)
-requestConstructor0 ds =
-  case ds.constructor0 of
-    Just constructor0 -> Right (constructor0, ds)
-    Nothing -> do
-      errorsToEither $ analyzeDefinitionSyntax ds.definition
-      let (constructor0, pattern0) = case ds.definition of
-            _ C.:< Ast0.CompoundF [_defSymbol, pattern0, constructor0] ->
-              (constructor0, pattern0)
-            _ -> unreachableBecauseOfAnalysisStep "analyzeDefinitionSyntax"
-          ds' = ds {constructor0 = Just constructor0, pattern0 = Just pattern0}
-      Right (constructor0, ds')
+requestConstructor0 ds = mkRequest ds constructor0 $ do
+  analysis ds $ analyzeDefinitionSyntax ds.definition
+  let (constructor0, pattern0) = case ds.definition of
+        _ C.:< Ast0.CompoundF [_defSymbol, pattern0, constructor0] ->
+          (constructor0, pattern0)
+        _ -> unreachableBecauseOfAnalysisStep "analyzeDefinitionSyntax"
+      ds' =
+        ds
+          { constructor0 = Success constructor0,
+            pattern0 = Success pattern0
+          }
+  Right (constructor0, ds')
 
 requestPattern0 :: CompileRequest (SrcLocked Ast0.Ast)
-requestPattern0 ds =
-  case ds.pattern0 of
-    Just pattern0 -> Right (pattern0, ds)
-    Nothing -> do
-      (_constructor0, ds) <- requestConstructor0 ds
-      Right (fromJust ds.pattern0, ds)
+requestPattern0 ds = mkRequest ds pattern0 $ do
+  (_constructor0, ds) <- requestConstructor0 ds
+  Right (fromSuccess ds.pattern0, ds)
 
 requestConstructor1 :: CompileRequest (SrcLocked Ast1.Ast)
-requestConstructor1 ds =
-  case ds.constructor1 of
-    Just constructor1 -> Right (constructor1, ds)
-    Nothing -> do
-      (constructor0, ds) <- requestConstructor0 ds
-      (pattern0, ds) <- requestPattern0 ds
-      let constructor1 = compile0to1 constructor0
-          pattern1 = compile0to1 pattern0
-      errorsToEither
-        ( analyzePatternForMoreThan1EllipsisPerTerm pattern1
-            <> analyzeEllipsesAppliedToSymbols pattern1
-            <> analyzeEllipsesAppliedToSymbols constructor1
-            <> analyzeVariableNotMatchedInPattern pattern1 constructor1
-        )
-      errorsToEither
-        ( analyzeEllipsesCapturesWithoutVariables pattern1
-            <> analyzeEllipsesCapturesWithoutVariables constructor1
-            <> analyzeVariablesUsedMoreThanOnceInPattern pattern1
-        )
-      let ds' =
-            ds
-              { constructor1 = Just constructor1,
-                pattern1 = Just pattern1
-              }
-      Right (constructor1, ds')
+requestConstructor1 ds = mkRequest ds constructor1 $ do
+  (constructor0, ds) <- requestConstructor0 ds
+  (pattern0, ds) <- requestPattern0 ds
+  let constructor1 = compile0to1 constructor0
+      pattern1 = compile0to1 pattern0
+  analysis
+    ds
+    ( analyzePatternForMoreThan1EllipsisPerTerm pattern1
+        <> analyzeEllipsesAppliedToSymbols pattern1
+        <> analyzeEllipsesAppliedToSymbols constructor1
+        <> analyzeVariableNotMatchedInPattern pattern1 constructor1
+    )
+  analysis
+    ds
+    ( analyzeEllipsesCapturesWithoutVariables pattern1
+        <> analyzeEllipsesCapturesWithoutVariables constructor1
+        <> analyzeVariablesUsedMoreThanOnceInPattern pattern1
+    )
+  let ds' =
+        ds
+          { constructor1 = Success constructor1,
+            pattern1 = Success pattern1
+          }
+  Right (constructor1, ds')
 
 requestPattern1 :: CompileRequest (SrcLocked Ast1.Ast)
-requestPattern1 ds =
-  case ds.pattern1 of
-    Just pattern1 -> Right (pattern1, ds)
-    Nothing -> do
-      (_constructor1, ds) <- requestConstructor1 ds
-      Right (fromJust ds.pattern1, ds)
+requestPattern1 ds = mkRequest ds pattern1 $ do
+  (_constructor1, ds) <- requestConstructor1 ds
+  Right (fromSuccess ds.pattern1, ds)
 
 requestPatternP0 :: CompileRequest (SrcLocked AstP0.Ast)
-requestPatternP0 ds =
-  case ds.patternP0 of
-    Just patternP0 -> Right (patternP0, ds)
-    Nothing -> do
-      (pattern1, ds) <- requestPattern1 ds
-      let patternP0 = compile1toP0 pattern1
-          ds' = ds {patternP0 = Just patternP0}
-      Right (patternP0, ds')
+requestPatternP0 ds = mkRequest ds patternP0 $ do
+  (pattern1, ds) <- requestPattern1 ds
+  let patternP0 = compile1toP0 pattern1
+      ds' = ds {patternP0 = Success patternP0}
+  Right (patternP0, ds')
 
 requestVariableBindings :: CompileRequest VariableBindings
-requestVariableBindings ds =
-  case ds.variableBindings of
-    Just variableBindings -> Right (variableBindings, ds)
-    Nothing -> do
-      (patternP0, ds) <- requestPatternP0 ds
-      let variableBindings = p0VariableBindings patternP0
-          ds' = ds {variableBindings = Just variableBindings}
-      Right (variableBindings, ds')
+requestVariableBindings ds = mkRequest ds variableBindings $ do
+  (patternP0, ds) <- requestPatternP0 ds
+  let variableBindings = p0VariableBindings patternP0
+      ds' = ds {variableBindings = Success variableBindings}
+  Right (variableBindings, ds')
 
 requestConstructorC0 :: CompileRequest (SrcLocked AstC0.Ast)
-requestConstructorC0 ds =
-  case ds.constructorC0 of
-    Just constructorC0 -> Right (constructorC0, ds)
-    Nothing -> do
-      ((constructor1, variableBindings), ds2) <- request2 requestConstructor1 requestVariableBindings ds
-      let constructorC0 = compile1toC0 variableBindings constructor1
-      (pattern1, ds3) <- requestPattern1 ds2
-      errorsToEither $ analyzeEllipsesCaptures pattern1 constructorC0
-      let ds' = ds3 {constructorC0 = Just constructorC0}
-      Right (constructorC0, ds')
+requestConstructorC0 ds = mkRequest ds constructorC0 $ do
+  (constructor1, ds) <- requestConstructor1 ds
+  (variableBindings, ds) <- requestVariableBindings ds
+  let constructorC0 = compile1toC0 variableBindings constructor1
+  (pattern1, ds) <- requestPattern1 ds
+  analysis ds $ analyzeEllipsesCounts variableBindings constructorC0
+  analysis ds $ analyzeEllipsesCaptures pattern1 constructorC0
+  let ds' = ds {constructorC0 = Success constructorC0}
+  Right (constructorC0, ds')
 
 requestConstructorC1 :: CompileRequest (SrcLocked AstC1.Ast)
-requestConstructorC1 ds =
-  case ds.constructorC1 of
-    Just constructorC1 -> Right (constructorC1, ds)
-    Nothing -> do
-      (constructorC0, ds) <- requestConstructorC0 ds
-      let (constructorC1, nextUnusedVar) = compileC0ToC1 constructorC0
-          ds' = ds {constructorC1 = Just constructorC1, nextUnusedVar}
-      Right (constructorC1, ds')
+requestConstructorC1 ds = mkRequest ds constructorC1 $ do
+  (constructorC0, ds) <- requestConstructorC0 ds
+  let (constructorC1, nextUnusedVar) = compileC0ToC1 constructorC0
+      ds' = ds {constructorC1 = Success constructorC1, nextUnusedVar}
+  Right (constructorC1, ds')
 
 requestConstructorC2 :: CompileRequest (SrcLocked (AstC2.Ast Int))
-requestConstructorC2 ds =
-  case ds.constructorC2 of
-    Just constructorC2 -> Right (constructorC2, ds)
-    Nothing -> do
-      (constructorC1, ds) <- requestConstructorC1 ds
-      let (constructorC2WithNamedLabels, nextUnusedVar) =
-            compileC1ToC2 ds.nextUnusedVar constructorC1
-          constructorC2WithOffsetLabels =
-            resolveC2NamedLabels constructorC2WithNamedLabels
-          ds' =
-            ds
-              { constructorC2 = Just constructorC2WithOffsetLabels,
-                nextUnusedVar
-              }
-      Right (constructorC2WithOffsetLabels, ds')
+requestConstructorC2 ds = mkRequest ds constructorC2 $ do
+  (constructorC1, ds) <- requestConstructorC1 ds
+  let (constructorC2WithNamedLabels, nextUnusedVar) =
+        compileC1ToC2 ds.nextUnusedVar constructorC1
+      constructorC2WithOffsetLabels =
+        resolveC2NamedLabels constructorC2WithNamedLabels
+      ds' =
+        ds
+          { constructorC2 = Success constructorC2WithOffsetLabels,
+            nextUnusedVar
+          }
+  Right (constructorC2WithOffsetLabels, ds')
 
 requestPredicates :: CompileRequest [IndexedPredicate]
-requestPredicates ds =
-  case ds.predicates of
-    Just predicates -> Right (predicates, ds)
-    Nothing -> do
-      (variableBindings, ds) <- requestVariableBindings ds
-      (patternP0, ds) <- requestPatternP0 ds
-      let predicates = ruleDefinitionPredicates variableBindings patternP0
-          ds' = ds {predicates = Just predicates} :: DefinitionStorage
-      Right (predicates, ds')
+requestPredicates ds = mkRequest ds predicates $ do
+  (variableBindings, ds) <- requestVariableBindings ds
+  (patternP0, ds) <- requestPatternP0 ds
+  let predicates = ruleDefinitionPredicates variableBindings patternP0
+      ds' = ds {predicates = Success predicates} :: DefinitionStorage
+  Right (predicates, ds')
 
--- Perform two requests at once, trying both even if one fails. This makes it
--- a bit easier to report multiple errors to the user without just stopping
--- after the first one.
-request2 :: CompileRequest a -> CompileRequest b -> CompileRequest (a, b)
-request2 req1 req2 ds =
-  case req1 ds of
-    Left errors1 -> case req2 ds of
-      Left errors2 -> Left (errors1 <> errors2)
-      Right _a2 -> Left errors1
-    Right (a1, ds) -> case req2 ds of
-      Left errors2 -> Left errors2
-      Right (a2, ds) -> Right ((a1, a2), ds)
+analysis :: DefinitionStorage -> [ErrorMessage] -> Either ([ErrorMessage], DefinitionStorage) ()
+analysis ds = \case
+  [] -> Right ()
+  errors -> Left (errors, ds)
 
 -- Finds the first element in a list that satisfies a predicate,
 -- returning the elements before it, itself, and the elements that
