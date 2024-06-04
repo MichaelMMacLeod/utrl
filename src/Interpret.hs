@@ -37,32 +37,6 @@ type Reduction = [Ast0.Ast]
 interpret :: Cfg -> Ast0.Ast -> Reduction
 interpret cfg = iterateMaybe (force . applyOneDefinitionBFS cfg)
 
--- compileAndRun ::
---   [SrcLocked Ast0.Ast] ->
---   Ast0.Ast ->
---   CompileResult Reduction
--- compileAndRun defAsts inputAst = do
---   cfg <- mkCfg $ mkStorage defAsts
---   pure $ run cfg inputAst
-
--- let computationSteps :: [Ast0.Ast]
---     computationSteps =
-
---     foldFunc =
---       if config.trace
---         then \y -> do
---           hPut stdout . encodeUtf8 $ Display.display0Text y
---           pure y
---         else \y -> deepseq y (pure y)
--- foldM (const foldFunc) input computationSteps
-
--- let results = iterateMaybe (applyOneDefinitionBFS e) input
---  in foldl' (\_ y -> deepseq y y) input results
-
--- last results
-
--- last (trace (unlines $ map (Display.display0 . uncofree) results) results)
-
 -- | Recursively searches through 'ast' from the top to bottom in a breadth-first-search order,
 -- applying and returning the result of the first matching definition from 'cfg'. Returns
 -- 'Nothing' if no such definition exists.
@@ -71,7 +45,6 @@ applyOneDefinitionBFS cfg ast = go $ singleton $ Matcher cfg.start ast []
   where
     go :: Seq Matcher -> Maybe Ast0.Ast
     go matcherQueue =
-      -- trace (show $ fmap ((\x@(i :< _) -> (i, Display.display0 $ uncofree x)) . _ast) matcherQueue) $
       case matcherQueue of
         Empty -> Nothing
         matcher :<| matcherQueue ->
@@ -133,44 +106,42 @@ runConstructor constructor input =
           Memory.instruction = instruction,
           Memory.dataStack = dataStack,
           Memory.variables = variables
-        } ->
-          -- trace (Display.display0 _input) $
-          do
-            i <- program !? instruction
-            pure $ case i of
-              AstC2.Assign (AstC2Assign.Assign lhs rhs) ->
-                m
-                  { Memory.variables =
-                      setNth
-                        lhs
-                        (\var -> error $ "$" ++ show var ++ " is undefined")
-                        (evalExpr m rhs)
-                        variables,
-                    Memory.instruction = instruction + 1
-                  }
-              AstC2.Push expr ->
-                let expr' = evalExpr m expr
-                    astExpr = Value.expectAst expr'
-                 in m
-                      { Memory.dataStack = astExpr : dataStack,
-                        Memory.instruction = instruction + 1
-                      }
-              AstC2.Build termCount ->
-                let termCount' = evalExpr m termCount
-                    termCountNat = Value.expectNat termCount'
-                    newTerm = Ast0.Compound . reverse $ take termCountNat dataStack
-                 in m
-                      { Memory.dataStack = newTerm : drop termCountNat dataStack,
-                        Memory.instruction = instruction + 1
-                      }
-              AstC2.Jump (AstC2Jump.Jump target condition) ->
-                let condition' = evalExpr m condition
-                    conditionBool = Value.expectBool condition'
-                    nextInstruction =
-                      if conditionBool
-                        then target
-                        else instruction + 1
-                 in m {Memory.instruction = nextInstruction}
+        } -> do
+          i <- program !? instruction
+          pure $ case i of
+            AstC2.Assign (AstC2Assign.Assign lhs rhs) ->
+              m
+                { Memory.variables =
+                    setNth
+                      lhs
+                      (\var -> error $ "$" ++ show var ++ " is undefined")
+                      (evalExpr m rhs)
+                      variables,
+                  Memory.instruction = instruction + 1
+                }
+            AstC2.Push expr ->
+              let expr' = evalExpr m expr
+                  astExpr = Value.expectAst expr'
+               in m
+                    { Memory.dataStack = astExpr : dataStack,
+                      Memory.instruction = instruction + 1
+                    }
+            AstC2.Build termCount ->
+              let termCount' = evalExpr m termCount
+                  termCountNat = Value.expectNat termCount'
+                  newTerm = Ast0.Compound . reverse $ take termCountNat dataStack
+               in m
+                    { Memory.dataStack = newTerm : drop termCountNat dataStack,
+                      Memory.instruction = instruction + 1
+                    }
+            AstC2.Jump (AstC2Jump.Jump target condition) ->
+              let condition' = evalExpr m condition
+                  conditionBool = Value.expectBool condition'
+                  nextInstruction =
+                    if conditionBool
+                      then target
+                      else instruction + 1
+               in m {Memory.instruction = nextInstruction}
 
 evalExpr :: Memory -> Expr -> Value
 evalExpr m = cata go
