@@ -2,15 +2,18 @@
 
 module Config
   ( Config (..),
-    run,
     main,
-    runConfigAndPrintOutput,
     runConfig,
     readFileUtf8,
   )
 where
 
 import Ast0 qualified
+import Cfg (Cfg, compile)
+import ConfigTypes (Config (..))
+import Control.Monad (foldM)
+import Control.Monad.Except (runExceptT)
+import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE)
 import Data.ByteString (ByteString, hPut)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -22,7 +25,7 @@ import GHC.IO.Encoding (utf8)
 import GHC.IO.Handle (hSetEncoding)
 import GHC.IO.Handle.FD (stderr, stdout, withFile)
 import GHC.IO.IOMode (IOMode (ReadMode))
-import Interpret (compileAndRun, compileWithoutRunning)
+import Interpret (interpret)
 import Options.Applicative
   ( Parser,
     execParser,
@@ -35,16 +38,13 @@ import Options.Applicative
     optional,
     progDesc,
     strOption,
+    switch,
     (<**>),
   )
 import Options.Applicative.Types (ParserInfo)
 import Read qualified
 import ReadTypes (SrcLocked)
-
-data Config = Config
-  { definitions :: FilePath,
-    input :: Maybe FilePath
-  }
+import Utils (uncofree)
 
 main :: IO ()
 main = execParser opts >>= runConfigAndPrintOutput
@@ -75,47 +75,60 @@ parseConfig = do
               )
             <> metavar "FILE"
         )
-  pure Config {definitions, input}
+  trace <-
+    switch
+      ( long "trace"
+          <> help "Display intermediate computation steps"
+      )
+  pure Config {definitions, input, trace}
+
+runConfigAndPrintOutput :: Config -> IO ()
+runConfigAndPrintOutput config = do
+  outputEither <- runExceptT $ runConfig config
+  case outputEither of
+    Left errors -> hPut stderr errors
+    Right output -> hPut stdout output
+
+runConfig :: Config -> ExceptT ByteString IO ByteString
+runConfig config = do
+  defText <- ExceptT $ Right <$> readFileUtf8 config.definitions
+  defAsts <- readAsts config.definitions defText
+  cfg <- encodeErrors config.definitions defText $ compile defAsts
+  case config.input of
+    Nothing ->
+      pure ""
+    Just input -> do
+      inputText <- ExceptT $ Right <$> readFileUtf8 input
+      inputAsts <- readAsts input inputText
+      ExceptT $ Right <$> runMany config cfg (map uncofree inputAsts)
+
+runMany :: Config -> Cfg -> [Ast0.Ast] -> IO ByteString
+runMany config cfg inputs = encodeUtf8 . T.unlines <$> mapM (runSingle config cfg) inputs
+
+runSingle :: Config -> Cfg -> Ast0.Ast -> IO Text
+runSingle config cfg input = Display.display0Text <$> foldM (const foldFunc) input reductions
+  where
+    foldFunc :: Ast0.Ast -> IO Ast0.Ast
+    foldFunc =
+      if config.trace
+        then \ast -> do
+          hPut stdout . encodeUtf8 $ Display.display0Text ast
+          hPut stdout "\n"
+          pure ast
+        else pure
+    reductions :: [Ast0.Ast]
+    reductions = interpret cfg input
 
 readFileUtf8 :: FilePath -> IO Text
 readFileUtf8 filePath = withFile filePath ReadMode $ \h -> do
   hSetEncoding h utf8
   T.hGetContents h
 
-readAsts :: FilePath -> Text -> Either ByteString [SrcLocked Ast0.Ast]
+readAsts :: FilePath -> Text -> ExceptT ByteString IO [SrcLocked Ast0.Ast]
 readAsts path contents = encodeErrors path contents (Read.read (Just path) contents)
 
-encodeErrors :: FilePath -> Text -> CompileResult a -> Either ByteString a
+encodeErrors :: FilePath -> Text -> CompileResult a -> ExceptT ByteString IO a
 encodeErrors path contents result = case result of
   Right a -> pure a
   Left errors ->
-    Left . encodeUtf8 $ errorMessages (Just path) contents errors
-
-run :: (FilePath, Text) -> Maybe (FilePath, Text) -> Either ByteString ByteString
-run (defsFile, defsText) input = do
-  defsAsts <- readAsts defsFile defsText
-  case input of
-    Nothing -> do
-      encodeErrors defsFile defsText (compileWithoutRunning defsAsts)
-      pure ""
-    Just (inputFile, inputText) -> do
-      inputAsts <- readAsts inputFile inputText
-      outputAsts <- encodeErrors defsFile defsText (compileAndRun defsAsts inputAsts)
-      pure . encodeUtf8 . T.unlines $ map display0Text outputAsts
-
-runConfig :: Config -> IO (Either ByteString ByteString)
-runConfig c = do
-  defsText <- readFileUtf8 c.definitions
-  input <- case c.input of
-    Nothing -> pure Nothing
-    Just inputFile -> do
-      inputText <- readFileUtf8 inputFile
-      pure $ Just (inputFile, inputText)
-  pure $ run (c.definitions, defsText) input
-
-runConfigAndPrintOutput :: Config -> IO ()
-runConfigAndPrintOutput c = do
-  eitherOutput <- runConfig c
-  case eitherOutput of
-    Left output -> hPut stderr output
-    Right output -> hPut stdout output
+    throwE . encodeUtf8 $ errorMessages (Just path) contents errors

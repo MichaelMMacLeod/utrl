@@ -1,8 +1,9 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
-module Cfg (mkCfg, Cfg (..), dumpCfgStmts) where
+module Cfg (mkCfg, Cfg (..), dumpCfgStmts, compile) where
 
 import Analyze (analyzeOverlappingPatterns)
+import Ast0 qualified
 import AstC2 qualified
 import Compile
   ( errorsToEither,
@@ -11,7 +12,7 @@ import Compile
     requestPredicates,
     requestVariableBindings,
   )
-import CompileTypes (CompileRequest, DefinitionStorage, Storage (..))
+import CompileTypes (CompileRequest, DefinitionStorage, Storage (..), mkStorage)
 import Data.Either.Extra (mapLeft)
 import Data.Functor.Base (ListF (..))
 import Data.Functor.Foldable (Recursive (..))
@@ -19,9 +20,14 @@ import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)
 import Data.List (intercalate)
 import Display qualified
+import Error (CompileResult)
 import ErrorTypes (ErrorMessage)
 import Predicate (IndexedPredicate)
+import ReadTypes (SrcLocked)
 import Utils (Cata, uncofree)
+
+compile :: [SrcLocked Ast0.Ast] -> CompileResult Cfg
+compile defAsts = mkCfg $ mkStorage defAsts
 
 -- It's tempting to use 'mapM' to evaluate each compileRequest against every definition,
 -- but due to the way that 'mapM' works with 'Either', this would short-circuit at the

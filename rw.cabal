@@ -93,6 +93,7 @@ library
     , Compile
     , CompileTypes
     , Config
+    , ConfigTypes
     , Display
     , Error
     , ErrorTypes
@@ -198,4 +199,5 @@ test-suite rw-test
     , fgl
     , text
     , bytestring
+    , transformers
 

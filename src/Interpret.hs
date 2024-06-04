@@ -1,9 +1,8 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Interpret
-  ( compileAndRun,
-    runConstructor,
-    compileWithoutRunning,
+  ( interpret,
+    Reduction,
   )
 where
 
@@ -16,45 +15,49 @@ import AstC2ExprVar (Var)
 import AstC2Jump qualified
 import AstC2Value (Value)
 import AstC2Value qualified as Value
-import Cfg (Cfg (..), mkCfg)
-import CompileTypes (mkStorage)
-import Control.DeepSeq (deepseq)
-import Data.Foldable (Foldable (foldl'), find)
+import Cfg (Cfg (..))
+import Control.DeepSeq (force)
+import Data.Foldable (find)
 import Data.Functor.Foldable (cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.List.Extra ((!?))
 import Data.Sequence (Seq (..), fromList, singleton)
-import Error (CompileResult)
 import InterpretMemory (Memory (Memory))
 import InterpretMemory qualified as Memory
 import Predicate (applyPredicates)
-import ReadTypes (SrcLocked)
-import Utils (Cata, iterateMaybe, setNth, uncofree)
+import Utils (Cata, iterateMaybe, setNth)
 
-data Matcher = Matcher
-  { _node :: !Node,
-    _ast :: !Ast0.Ast,
-    index :: [Int]
-  }
+-- The stream of results of interpreting some input. The first element
+-- is the input, the next element is the result of applying a definition
+-- to the input, the third is the result of applying a definition to the
+-- second, and so on. The last element is the one to which there are no
+-- further definitions left to apply.
+type Reduction = [Ast0.Ast]
 
-compileAndRun ::
-  [SrcLocked Ast0.Ast] ->
-  [SrcLocked Ast0.Ast] ->
-  CompileResult [Ast0.Ast]
-compileAndRun defAsts inputAsts = do
-  cfg <- mkCfg $ mkStorage defAsts
-  let results = map (run cfg . uncofree) inputAsts
-  pure results
+interpret :: Cfg -> Ast0.Ast -> Reduction
+interpret cfg = iterateMaybe (force . applyOneDefinitionBFS cfg)
 
-compileWithoutRunning :: [SrcLocked Ast0.Ast] -> CompileResult ()
-compileWithoutRunning defAsts = do
-  _cfg <- mkCfg $ mkStorage defAsts
-  pure ()
+-- compileAndRun ::
+--   [SrcLocked Ast0.Ast] ->
+--   Ast0.Ast ->
+--   CompileResult Reduction
+-- compileAndRun defAsts inputAst = do
+--   cfg <- mkCfg $ mkStorage defAsts
+--   pure $ run cfg inputAst
 
-run :: Cfg -> Ast0.Ast -> Ast0.Ast
-run e input =
-  let results = iterateMaybe (applyOneDefinitionBFS e) input
-   in foldl' (\_ y -> deepseq y y) input results
+-- let computationSteps :: [Ast0.Ast]
+--     computationSteps =
+
+--     foldFunc =
+--       if config.trace
+--         then \y -> do
+--           hPut stdout . encodeUtf8 $ Display.display0Text y
+--           pure y
+--         else \y -> deepseq y (pure y)
+-- foldM (const foldFunc) input computationSteps
+
+-- let results = iterateMaybe (applyOneDefinitionBFS e) input
+--  in foldl' (\_ y -> deepseq y y) input results
 
 -- last results
 
@@ -218,3 +221,9 @@ replace0At ast index replacement = case index of
         before = take n xs
         after = drop (n + 1) xs
         x = replace0At (xs !! n) index replacement
+
+data Matcher = Matcher
+  { _node :: !Node,
+    _ast :: !Ast0.Ast,
+    index :: [Int]
+  }

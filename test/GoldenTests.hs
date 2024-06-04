@@ -1,7 +1,8 @@
 module GoldenTests (goldenTests) where
 
-import Config (readFileUtf8, run)
+import Config (Config (..), readFileUtf8, runConfig)
 import Control.Monad (guard)
+import Control.Monad.Trans.Except (runExceptT, ExceptT)
 import Data.ByteString (fromStrict)
 import Data.ByteString.Lazy (ByteString)
 import Data.Either.Extra (fromEither)
@@ -35,18 +36,14 @@ createGoldenTest :: (FilePath, Bool) -> IO GoldenTestConfig
 createGoldenTest (testName, hasInput) = do
   let defsFile = testName <> ".defs"
       expectedOutputFile = testName <> ".expected"
-  defsFileContents <- readFileUtf8 defsFile
-  input <-
-    if hasInput
-      then do
-        let inputFile = testName <> ".input"
-        inputFileContents <- readFileUtf8 inputFile
-        pure $ Just (inputFile, inputFileContents)
-      else pure Nothing
+      input =
+        if hasInput
+          then Just $ testName <> ".input"
+          else Nothing
   pure
     GoldenTestConfig
       { testName,
-        defs = (defsFile, defsFileContents),
+        defs = defsFile,
         expectedOutputFile,
         input
       }
@@ -57,7 +54,15 @@ goldenTest c = goldenVsStringDiff c.testName diffCmd c.expectedOutputFile actual
     diffCmd ref new = ["diff", "--color=always", "-u", ref, new]
 
     actualOutput :: IO ByteString
-    actualOutput = pure . fromStrict . fromEither $ run c.defs c.input
+    actualOutput = fromStrict . fromEither <$> runExceptT (runConfig config)
+
+    config :: Config
+    config =
+      Config
+        { definitions = c.defs,
+          input = c.input,
+          trace = False
+        }
 
 isDefsFile :: FilePath -> Maybe FilePath
 isDefsFile = stripSuffix ".defs"
@@ -70,7 +75,7 @@ isInputFile = stripSuffix ".input"
 
 data GoldenTestConfig = GoldenTestConfig
   { testName :: String,
-    defs :: (FilePath, Text),
+    defs :: FilePath,
     expectedOutputFile :: FilePath,
-    input :: Maybe (FilePath, Text)
+    input :: Maybe FilePath
   }
