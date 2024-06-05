@@ -98,7 +98,6 @@ library
     , Error
     , ErrorTypes
     , Interpret
-    , InterpretMemory
     , Lib
     , Predicate
     , Read
