@@ -1,4 +1,4 @@
-error[E008]: overlapping patterns
+error[E007]: overlapping patterns
 ./test/programs/error-overlapping-patterns-multiple.defs:1:6
    |
  1 | (def (a b $x ..) _)
@@ -9,7 +9,7 @@ error[E008]: overlapping patterns
    |      ^^^^^^^^^^^^^ ... this other pattern
 help: patterns possibly matching the same term are not allowed
 
-error[E008]: overlapping patterns
+error[E007]: overlapping patterns
 ./test/programs/error-overlapping-patterns-multiple.defs:1:6
    |
  1 | (def (a b $x ..) _)

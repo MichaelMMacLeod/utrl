@@ -1,4 +1,4 @@
-error[E008]: overlapping patterns
+error[E007]: overlapping patterns
 ./test/programs/error-overlapping-patterns-simple.defs:1:6
    |
  1 | (def A Y)

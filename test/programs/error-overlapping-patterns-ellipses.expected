@@ -1,4 +1,4 @@
-error[E008]: overlapping patterns
+error[E007]: overlapping patterns
 ./test/programs/error-overlapping-patterns-ellipses.defs:1:6
    |
  1 | (def (a b ($x c $y) .. d) _)

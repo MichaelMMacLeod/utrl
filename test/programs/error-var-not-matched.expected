@@ -1,4 +1,4 @@
-error[E013]: variable not matched in pattern
+error[E012]: variable not matched in pattern
 ./test/programs/error-var-not-matched.defs:1:15
    |
  1 | (def (copy x) $x)

@@ -73,14 +73,14 @@ errorCode = \case
   BadEllipsesCount -> 2
   VarsNotCapturedUnderSameEllipsisInConstructor -> 3
   EllipsisAppliedToSymbol -> 4
-  MoreThanOneEllipsisInSingleCompoundTermOfPattern -> 6
-  VariableUsedMoreThanOnceInPattern -> 7
-  OverlappingPatterns -> 8
-  NoVariablesInEllipsis -> 9
-  ExpectedDefinitionGotSymbol -> 10
-  DefinitionHasWrongNumberOfTerms -> 11
-  DefinitionDoesNotStartWithDef -> 12
-  VariableNotMatchedInPattern -> 13
+  MoreThanOneEllipsisInSingleCompoundTermOfPattern -> 5
+  VariableUsedMoreThanOnceInPattern -> 6
+  OverlappingPatterns -> 7
+  NoVariablesInEllipsis -> 8
+  ExpectedDefinitionGotSymbol -> 9
+  DefinitionHasWrongNumberOfTerms -> 10
+  DefinitionDoesNotStartWithDef -> 11
+  VariableNotMatchedInPattern -> 12
 
 type FileContents = Text
 

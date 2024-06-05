@@ -1,4 +1,4 @@
-error[E011]: definition has too few terms
+error[E010]: definition has too few terms
 ./test/programs/error-def-2-terms.defs:1:1
    |
  1 | (def (blah (blah) blah))

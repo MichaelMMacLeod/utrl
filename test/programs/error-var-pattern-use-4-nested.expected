@@ -1,4 +1,4 @@
-error[E007]: variable occurs more than once in pattern
+error[E006]: variable occurs more than once in pattern
 ./test/programs/error-var-pattern-use-4-nested.defs:1:12
    |
  1 | (def (one ($x two ($x (three $x))) four $x)

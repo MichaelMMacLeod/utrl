@@ -1,4 +1,4 @@
-error[E010]: expected definition, found symbol
+error[E009]: expected definition, found symbol
 ./test/programs/error-def-is-symbol.defs:1:1
    |
  1 | I_am_a_symbol_not_a_definition

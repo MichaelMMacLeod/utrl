@@ -1,4 +1,4 @@
-error[E012]: definition does not start with 'def'
+error[E011]: definition does not start with 'def'
 ./test/programs/error-def-missing-def.defs:1:2
    |
  1 | (DEF A B)

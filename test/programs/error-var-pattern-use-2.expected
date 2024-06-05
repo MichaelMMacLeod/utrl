@@ -1,4 +1,4 @@
-error[E007]: variable occurs more than once in pattern
+error[E006]: variable occurs more than once in pattern
 ./test/programs/error-var-pattern-use-2.defs:1:13
    |
  1 | (def (twice $x $x) constructor)

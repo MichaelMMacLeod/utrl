@@ -1,4 +1,4 @@
-error[E006]: too many ellipses in single term of pattern
+error[E005]: too many ellipses in single term of pattern
 ./test/programs/error-pattern-3-ellipses.defs:1:6
    |
  1 | (def ($x .. $y .. $z ..) constructor)

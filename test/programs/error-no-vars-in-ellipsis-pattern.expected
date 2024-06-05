@@ -1,4 +1,4 @@
-error[E009]: no variables in term preceding ellipsis
+error[E008]: no variables in term preceding ellipsis
 ./test/programs/error-no-vars-in-ellipsis-pattern.defs:1:33
    |
  1 | (def (copy (list (no vars here) ..))
