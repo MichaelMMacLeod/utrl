@@ -19,6 +19,7 @@ import Cfg (Cfg (..))
 import Control.DeepSeq (force)
 import Control.Monad.ST (ST, runST)
 import Data.Array (Array, listArray)
+import Data.Array.Base ((!?))
 import Data.Array.ST (MArray (newArray_), STArray, readArray, writeArray)
 import Data.Foldable (find)
 import Data.Functor.Foldable (ListF (..), cata)
@@ -26,7 +27,6 @@ import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.Sequence (Seq (..), fromList, singleton)
 import Predicate (applyPredicates)
 import Utils (Cata, iterateMaybe)
-import Data.Array.Base ((!?))
 
 -- The stream of results of interpreting some input. The first element
 -- is the input, the next element is the result of applying a definition
@@ -96,17 +96,13 @@ listToArray :: [e] -> Array Int e
 listToArray xs = listArray (0, length xs - 1) xs
 
 runConstructor :: AstC2.Ast Int -> Ast0.Ast -> Ast0.Ast
-runConstructor constructor input =
-  head $ last allDataStacks
+runConstructor constructor input = headOfLastDataStack
   where
-    allDataStacks :: [[Ast0.Ast]]
-    allDataStacks = runST allDataStacksST
+    headOfLastDataStack :: Ast0.Ast
+    headOfLastDataStack = runST $ head . dataStack . last <$> allStates
 
-    allDataStacksST :: ST s [[Ast0.Ast]]
-    allDataStacksST = fmap (map dataStack) allStatesST
-
-    allStatesST :: ST s [Memory s]
-    allStatesST = do
+    allStates :: ST s [Memory s]
+    allStates = do
       initialState <- initialState
       iterateMaybeST interpretNextInstruction initialState
 
@@ -124,51 +120,38 @@ runConstructor constructor input =
 
     interpretNextInstruction :: Memory s -> ST s (Maybe (Memory s))
     interpretNextInstruction m =
-      case m of
-        Memory
-          { input = _input,
-            program = program,
-            instruction = instruction,
-            dataStack = dataStack,
-            variables = variables
-          } -> do
-            let maybeI = program !? instruction
-            case maybeI of
-              Nothing -> pure Nothing
-              Just i -> case i of
-                AstC2.Assign (AstC2Assign.Assign lhs rhs) -> do
-                  e <- evalExpr m rhs
-                  writeArray variables lhs e
-                  pure . Just $
-                    m
-                      { variables,
-                        instruction = instruction + 1
-                      }
-                AstC2.Push expr -> do
-                  expr' <- evalExpr m expr
-                  let astExpr = Value.expectAst expr'
-                  pure . Just $
-                    m
-                      { dataStack = astExpr : dataStack,
-                        instruction = instruction + 1
-                      }
-                AstC2.Build termCount -> do
-                  termCount' <- evalExpr m termCount
-                  let termCountNat = Value.expectNat termCount'
-                      newTerm = Ast0.Compound . reverse $ take termCountNat dataStack
-                  pure . Just $
-                    m
-                      { dataStack = newTerm : drop termCountNat dataStack,
-                        instruction = instruction + 1
-                      }
-                AstC2.Jump (AstC2Jump.Jump target condition) -> do
-                  condition' <- evalExpr m condition
-                  let conditionBool = Value.expectBool condition'
-                      nextInstruction =
-                        if conditionBool
-                          then target
-                          else instruction + 1
-                  pure . Just $ m {instruction = nextInstruction}
+      case program m !? m.instruction of
+        Nothing -> pure Nothing
+        Just i -> case i of
+          AstC2.Assign (AstC2Assign.Assign lhs rhs) -> do
+            e <- evalExpr m rhs
+            writeArray m.variables lhs e
+            pure . Just $ m {instruction = m.instruction + 1}
+          AstC2.Push expr -> do
+            expr' <- evalExpr m expr
+            let astExpr = Value.expectAst expr'
+            pure . Just $
+              m
+                { dataStack = astExpr : m.dataStack,
+                  instruction = m.instruction + 1
+                }
+          AstC2.Build termCount -> do
+            termCount' <- evalExpr m termCount
+            let termCountNat = Value.expectNat termCount'
+                newTerm = Ast0.Compound . reverse $ take termCountNat m.dataStack
+            pure . Just $
+              m
+                { dataStack = newTerm : drop termCountNat m.dataStack,
+                  instruction = m.instruction + 1
+                }
+          AstC2.Jump (AstC2Jump.Jump target condition) -> do
+            condition' <- evalExpr m condition
+            let conditionBool = Value.expectBool condition'
+                nextInstruction =
+                  if conditionBool
+                    then target
+                    else m.instruction + 1
+            pure . Just $ m {instruction = nextInstruction}
 
 largestVariable :: AstC2.Ast Int -> Var
 largestVariable = cata go
