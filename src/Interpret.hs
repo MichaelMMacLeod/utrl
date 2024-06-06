@@ -53,7 +53,7 @@ applyOneDefinitionBFS cfg ast = go $ singleton $ Matcher cfg.start ast []
             Left subtermMatchers ->
               go $ matcherQueue <> subtermMatchers
             Right matcher ->
-              case _ast matcher of
+              case matcher.ast of
                 replacementAst ->
                   Just $ replace0At ast matcher.index replacementAst
 
@@ -63,12 +63,12 @@ applyOneDefinitionBFS cfg ast = go $ singleton $ Matcher cfg.start ast []
 -- search order.
 applyOneDefinition :: Cfg -> Matcher -> Either (Seq Matcher) Matcher
 applyOneDefinition cfg matcher =
-  let neighbors = lsuc cfg.graph matcher._node
-      maybeNextNode = fst <$> find (\(_, preds) -> applyPredicates preds matcher._ast) neighbors
+  let neighbors = lsuc cfg.graph matcher.node
+      maybeNextNode = fst <$> find (\(_, preds) -> applyPredicates preds matcher.ast) neighbors
    in case maybeNextNode of
         Just nextNode ->
           let constructor = snd $ labNode' $ context cfg.graph nextNode
-              nextAst = runConstructor constructor matcher._ast
+              nextAst = runConstructor constructor matcher.ast
               nextNodeNeighbors = lsuc cfg.graph nextNode
               newNode =
                 if null nextNodeNeighbors
@@ -76,7 +76,7 @@ applyOneDefinition cfg matcher =
                   else nextNode
               currentIndex = matcher.index
            in Right $ Matcher newNode nextAst currentIndex
-        Nothing -> Left $ fromList $ case matcher._ast of
+        Nothing -> Left $ fromList $ case matcher.ast of
           Ast0.Symbol _ -> []
           Ast0.Compound xs ->
             zipWith m1 [0 ..] xs
@@ -220,8 +220,8 @@ replace0At ast index replacement = case index of
         x = replace0At (xs !! n) index replacement
 
 data Matcher = Matcher
-  { _node :: !Node,
-    _ast :: !Ast0.Ast,
+  { node :: !Node,
+    ast :: !Ast0.Ast,
     index :: [Int]
   }
 
