@@ -18,14 +18,15 @@ import AstC2Value qualified as Value
 import Cfg (Cfg (..))
 import Control.DeepSeq (force)
 import Control.Monad.ST (ST, runST)
-import Data.Array.ST (MArray (getBounds, newArray_), STArray, readArray, writeArray)
+import Data.Array (Array, listArray)
+import Data.Array.ST (MArray (newArray_), STArray, readArray, writeArray)
 import Data.Foldable (find)
 import Data.Functor.Foldable (ListF (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
-import Data.List.Extra ((!?))
 import Data.Sequence (Seq (..), fromList, singleton)
 import Predicate (applyPredicates)
 import Utils (Cata, iterateMaybe)
+import Data.Array.Base ((!?))
 
 -- The stream of results of interpreting some input. The first element
 -- is the input, the next element is the result of applying a definition
@@ -91,6 +92,9 @@ iterateMaybeST f b =
       Nothing -> pure []
       Just b -> iterateMaybeST f b
 
+listToArray :: [e] -> Array Int e
+listToArray xs = listArray (0, length xs - 1) xs
+
 runConstructor :: AstC2.Ast Int -> Ast0.Ast -> Ast0.Ast
 runConstructor constructor input =
   head $ last allDataStacks
@@ -112,7 +116,7 @@ runConstructor constructor input =
       pure $
         Memory
           { input = input,
-            program = constructor,
+            program = listToArray constructor,
             instruction = 0,
             dataStack = [],
             variables
@@ -240,7 +244,7 @@ data Matcher = Matcher
 
 data Memory s = Memory
   { input :: !Ast0.Ast,
-    program :: !(AstC2.Ast Int),
+    program :: !(Array Int (AstC2.Stmt Int)),
     instruction :: !Int,
     dataStack :: ![Ast0.Ast],
     variables :: !(STArray s Int Value)
