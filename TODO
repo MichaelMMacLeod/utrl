@@ -63,14 +63,5 @@
 
     So a document containing preprocessor_macros could be preprocessed
     and could do arbitrary calcualtions: 5
-- Make sure all possible errors to detect at compile time actually are detected
-  - E.g., fix this compiling without error (undefined var reference)
 
-    (def pattern $undefined-var)
-
-  - And this (overlapping rules should be detected)
-
-    (def (add $n 0)
-      $n)
-    (def (add 0 $m)
-      $m)
+- Add colorized output for error messages, tracing
