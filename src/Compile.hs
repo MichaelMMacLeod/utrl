@@ -1,11 +1,7 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Compile
-  ( compile0to1,
-    compile1toP0,
-    compile1toC0,
-    compileC0ToC1,
-    errorsToEither,
+  ( errorsToEither,
     requestConstructorC2,
     requestPredicates,
     requestPatternP0,
