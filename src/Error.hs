@@ -52,7 +52,7 @@ import Text.Megaparsec
   )
 import Text.Megaparsec.Error (ParseError)
 import Text.Megaparsec.Pos (unPos)
-import Utils (Cata, compareSpan, flipOrder, tshow)
+import Utils (Cata, compareSpan, flipOrder, intToText)
 import Prelude hiding (span)
 
 errorMessages :: Maybe FilePath -> FileContents -> [ErrorMessageInfo Int] -> Text
@@ -161,7 +161,7 @@ data OffendingLine = OffendingLine
 
 formatErrorMessage :: ErrorMessageInfo OffendingLine -> Text
 formatErrorMessage (ErrorMessageInfo {errorType, message, annotations, help}) =
-  let errorCodeText = "E" <> T.justifyRight 3 '0' (tshow $ errorCode errorType)
+  let errorCodeText = "E" <> T.justifyRight 3 '0' (intToText $ errorCode errorType)
    in "error["
         <> errorCodeText
         <> "]: "
@@ -186,7 +186,7 @@ formatSourcePos :: SourcePos -> Text
 formatSourcePos (SourcePos {sourceName, sourceLine, sourceColumn}) =
   T.intercalate
     ":"
-    [pack sourceName, tshow $ unPos sourceLine, tshow $ unPos sourceColumn]
+    [pack sourceName, intToText $ unPos sourceLine, intToText $ unPos sourceColumn]
 
 formatAnnotationBlock :: Annotation OffendingLine -> Text
 formatAnnotationBlock (Annotation {span, annotation}) =
@@ -203,7 +203,7 @@ formatAnnotationBlock (Annotation {span, annotation}) =
           <> " "
           <> indentedAnnotation
       line1And3PaddingCount = T.length lineNumberText + 2
-      lineNumberText = tshow . unPos $ sourceLine sourcePos
+      lineNumberText = intToText . unPos $ sourceLine sourcePos
 
       indentedAnnotation :: Text
       indentedAnnotation =
@@ -265,9 +265,9 @@ badEllipsesCountErrorMessage requiredCount actualCount patternVar constructorVar
     numDotDotWords :: Int -> Text
     numDotDotWords = \case
       1 -> "1 ellipsis"
-      n -> tshow n <> " ellipses"
+      n -> intToText n <> " ellipses"
 
-ellipsisAppliedToSymbolErrorMessage :: String -> Span Int -> ErrorMessage
+ellipsisAppliedToSymbolErrorMessage :: Text -> Span Int -> ErrorMessage
 ellipsisAppliedToSymbolErrorMessage symbolName symbolSpan =
   ErrorMessageInfo
     { errorType = EllipsisAppliedToSymbol,
@@ -280,13 +280,13 @@ ellipsisAppliedToSymbolErrorMessage symbolName symbolSpan =
                   <> "so it is not considered a variable"
             }
         ],
-      help = Just $ "perhaps you meant '$" <> pack symbolName <> "'?"
+      help = Just $ "perhaps you meant '$" <> symbolName <> "'?"
     }
 
 badEllipsesCapturesErrorMessage ::
-  String ->
+  Text ->
   Span Int ->
-  String ->
+  Text ->
   Span Int ->
   Span Int ->
   ErrorMessage
@@ -302,11 +302,11 @@ badEllipsesCapturesErrorMessage
         annotations =
           [ Annotation
               { span = ellipses1PatternSpan,
-                annotation = pack var1Name <> " matched under this ellipsis"
+                annotation = var1Name <> " matched under this ellipsis"
               },
             Annotation
               { span = ellipses2PatternSpan,
-                annotation = pack var2Name <> " matched under this ellipsis"
+                annotation = var2Name <> " matched under this ellipsis"
               },
             Annotation
               { span = ellipsesConstructorSpan,
@@ -362,7 +362,7 @@ definitionHasWrongNumberOfTermsErrorMessage defSpan actualNumberOfTerms =
       annotations =
         [ Annotation
             { span = defSpan,
-              annotation = "has " <> tshow actualNumberOfTerms <> " terms, but should have 3"
+              annotation = "has " <> intToText actualNumberOfTerms <> " terms, but should have 3"
             }
         ],
       help = badDefinitionHelp
@@ -400,7 +400,7 @@ moreThanOneEllipsisInSingleTermOfPatternErrorMessage termWithEllipsesSpan extraE
     mkExtraEllipsisSpanAnnotation ellipsisNumber ellipsisSpan =
       Annotation
         { span = ellipsisSpan,
-          annotation = "ellipsis #" <> tshow ellipsisNumber
+          annotation = "ellipsis #" <> intToText ellipsisNumber
         }
 
 variableUsedMoreThanOnceInPatternErrorMessage :: [Span Int] -> ErrorMessage
@@ -416,7 +416,7 @@ variableUsedMoreThanOnceInPatternErrorMessage varUseSpans =
     mkAnnotation useNumber span =
       Annotation
         { span,
-          annotation = "use #" <> tshow useNumber
+          annotation = "use #" <> intToText useNumber
         }
 
 overlappingPatternsErrorMessage :: Span Int -> Span Int -> ErrorMessage

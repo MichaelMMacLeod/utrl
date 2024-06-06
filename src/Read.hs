@@ -4,7 +4,7 @@ import Ast0 qualified
 import Control.Comonad.Cofree (Cofree (..))
 import Data.Char (isSpace)
 import Data.Either.Extra (fromRight')
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Data.Void (Void)
 import Error
   ( CompileResult,
@@ -79,7 +79,7 @@ rwSymbol = lexeme $ do
   cN <- many rwSymbolChar
   endingOffset <- getOffset
   let span = Span offset (endingOffset - offset)
-  pure $ span :< Ast0.SymbolF (c0 : cN)
+  pure $ span :< Ast0.SymbolF (pack $ c0 : cN)
 
 symbol :: Text -> Parser Text
 symbol = L.symbol spaceConsumer

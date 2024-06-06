@@ -7,15 +7,16 @@ import Data.Functor.Foldable
     embed,
     project,
   )
+import Data.Text (Text)
 
 data Ast
-  = Symbol String
+  = Symbol Text
   | Compound [Ast]
   | Ellipses Ast
   deriving (Show)
 
 data AstF r
-  = SymbolF String
+  = SymbolF Text
   | CompoundF [r]
   | EllipsesF r
   deriving (Show, Functor)

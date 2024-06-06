@@ -11,12 +11,13 @@ module AstC0
 where
 
 import Data.Functor.Foldable (Base, Corecursive (..), Recursive (..))
+import Data.Text (Text)
 
 data Ast
-  = Symbol String
+  = Symbol Text
   | Compound [Ast]
   | Ellipses Ast
-  | Variable Index String
+  | Variable Index Text
   deriving (Show)
 
 data IndexElement
@@ -36,9 +37,9 @@ isBetween = \case
 type Index = [IndexElement]
 
 data AstF r
-  = SymbolF String
+  = SymbolF Text
   | CompoundF [r]
-  | VariableF Index String
+  | VariableF Index Text
   | EllipsesF r
   deriving (Functor)
 

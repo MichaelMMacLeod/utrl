@@ -12,14 +12,15 @@ import Data.Functor.Foldable
     project,
   )
 import GHC.Generics (Generic)
+import Data.Text (Text)
 
 data Ast
-  = Symbol String
+  = Symbol Text
   | Compound [Ast]
   deriving (Show, Eq, Generic, NFData)
 
 data AstF r
-  = SymbolF String
+  = SymbolF Text
   | CompoundF [r]
   deriving (Show, Functor)
 

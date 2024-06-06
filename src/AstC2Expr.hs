@@ -7,12 +7,13 @@ where
 
 import AstC2ExprVar (Var)
 import Data.Functor.Foldable (Base, Corecursive (..), Recursive (..))
+import Data.Text (Text)
 
 data Expr
   = Bool Bool
   | Var Var
   | Nat Int
-  | Symbol String
+  | Symbol Text
   | Input
   | Length Expr
   | BinOp Op Expr Expr
@@ -25,7 +26,7 @@ data ExprF r
   = BoolF Bool
   | VarF Var
   | NatF Int
-  | SymbolF String
+  | SymbolF Text
   | InputF
   | LengthF r
   | BinOpF Op r r

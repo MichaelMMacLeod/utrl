@@ -17,9 +17,9 @@ import Control.Monad.Trans.Except (ExceptT (ExceptT), throwE)
 import Data.ByteString (ByteString, hPut)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Encoding (encodeUtf8, strictBuilderToText, textToStrictBuilder)
 import Data.Text.IO qualified as T
-import Display (display0Text)
+import Display (display0, display0Builder)
 import Error (CompileResult, errorMessages)
 import GHC.IO.Encoding (utf8)
 import GHC.IO.Handle (hSetEncoding)
@@ -44,7 +44,7 @@ import Options.Applicative
 import Options.Applicative.Types (ParserInfo)
 import Read qualified
 import ReadTypes (SrcLocked)
-import Utils (tshow, uncofree)
+import Utils (intToText, uncofree)
 
 main :: IO ()
 main = execParser opts >>= runConfigAndPrintOutput
@@ -106,14 +106,19 @@ runMany :: Config -> Cfg -> [Ast0.Ast] -> IO ByteString
 runMany config cfg inputs = encodeUtf8 . T.unlines <$> mapM (runSingle config cfg) inputs
 
 runSingle :: Config -> Cfg -> Ast0.Ast -> IO Text
-runSingle config cfg input = Display.display0Text <$> foldM (const foldFunc) input numberedReductions
+runSingle config cfg input = display0 <$> foldM (const foldFunc) input numberedReductions
   where
     foldFunc :: (Int, Ast0.Ast) -> IO Ast0.Ast
     foldFunc (i, ast) =
       if config.trace
         then do
-          hPut stdout . encodeUtf8 $ tshow i <> ". " <> Display.display0Text ast
-          hPut stdout "\n"
+          let textBuilder =
+                textToStrictBuilder (intToText i)
+                  <> textToStrictBuilder ". "
+                  <> display0Builder ast
+                  <> textToStrictBuilder "\n"
+              bytestring = encodeUtf8 $ strictBuilderToText textBuilder
+          hPut stdout bytestring
           pure ast
         else pure ast
 

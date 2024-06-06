@@ -12,12 +12,13 @@ import Data.Functor.Foldable
     project,
   )
 import Data.List.Extra (snoc)
+import Data.Text (Text)
 import ErrorTypes (Span (..))
 import ReadTypes (SrcLocked)
 import Utils (Cata)
 
 data Ast
-  = Symbol String
+  = Symbol Text
   | CompoundWithoutEllipses [Ast]
   | CompoundWithEllipses
       { before :: [Ast],
@@ -41,7 +42,7 @@ indexP0ByC0 ast = cata go ast []
        in (l, index) :< CompoundWithEllipsesF b' e' a'
 
 data AstF r
-  = SymbolF String
+  = SymbolF Text
   | CompoundWithoutEllipsesF [r]
   | CompoundWithEllipsesF
       { beforeF :: [r],

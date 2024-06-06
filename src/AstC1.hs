@@ -15,12 +15,13 @@ import Data.Functor.Foldable
     embed,
     project,
   )
+import Data.Text (Text)
 
 data AssignmentLocation = TopLevel | NotTopLevel
   deriving (Show, Eq)
 
 data Ast
-  = Symbol String
+  = Symbol Text
   | Compound [Ast]
   | Assignment (Var, Index, AssignmentLocation) Ast
   | Copy Var
@@ -41,7 +42,7 @@ data IndexElement
 type Index = [IndexElement]
 
 data AstF r
-  = SymbolF String
+  = SymbolF Text
   | CompoundF [r]
   | AssignmentF (Var, Index, AssignmentLocation) r
   | CopyF Var

@@ -11,10 +11,11 @@ where
 
 import Ast0 qualified
 import AstC0 qualified
+import Data.Text (Text)
 import Utils (isDollarSignVar)
 
 data Predicate
-  = SymbolEqualTo String
+  = SymbolEqualTo Text
   | LengthEqualTo Int
   | LengthGreaterThanOrEqualTo Int
   deriving (Eq, Show, Ord)

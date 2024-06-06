@@ -1,32 +1,27 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Display
-  ( display0,
-    display1,
-    displayC0,
-    displayC2,
+  ( displayC2,
     displayExpr,
     displayP0,
-    display0Text,
+    display0,
+    display0Builder,
   )
 where
 
-import qualified Ast0
-import qualified Ast1
-import qualified AstC0
-import qualified AstC2
-import qualified AstC2Assign
+import Ast0 qualified
+import AstC2 qualified
+import AstC2Assign qualified
 import AstC2Expr (Expr)
-import qualified AstC2Expr as Expr
-import qualified AstC2Jump
-import qualified AstP0
+import AstC2Expr qualified as Expr
+import AstC2Jump qualified
+import AstP0 qualified
 import Data.Functor.Foldable (ListF (..), cata)
-import Data.List (intercalate)
+import Data.Text (Text)
+import Data.Text.Encoding (StrictBuilder, strictBuilderToText, textToStrictBuilder)
 import Utils (Cata)
-import Data.Text (Text, pack)
-import qualified Data.Text as T
 
-displayP0 :: AstP0.Ast -> String
+displayP0 :: AstP0.Ast -> Text
 displayP0 = display0 . cata go
   where
     go :: Cata AstP0.Ast Ast0.Ast
@@ -78,48 +73,23 @@ displayExpr = cata go
           Expr.LessThan -> lhs ++ " < " ++ rhs
           Expr.ArrayAccess -> lhs ++ "[" ++ rhs ++ "]"
 
-display0Text :: Ast0.Ast -> Text
-display0Text = cata go
+unwordsBuilder :: [StrictBuilder] -> StrictBuilder
+unwordsBuilder builders = case builders of
+  [] -> mempty
+  b : builders -> b <> cata go builders
   where
-    go :: Cata Ast0.Ast Text
+    go :: Cata [StrictBuilder] StrictBuilder
     go = \case
-      Ast0.SymbolF s -> pack s
-      Ast0.CompoundF xs -> "(" <> T.unwords xs <> ")"
+      Nil -> mempty
+      Cons b builders -> textToStrictBuilder " " <> b <> builders
 
-display0 :: Ast0.Ast -> String
-display0 = cata $ \case
-  Ast0.SymbolF s -> s
-  Ast0.CompoundF xs -> "(" ++ unwords xs ++ ")"
+display0 :: Ast0.Ast -> Text
+display0 = strictBuilderToText . display0Builder
 
-display1 :: Ast1.Ast -> String
-display1 =
-  display0
-    . cata
-      ( \case
-          Ast1.SymbolF s -> Ast0.Symbol s
-          Ast1.CompoundF xs -> Ast0.Compound xs
-          Ast1.EllipsesF x -> Ast0.Compound [Ast0.Symbol "Ast1.Ellipses", x]
-      )
-
-displayC0 :: AstC0.Ast -> String
-displayC0 =
-  display1
-    . cata
-      ( \case
-          AstC0.SymbolF s -> Ast1.Symbol s
-          AstC0.VariableF i _s ->
-            Ast1.Compound
-              [ Ast1.Symbol "AstC0.Variable",
-                Ast1.Symbol $ displayIndexC0 i
-              ]
-          AstC0.CompoundF xs -> Ast1.Compound xs
-          AstC0.EllipsesF x -> Ast1.Ellipses x
-      )
-
-displayIndexC0 :: AstC0.Index -> String
-displayIndexC0 index = "[" ++ intercalate "," (map displayIndexElementC0 index) ++ "]"
-
-displayIndexElementC0 :: AstC0.IndexElement -> String
-displayIndexElementC0 (AstC0.ZeroPlus i) = show i
-displayIndexElementC0 (AstC0.LenMinus i) = "(len-" ++ show i ++ ")"
-displayIndexElementC0 (AstC0.Between zeroPlusC0 lenMinusC0) = show zeroPlusC0 ++ ".." ++ show lenMinusC0
+display0Builder :: Ast0.Ast -> StrictBuilder
+display0Builder = cata go
+  where
+    go :: Cata Ast0.Ast StrictBuilder
+    go = \case
+      Ast0.SymbolF s -> textToStrictBuilder s
+      Ast0.CompoundF xs -> textToStrictBuilder "(" <> unwordsBuilder xs <> textToStrictBuilder ")"

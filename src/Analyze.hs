@@ -68,15 +68,16 @@ import Utils
     pushBetweenTail,
   )
 import Prelude hiding (span)
+import Data.Text (Text)
 
 -- | Finds errors relating to the use of a '$variable' in the constructor that was
 -- not matched in the pattern, as in '(def (copy x) $x)'.
 analyzeVariableNotMatchedInPattern :: SrcLocked Ast1.Ast -> SrcLocked Ast1.Ast -> [ErrorMessage]
 analyzeVariableNotMatchedInPattern patternAst constructorAst =
-  let variablesMatchedInPattern :: S.Set String
+  let variablesMatchedInPattern :: S.Set Text
       variablesMatchedInPattern = cata goPattern patternAst
 
-      goPattern :: Cata (SrcLocked Ast1.Ast) (S.Set String)
+      goPattern :: Cata (SrcLocked Ast1.Ast) (S.Set Text)
       goPattern (_span :< ast) = case ast of
         Ast1.SymbolF s ->
           if isDollarSignVar s
@@ -191,7 +192,7 @@ analyzeEllipsesCaptures pattern = extractErrors . cata go
                 ]
 
 data Assignment = Assignment
-  { variableName :: String,
+  { variableName :: Text,
     index :: (AstC0.Index, Between)
   }
 
@@ -298,7 +299,7 @@ analyzePatternForMoreThan1EllipsisPerTerm = para go
 analyzeVariablesUsedMoreThanOnceInPattern :: SrcLocked Ast1.Ast -> [ErrorMessage]
 analyzeVariablesUsedMoreThanOnceInPattern = report . cata findVarSpans
   where
-    report :: H.HashMap String [Span Int] -> [ErrorMessage]
+    report :: H.HashMap Text [Span Int] -> [ErrorMessage]
     report uses =
       let spansOfVarsWithMoreThanOneUse :: [[Span Int]]
           spansOfVarsWithMoreThanOneUse = filter ((> 1) . length) $ H.elems uses
@@ -306,7 +307,7 @@ analyzeVariablesUsedMoreThanOnceInPattern = report . cata findVarSpans
             variableUsedMoreThanOnceInPatternErrorMessage
             spansOfVarsWithMoreThanOneUse
 
-    findVarSpans :: Cata (SrcLocked Ast1.Ast) (H.HashMap String [Span Int])
+    findVarSpans :: Cata (SrcLocked Ast1.Ast) (H.HashMap Text [Span Int])
     findVarSpans (span :< ast) = case ast of
       Ast1.SymbolF s ->
         if isDollarSignVar s

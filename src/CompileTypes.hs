@@ -17,6 +17,7 @@ import AstC1 qualified
 import AstC2 qualified
 import AstP0 qualified
 import Data.HashMap.Strict qualified as H
+import Data.Text (Text)
 import ErrorTypes (ErrorMessage, Span)
 import Predicate (IndexedPredicate)
 import ReadTypes (SrcLocked)
@@ -79,4 +80,4 @@ fromSuccess stage = case stage of
   Pending -> error "fromScucess: Pending"
   Fail _ -> error "fromSuccess: Fail"
 
-type VariableBindings = H.HashMap String (AstC0.Index, Span Int)
+type VariableBindings = H.HashMap Text (AstC0.Index, Span Int)

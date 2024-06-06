@@ -19,6 +19,7 @@ module Utils
     pushBetweenTail,
     compareSpan,
     flipOrder,
+    intToText,
   )
 where
 
@@ -30,7 +31,10 @@ import Control.Comonad.Trans.Cofree (CofreeF ((:<)))
 import Data.Functor.Base (ListF (..))
 import Data.Functor.Foldable (Base, Corecursive (..), Recursive (..))
 import Data.List.Extra (snoc, (!?))
-import Data.Text (Text, pack)
+import Data.Text (Text, isPrefixOf, pack)
+import Data.Text.Lazy qualified as T (toStrict)
+import Data.Text.Lazy.Builder qualified as B
+import Data.Text.Lazy.Builder.Int qualified as B
 import ErrorTypes (Span, location)
 import GHC.Base (compareInt)
 import ReadTypes (SrcLocked)
@@ -56,6 +60,11 @@ setNth i defaultValue x xs = left ++ [x] ++ right
     left = take i (xs ++ map defaultValue [0 ..])
     right = drop (i + 1) xs
 
+-- Converts integers to Text without converting through String.
+-- Copied from here: https://github.com/haskell/text/issues/218
+intToText :: (Integral a) => a -> Text
+intToText = T.toStrict . B.toLazyText . B.decimal
+
 tshow :: (Show a) => a -> Text
 tshow = pack . show
 
@@ -65,9 +74,8 @@ tshow = pack . show
 uncofree :: (Corecursive f) => Cofree (Base f) a -> f
 uncofree = cata $ \(_ :< a) -> embed a
 
-isDollarSignVar :: String -> Bool
-isDollarSignVar ('$' : _) = True
-isDollarSignVar _ = False
+isDollarSignVar :: Text -> Bool
+isDollarSignVar = isPrefixOf "$"
 
 -- | Returns the C1-portion of the end of a C0-index, that is,
 -- drops all indices up to and including the last 'Between' variant
