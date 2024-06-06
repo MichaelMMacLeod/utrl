@@ -45,11 +45,12 @@ type Para t a = Base t (t, a) -> a
 
 type Histo t a = Base t (Cofree (Base t) a) -> a
 
-type Ana t a = a -> Base t a
+type Ana a t = a -> Base t a
 
-iterateMaybe :: (b -> Maybe b) -> b -> [b]
+iterateMaybe :: forall b. (b -> Maybe b) -> b -> [b]
 iterateMaybe f b = b : ana go b
   where
+    go :: Ana b [b]
     go x = case f x of
       Nothing -> Nil
       Just x' -> Cons x' x'

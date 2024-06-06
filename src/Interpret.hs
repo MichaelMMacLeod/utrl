@@ -17,13 +17,15 @@ import AstC2Value (Value)
 import AstC2Value qualified as Value
 import Cfg (Cfg (..))
 import Control.DeepSeq (force)
+import Control.Monad.ST (ST, runST)
+import Data.Array.ST (MArray (newArray_), STArray, readArray, writeArray)
 import Data.Foldable (find)
 import Data.Functor.Foldable (cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.List.Extra ((!?))
 import Data.Sequence (Seq (..), fromList, singleton)
 import Predicate (applyPredicates)
-import Utils (Cata, iterateMaybe, setNth)
+import Utils (Cata, iterateMaybe)
 
 -- The stream of results of interpreting some input. The first element
 -- is the input, the next element is the result of applying a definition
@@ -81,103 +83,129 @@ applyOneDefinition cfg matcher =
               m1 :: Int -> Ast0.Ast -> Matcher
               m1 i x = Matcher cfg.start x $ matcher.index <> [i]
 
+iterateMaybeST :: forall s b. (b -> ST s (Maybe b)) -> b -> ST s [b]
+iterateMaybeST f b =
+  (b :) <$> do
+    fb <- f b
+    case fb of
+      Nothing -> pure []
+      Just b -> iterateMaybeST f b
+
 runConstructor :: AstC2.Ast Int -> Ast0.Ast -> Ast0.Ast
 runConstructor constructor input =
-  head . dataStack . last $
-    iterateMaybe transition initialState
+  head $ last allDataStacks
   where
-    initialState :: Memory
-    initialState =
-      Memory
-        { input = input,
-          program = constructor,
-          instruction = 0,
-          dataStack = [],
-          variables = []
-        }
+    allDataStacks :: [[Ast0.Ast]]
+    allDataStacks = runST allDataStacksST
 
-    transition :: Memory -> Maybe Memory
-    transition m = case m of
-      Memory
-        { input = _input,
-          program = program,
-          instruction = instruction,
-          dataStack = dataStack,
-          variables = variables
-        } -> do
-          i <- program !? instruction
-          pure $ case i of
-            AstC2.Assign (AstC2Assign.Assign lhs rhs) ->
-              m
-                { variables =
-                    setNth
-                      lhs
-                      (\var -> error $ "$" ++ show var ++ " is undefined")
-                      (evalExpr m rhs)
-                      variables,
-                  instruction = instruction + 1
-                }
-            AstC2.Push expr ->
-              let expr' = evalExpr m expr
-                  astExpr = Value.expectAst expr'
-               in m
-                    { dataStack = astExpr : dataStack,
-                      instruction = instruction + 1
-                    }
-            AstC2.Build termCount ->
-              let termCount' = evalExpr m termCount
-                  termCountNat = Value.expectNat termCount'
-                  newTerm = Ast0.Compound . reverse $ take termCountNat dataStack
-               in m
-                    { dataStack = newTerm : drop termCountNat dataStack,
-                      instruction = instruction + 1
-                    }
-            AstC2.Jump (AstC2Jump.Jump target condition) ->
-              let condition' = evalExpr m condition
-                  conditionBool = Value.expectBool condition'
-                  nextInstruction =
-                    if conditionBool
-                      then target
-                      else instruction + 1
-               in m {instruction = nextInstruction}
+    allDataStacksST :: ST s [[Ast0.Ast]]
+    allDataStacksST = fmap (map dataStack) allStatesST
 
-evalExpr :: Memory -> Expr -> Value
+    allStatesST :: ST s [Memory s]
+    allStatesST = do
+      initialState <- initialState
+      iterateMaybeST interpretNextInstruction initialState
+
+    initialState :: ST s (Memory s)
+    initialState = do
+      variables <- newArray_ (0, 1023)
+      pure $
+        Memory
+          { input = input,
+            program = constructor,
+            instruction = 0,
+            dataStack = [],
+            variables
+          }
+
+    interpretNextInstruction :: Memory s -> ST s (Maybe (Memory s))
+    interpretNextInstruction m =
+      case m of
+        Memory
+          { input = _input,
+            program = program,
+            instruction = instruction,
+            dataStack = dataStack,
+            variables = variables
+          } -> do
+            let maybeI = program !? instruction
+            case maybeI of
+              Nothing -> pure Nothing
+              Just i -> case i of
+                AstC2.Assign (AstC2Assign.Assign lhs rhs) -> do
+                  e <- evalExpr m rhs
+                  writeArray variables lhs e
+                  pure . Just $
+                    m
+                      { variables,
+                        instruction = instruction + 1
+                      }
+                AstC2.Push expr -> do
+                  expr' <- evalExpr m expr
+                  let astExpr = Value.expectAst expr'
+                  pure . Just $
+                    m
+                      { dataStack = astExpr : dataStack,
+                        instruction = instruction + 1
+                      }
+                AstC2.Build termCount -> do
+                  termCount' <- evalExpr m termCount
+                  let termCountNat = Value.expectNat termCount'
+                      newTerm = Ast0.Compound . reverse $ take termCountNat dataStack
+                  pure . Just $
+                    m
+                      { dataStack = newTerm : drop termCountNat dataStack,
+                        instruction = instruction + 1
+                      }
+                AstC2.Jump (AstC2Jump.Jump target condition) -> do
+                  condition' <- evalExpr m condition
+                  let conditionBool = Value.expectBool condition'
+                      nextInstruction =
+                        if conditionBool
+                          then target
+                          else instruction + 1
+                  pure . Just $ m {instruction = nextInstruction}
+
+evalExpr :: forall s. Memory s -> Expr -> ST s Value
 evalExpr m = cata go
   where
-    go :: Cata Expr Value
+    go :: Cata Expr (ST s Value)
     go = \case
-      Expr.BoolF b -> Value.Bool b
+      Expr.BoolF b -> pure $ Value.Bool b
       Expr.VarF v -> evalVar m v
-      Expr.NatF n -> Value.Nat n
-      Expr.SymbolF s -> Value.Ast $ Ast0.Symbol s
-      Expr.InputF -> Value.Ast m.input
-      Expr.BinOpF op lhs rhs ->
+      Expr.NatF n -> pure $ Value.Nat n
+      Expr.SymbolF s -> pure $ Value.Ast $ Ast0.Symbol s
+      Expr.InputF -> pure $ Value.Ast m.input
+      Expr.BinOpF op lhs rhs -> do
+        lhs <- lhs
+        rhs <- rhs
         case op of
           Expr.Add ->
             let lhsNat = Value.expectNat lhs
                 rhsNat = Value.expectNat rhs
-             in Value.Nat $ lhsNat + rhsNat
+             in pure $ Value.Nat $ lhsNat + rhsNat
           Expr.Sub ->
             let lhsNat = Value.expectNat lhs
                 rhsNat = Value.expectNat rhs
-             in Value.Nat $ lhsNat - rhsNat
+             in pure $ Value.Nat $ lhsNat - rhsNat
           Expr.ArrayAccess ->
             let lhsAst = Value.expectAst lhs
                 rhsNat = Value.expectNat rhs
              in case lhsAst of
                   Ast0.Symbol _ -> Value.mkTypeError "Compound" lhs
-                  Ast0.Compound xs -> Value.Ast $ xs !! rhsNat
+                  Ast0.Compound xs -> pure $ Value.Ast $ xs !! rhsNat
           Expr.LessThan ->
             let lhsNat = Value.expectNat lhs
                 rhsNat = Value.expectNat rhs
-             in Value.Bool $ lhsNat < rhsNat
-      Expr.LengthF e ->
+             in pure $ Value.Bool $ lhsNat < rhsNat
+      Expr.LengthF e -> do
+        e <- e
         case Value.expectAst e of
           Ast0.Symbol _ -> Value.mkTypeError "Compound" e
-          Ast0.Compound xs -> Value.Nat $ length xs
+          Ast0.Compound xs -> pure $ Value.Nat $ length xs
 
-evalVar :: Memory -> Var -> Value
-evalVar m v = m.variables !! v
+evalVar :: Memory s -> Var -> ST s Value
+evalVar m = readArray m.variables
 
 replace0At :: Ast0.Ast -> [Int] -> Ast0.Ast -> Ast0.Ast
 replace0At ast index replacement = case index of
@@ -197,11 +225,10 @@ data Matcher = Matcher
     index :: [Int]
   }
 
-data Memory = Memory
+data Memory s = Memory
   { input :: !Ast0.Ast,
     program :: !(AstC2.Ast Int),
     instruction :: !Int,
     dataStack :: ![Ast0.Ast],
-    variables :: ![Value]
+    variables :: !(STArray s Int Value)
   }
-  deriving (Show)
