@@ -199,4 +199,4 @@ test-suite rw-test
     , text
     , bytestring
     , transformers
-
+    , typed-process

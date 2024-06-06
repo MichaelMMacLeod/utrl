@@ -44,7 +44,7 @@ import Options.Applicative
 import Options.Applicative.Types (ParserInfo)
 import Read qualified
 import ReadTypes (SrcLocked)
-import Utils (uncofree)
+import Utils (tshow, uncofree)
 
 main :: IO ()
 main = execParser opts >>= runConfigAndPrintOutput
@@ -106,16 +106,20 @@ runMany :: Config -> Cfg -> [Ast0.Ast] -> IO ByteString
 runMany config cfg inputs = encodeUtf8 . T.unlines <$> mapM (runSingle config cfg) inputs
 
 runSingle :: Config -> Cfg -> Ast0.Ast -> IO Text
-runSingle config cfg input = Display.display0Text <$> foldM (const foldFunc) input reductions
+runSingle config cfg input = Display.display0Text <$> foldM (const foldFunc) input numberedReductions
   where
-    foldFunc :: Ast0.Ast -> IO Ast0.Ast
-    foldFunc =
+    foldFunc :: (Int, Ast0.Ast) -> IO Ast0.Ast
+    foldFunc (i, ast) =
       if config.trace
-        then \ast -> do
-          hPut stdout . encodeUtf8 $ Display.display0Text ast
+        then do
+          hPut stdout . encodeUtf8 $ tshow i <> ". " <> Display.display0Text ast
           hPut stdout "\n"
           pure ast
-        else pure
+        else pure ast
+
+    numberedReductions :: [(Int, Ast0.Ast)]
+    numberedReductions = zip [0 ..] reductions
+
     reductions :: [Ast0.Ast]
     reductions = interpret cfg input
 
