@@ -18,9 +18,9 @@ import AstC2Value qualified as Value
 import Cfg (Cfg (..))
 import Control.DeepSeq (force)
 import Control.Monad.ST (ST, runST)
-import Data.Array.ST (MArray (newArray_), STArray, readArray, writeArray)
+import Data.Array.ST (MArray (getBounds, newArray_), STArray, readArray, writeArray)
 import Data.Foldable (find)
-import Data.Functor.Foldable (cata)
+import Data.Functor.Foldable (ListF (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
 import Data.List.Extra ((!?))
 import Data.Sequence (Seq (..), fromList, singleton)
@@ -108,7 +108,7 @@ runConstructor constructor input =
 
     initialState :: ST s (Memory s)
     initialState = do
-      variables <- newArray_ (0, 1023)
+      variables <- newArray_ (0, largestVariable constructor)
       pure $
         Memory
           { input = input,
@@ -165,6 +165,19 @@ runConstructor constructor input =
                           then target
                           else instruction + 1
                   pure . Just $ m {instruction = nextInstruction}
+
+largestVariable :: AstC2.Ast Int -> Var
+largestVariable = cata go
+  where
+    go :: Cata (AstC2.Ast Int) Var
+    go = \case
+      Nil -> 0
+      Cons ast result -> max result (extractVar ast)
+
+    extractVar :: AstC2.Stmt Int -> Var
+    extractVar = \case
+      AstC2.Assign (AstC2Assign.Assign {lhs}) -> lhs
+      _ -> 0
 
 evalExpr :: forall s. Memory s -> Expr -> ST s Value
 evalExpr m = cata go
