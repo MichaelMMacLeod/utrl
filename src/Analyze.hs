@@ -433,7 +433,7 @@ removeEllipsesFromPattern = cata go
     go (_ :< ast) = case ast of
       AstP0.SymbolF s -> Ast0.Symbol s
       AstP0.CompoundWithoutEllipsesF xs -> Ast0.Compound xs
-      AstP0.CompoundWithEllipsesF b e a -> Ast0.Compound $ b ++ [e] ++ a
+      AstP0.CompoundWithEllipsesF b _e a -> Ast0.Compound $ b <> a
 
 -- Returns a list of conditions that must hold for a given rule's pattern to
 -- match a term.
