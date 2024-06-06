@@ -78,7 +78,7 @@ parseConfig = do
   trace <-
     switch
       ( long "trace"
-          <> help "Display intermediate computation steps"
+          <> help "Display intermediate computation steps. Has no effect without '--input'."
       )
   pure Config {definitions, input, trace}
 
