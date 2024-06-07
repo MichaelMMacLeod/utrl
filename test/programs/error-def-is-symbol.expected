@@ -1,6 +1,6 @@
 error[E009]: expected definition, found symbol
-./test/programs/error-def-is-symbol.defs:1:1
+./test/programs/error-def-is-symbol.defs:2:1
    |
- 1 | I_am_a_symbol_not_a_definition
+ 2 | I_am_a_symbol_not_a_definition
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this should be a definition
 help: definitions look like this: '(def <pattern> <constructor>)'
