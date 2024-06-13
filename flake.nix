@@ -38,7 +38,7 @@
       in {
         packages = rec {
           default = rw;
-          rw = pkgs.haskellPackages.developPackage { root = ./.; };
+          rw = compose.addTestToolDepend (compose.dontCheck (pkgs.haskellPackages.developPackage { root = ./.; })) (pkgs.haskellPackages.developPackage { root = ./.; });
         };
         devShells.default = with pkgs;
           haskellPackages.shellFor {
