@@ -9,21 +9,18 @@ import Data.List.Extra (stripSuffix)
 import Data.Maybe (mapMaybe)
 import Data.Text qualified as T
 import System.Directory.Extra (listDirectory)
-import System.Process.Typed (ExitCode, readProcessInterleaved, runProcess, shell, proc)
+import System.Process.Typed (ExitCode, proc, readProcessInterleaved, runProcess, shell)
 import Test.Tasty (TestTree)
 import Test.Tasty.Golden (goldenVsStringDiff)
 import Test.Tasty.Runners (TestTree (TestGroup))
 
 goldenTests :: IO TestTree
 goldenTests =
-  buildCmd >> do
+  do
     listing <- map ("./test/programs/" <>) <$> listDirectory "./test/programs"
     goldenTestConfigs <- mkGoldenTestConfigs listing
     let subTestTrees = map goldenTest goldenTestConfigs
     pure $ TestGroup "golden tests" subTestTrees
-
-buildCmd :: IO ExitCode
-buildCmd = runProcess (shell "cabal build")
 
 mkGoldenTestConfigs :: [FilePath] -> IO [GoldenTestConfig]
 mkGoldenTestConfigs directoryListing = do
@@ -71,12 +68,12 @@ goldenTest c = goldenVsStringDiff c.testName diffCmd c.expectedOutputFile mainOu
     runCmd :: IO (ExitCode, ByteString)
     runCmd = do
       args <- args
-      readProcessInterleaved (proc "cabal" args)
+      readProcessInterleaved (proc "rw" args)
 
     args :: IO [String]
     args = do
       argsFileArgs <- argsFileArgs
-      pure $ ["run", "rw", "--"] <> defsArgs <> argsFileArgs <> inputArgs
+      pure $ {-["run", "rw", "--"] <>-} defsArgs <> argsFileArgs <> inputArgs
 
     argsFileArgs :: IO [String]
     argsFileArgs =

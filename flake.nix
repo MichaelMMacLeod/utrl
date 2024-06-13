@@ -34,7 +34,12 @@
         # extendedHaskellPackages = with pkgs; haskellPackages.extend (haskell.lib.compose.packageSourceOverrides {
         #   rw = ./.;
         # });
+        compose = pkgs.haskell.lib.compose;
       in {
+        packages = rec {
+          default = rw;
+          rw = pkgs.haskellPackages.developPackage { root = ./.; };
+        };
         devShells.default = with pkgs;
           haskellPackages.shellFor {
             shellHook = ''

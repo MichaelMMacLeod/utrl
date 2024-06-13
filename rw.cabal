@@ -182,6 +182,10 @@ test-suite rw-test
   -- The entrypoint to the test suite.
   main-is: Main.hs
 
+  build-tool-depends:
+    -- Makes the executable available for the tests
+    rw:rw
+
   -- Test dependencies.
   build-depends:
       base
