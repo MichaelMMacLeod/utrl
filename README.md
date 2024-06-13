@@ -1,5 +1,9 @@
 # Unnamed Term Rewriting Language (Haskell, 2024)
 
+## Building
+
+nix --version >= 2.8
+
 ## Error Code Index
 
 ### `E001`
