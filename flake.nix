@@ -31,14 +31,13 @@
           rm -rf "$HOME/.config/VSCodium/GPUCache"
         '';
         drv = pkgs.haskellPackages.callCabal2nix "rw" ./. { };
-        # extendedHaskellPackages = with pkgs; haskellPackages.extend (haskell.lib.compose.packageSourceOverrides {
-        #   rw = ./.;
-        # });
         compose = pkgs.haskell.lib.compose;
+        rwpkg = compose.dontHaddock (compose.disableLibraryProfiling
+          (pkgs.haskellPackages.developPackage { root = ./.; }));
       in {
         packages = rec {
           default = rw;
-          rw = compose.addTestToolDepend (compose.dontCheck (pkgs.haskellPackages.developPackage { root = ./.; })) (pkgs.haskellPackages.developPackage { root = ./.; });
+          rw = compose.addTestToolDepend (compose.dontCheck rwpkg) rwpkg;
         };
         devShells.default = with pkgs;
           haskellPackages.shellFor {
