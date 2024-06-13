@@ -30,41 +30,42 @@
           # See https://github.com/NixOS/nixpkgs/issues/259929.
           rm -rf "$HOME/.config/VSCodium/GPUCache"
         '';
-        drv = pkgs.haskellPackages.callCabal2nix "rw" ./. {};
+        drv = pkgs.haskellPackages.callCabal2nix "rw" ./. { };
         # extendedHaskellPackages = with pkgs; haskellPackages.extend (haskell.lib.compose.packageSourceOverrides {
         #   rw = ./.;
         # });
       in {
-        devShells.default = with pkgs; haskellPackages.shellFor {
-          shellHook = ''
-            ${prelude "default"}
-          '';
+        devShells.default = with pkgs;
+          haskellPackages.shellFor {
+            shellHook = ''
+              ${prelude "default"}
+            '';
 
-          withHoogle = true;
-          
-          packages = p: [
-            drv
-          ];
+            withHoogle = true;
 
-          enableLibraryProfiling = true;
-          enableExecutableProfiling = true;
+            packages = p: [ drv ];
 
-          nativeBuildInputs = with haskellPackages; [
-            jq
-            cabal-install
-            ghcid
-            haskell-language-server
-            hlint
-            ormolu
-            diffutils # used when running golden tests
-            (vscode-with-extensions.override {
-              vscode = vscodium;
-              vscodeExtensions = with vscode-extensions; [
-                haskell.haskell
-                justusadam.language-haskell
-              ];
-            })
-          ];
-        };
+            enableLibraryProfiling = true;
+            enableExecutableProfiling = true;
+
+            nativeBuildInputs = with haskellPackages; [
+              jq
+              cabal-install
+              ghcid
+              haskell-language-server
+              hlint
+              ormolu
+              diffutils # used when running golden tests
+              nixfmt
+              (vscode-with-extensions.override {
+                vscode = vscodium;
+                vscodeExtensions = with vscode-extensions; [
+                  haskell.haskell
+                  justusadam.language-haskell
+                  jnoortheen.nix-ide
+                ];
+              })
+            ];
+          };
       });
 }
