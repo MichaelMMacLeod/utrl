@@ -24,6 +24,7 @@ import Data.Array.ST (MArray (newArray_), STArray, readArray, writeArray)
 import Data.Foldable (find)
 import Data.Functor.Foldable (ListF (..), cata)
 import Data.Graph.Inductive (Node, context, labNode', lsuc)
+import Data.Kind (Type)
 import Data.Sequence (Seq (..), fromList, singleton)
 import Predicate (applyPredicates)
 import Utils (Cata, iterateMaybe)
@@ -33,6 +34,7 @@ import Utils (Cata, iterateMaybe)
 -- to the input, the third is the result of applying a definition to the
 -- second, and so on. The last element is the one to which there are no
 -- further definitions left to apply.
+type Reduction :: Type
 type Reduction = [Ast0.Ast]
 
 interpret :: Cfg -> Ast0.Ast -> Reduction
@@ -219,12 +221,14 @@ replace0At ast index replacement = case index of
         after = drop (n + 1) xs
         x = replace0At (xs !! n) index replacement
 
+type Matcher :: Type
 data Matcher = Matcher
   { node :: !Node,
     ast :: !Ast0.Ast,
     index :: [Int]
   }
 
+type Memory :: Type -> Type
 data Memory s = Memory
   { input :: !Ast0.Ast,
     program :: !(Array Int (AstC2.Stmt Int)),

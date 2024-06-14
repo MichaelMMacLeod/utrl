@@ -5,6 +5,7 @@ module GoldenTests (goldenTests) where
 import Config (readFileUtf8)
 import Control.Monad (guard)
 import Data.ByteString.Lazy (ByteString)
+import Data.Kind (Type)
 import Data.List.Extra (stripSuffix)
 import Data.Maybe (mapMaybe)
 import Data.Text qualified as T
@@ -16,11 +17,12 @@ import Test.Tasty.Runners (TestTree (TestGroup))
 
 goldenTests :: IO TestTree
 goldenTests =
-  do
-    listing <- map ("./test/programs/" <>) <$> listDirectory "./test/programs"
-    goldenTestConfigs <- mkGoldenTestConfigs listing
-    let subTestTrees = map goldenTest goldenTestConfigs
-    pure $ TestGroup "golden tests" subTestTrees
+  let testProgramDir = "./test/programs/"
+   in do
+        listing <- map (testProgramDir <>) <$> listDirectory testProgramDir
+        goldenTestConfigs <- mkGoldenTestConfigs listing
+        let subTestTrees = map goldenTest goldenTestConfigs
+        pure $ TestGroup "golden tests" subTestTrees
 
 mkGoldenTestConfigs :: [FilePath] -> IO [GoldenTestConfig]
 mkGoldenTestConfigs directoryListing = do
@@ -103,6 +105,7 @@ isInputFile = stripSuffix ".input"
 isArgsFile :: FilePath -> Maybe FilePath
 isArgsFile = stripSuffix ".args"
 
+type GoldenTestConfig :: Type
 data GoldenTestConfig = GoldenTestConfig
   { testName :: String,
     defsFile :: FilePath,

@@ -3,47 +3,54 @@
 module AstC0
   ( Ast (..),
     AstF (..),
-    AstF',
     Index,
     IndexElement (..),
     isBetween,
+    AstC0Between (..),
   )
 where
 
 import Data.Functor.Foldable (Base, Corecursive (..), Recursive (..))
+import Data.Kind (Type)
 import Data.Text (Text)
 
+type Ast :: Type
 data Ast
   = Symbol Text
   | Compound [Ast]
   | Ellipses Ast
   | Variable Index Text
-  deriving (Show)
+  deriving stock (Show)
 
+type IndexElement :: Type
 data IndexElement
   = ZeroPlus Int
   | LenMinus Int
-  | Between
-      { zeroPlus :: Int,
-        lenMinus :: Int
-      }
-  deriving (Eq, Show, Ord)
+  | Between AstC0Between
+  deriving stock (Eq, Show)
+
+type AstC0Between :: Type
+data AstC0Between = AstC0Between
+  { zeroPlus :: Int,
+    lenMinus :: Int
+  }
+  deriving stock (Show, Eq)
 
 isBetween :: IndexElement -> Bool
 isBetween = \case
   Between {} -> True
   _ -> False
 
+type Index :: Type
 type Index = [IndexElement]
 
+type AstF :: Type -> Type
 data AstF r
   = SymbolF Text
   | CompoundF [r]
   | VariableF Index Text
   | EllipsesF r
-  deriving (Functor)
-
-type AstF' t = AstF t -> t
+  deriving stock (Functor)
 
 type instance Base Ast = AstF
 

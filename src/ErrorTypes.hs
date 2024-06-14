@@ -6,10 +6,13 @@ module ErrorTypes
     ErrorMessage,
   )
 where
-import Data.Text (Text)
+
 import Data.Hashable (Hashable)
+import Data.Kind (Type)
+import Data.Text (Text)
 import GHC.Generics (Generic)
 
+type ErrorType :: Type
 data ErrorType
   = ParsingError
   | BadEllipsesCount
@@ -23,28 +26,32 @@ data ErrorType
   | DefinitionHasWrongNumberOfTerms
   | DefinitionDoesNotStartWithDef
   | VariableNotMatchedInPattern
-  deriving (Eq, Show)
+  deriving stock (Eq, Show)
 
+type ErrorMessage :: Type
 type ErrorMessage = ErrorMessageInfo Int
 
+type ErrorMessageInfo :: Type -> Type
 data ErrorMessageInfo l = ErrorMessageInfo
   { errorType :: ErrorType,
     message :: Text,
     annotations :: [Annotation l],
     help :: Maybe Text
   }
-  deriving (Eq, Show)
+  deriving stock (Eq, Show)
 
+type Annotation :: Type -> Type
 data Annotation l = Annotation
   { span :: Span l,
     annotation :: Text
   }
-  deriving (Eq, Show)
+  deriving stock (Eq, Show)
 
+type Span :: Type -> Type
 data Span l = Span
   { location :: l,
     length :: Int
   }
-  deriving (Eq, Show, Generic)
+  deriving stock (Eq, Show, Generic)
 
 instance Hashable (Span Int)

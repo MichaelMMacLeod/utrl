@@ -15,6 +15,7 @@ import AstC2Assign qualified
 import AstC2Expr (Expr)
 import AstC2Expr qualified as Expr
 import AstC2Jump qualified
+import AstP0 (AstP0CompoundWtihEllipsesF (AstP0CompoundWtihEllipsesF))
 import AstP0 qualified
 import Data.Functor.Foldable (ListF (..), cata)
 import Data.Text (Text)
@@ -28,7 +29,8 @@ displayP0 = display0 . cata go
     go = \case
       AstP0.SymbolF s -> Ast0.Symbol s
       AstP0.CompoundWithoutEllipsesF xs -> Ast0.Compound xs
-      AstP0.CompoundWithEllipsesF b e a -> Ast0.Compound $ b ++ [e, Ast0.Symbol ".."] ++ a
+      AstP0.CompoundWithEllipsesF (AstP0CompoundWtihEllipsesF b e a) ->
+        Ast0.Compound $ b ++ [e, Ast0.Symbol ".."] ++ a
 
 displayC2 :: (Show a) => AstC2.Ast a -> String
 displayC2 = addLineNumbers . cata go

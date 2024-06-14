@@ -23,15 +23,16 @@ import Analyze
   )
 import Ast0 qualified
 import Ast1 qualified
+import AstC0 (AstC0Between (..))
 import AstC0 qualified
-import AstC1 (AssignmentLocation (..))
+import AstC1 (AssignmentLocation (..), AstC1LoopF (..))
 import AstC1 qualified
 import AstC2 qualified
 import AstC2Assign qualified
 import AstC2Expr qualified
 import AstC2Expr qualified as C2Expr
 import AstC2Jump qualified
-import AstP0 (indexP0ByC0)
+import AstP0 (AstP0CompoundWtihEllipsesF (..), indexP0ByC0)
 import AstP0 qualified
 import CompileTypes
   ( CompileRequest,
@@ -57,6 +58,7 @@ import Data.Functor.Foldable (ListF (..), Recursive (..))
 import Data.HashMap.Strict ((!?))
 import Data.HashMap.Strict qualified as H
 import Data.Hashable (Hashable)
+import Data.Kind (Type)
 import Data.Maybe (fromJust)
 import Error (CompileResult)
 import ErrorTypes (ErrorMessage, Span)
@@ -64,8 +66,7 @@ import GHC.Generics (Generic)
 import Predicate (IndexedPredicate)
 import ReadTypes (SrcLocked)
 import Utils
-  ( Between (..),
-    Cata,
+  ( Cata,
     Para,
     isDollarSignVar,
     popBetweenTail,
@@ -208,7 +209,8 @@ compile1toP0 = para go
               Nothing ->
                 span C.:< AstP0.CompoundWithoutEllipsesF (map snd inputXsPairs)
               Just (b, e, a) ->
-                span C.:< AstP0.CompoundWithEllipsesF (map snd b) (snd e) (map snd a)
+                let cwe = AstP0CompoundWtihEllipsesF (map snd b) (snd e) (map snd a)
+                 in span C.:< AstP0.CompoundWithEllipsesF cwe
       Ast1.EllipsesF x -> extract x
 
 p0VariableBindings :: SrcLocked AstP0.Ast -> VariableBindings
@@ -221,7 +223,8 @@ p0VariableBindings = cata go . indexP0ByC0
           then H.singleton s (index, l)
           else H.empty
       AstP0.CompoundWithoutEllipsesF xs -> H.unions xs
-      AstP0.CompoundWithEllipsesF b e a -> H.unions $ e : (b <> a)
+      AstP0.CompoundWithEllipsesF (AstP0CompoundWtihEllipsesF b e a) ->
+        H.unions $ e : (b <> a)
 
 errorsToEither :: [ErrorMessage] -> CompileResult ()
 errorsToEither = \case
@@ -254,10 +257,11 @@ compile1toC0 variableBindings = cata go
       Ast1.CompoundF xs -> span C.:< AstC0.CompoundF xs
       Ast1.EllipsesF x -> span C.:< AstC0.EllipsesF x
 
+type C0ToC1Data :: Type
 data C0ToC1Data = C0ToC1Data
   { ast :: !(SrcLocked AstC1.Ast),
     nextUnusedVar :: !Var,
-    remainingAssignment :: Maybe (Var, AstC0.Index, Between)
+    remainingAssignment :: Maybe (Var, AstC0.Index, AstC0Between)
   }
 
 compileC0ToC1 :: SrcLocked AstC0.Ast -> (SrcLocked AstC1.Ast, Var)
@@ -301,17 +305,19 @@ traverseC0ToC1 (l :< a) nextUnusedVar = case a of
     let C0ToC1Data ast nextUnusedVar' remainingAssignment = x nextUnusedVar
      in case remainingAssignment of
           Nothing -> unreachableBecauseOfAnalysisStep "analyzeEllipsesCounts"
-          Just (var, c0, Between {zeroPlus, lenMinus}) ->
+          Just (var, c0, AstC0Between {zeroPlus, lenMinus}) ->
             let (c0', c1) = popTrailingC1Index c0
                 loopAst =
                   l
                     C.:< AstC1.LoopF
-                      { AstC1.varF = var,
-                        AstC1.srcF = nextUnusedVar' + 1,
-                        AstC1.startF = zeroPlus,
-                        AstC1.endF = lenMinus,
-                        AstC1.bodyF = ast
-                      }
+                      ( AstC1LoopF
+                          { varF = var,
+                            srcF = nextUnusedVar' + 1,
+                            startF = zeroPlus,
+                            endF = lenMinus,
+                            bodyF = ast
+                          }
+                      )
              in C0ToC1Data
                   { ast =
                       if null c1
@@ -360,9 +366,9 @@ traverseC0ToC1 (l :< a) nextUnusedVar = case a of
               }
         where
           compatibleRemainingAssignment ::
-            Maybe (Var, AstC0.Index, Between) ->
-            Maybe (Var, AstC0.Index, Between) ->
-            Maybe (Var, AstC0.Index, Between)
+            Maybe (Var, AstC0.Index, AstC0Between) ->
+            Maybe (Var, AstC0.Index, AstC0Between) ->
+            Maybe (Var, AstC0.Index, AstC0Between)
           compatibleRemainingAssignment Nothing Nothing = Nothing
           compatibleRemainingAssignment (Just t) Nothing = Just t
           compatibleRemainingAssignment Nothing (Just t) = Just t
@@ -371,18 +377,19 @@ traverseC0ToC1 (l :< a) nextUnusedVar = case a of
               then Just u
               else unreachableBecauseOfAnalysisStep "analyzeEllipsesCaptures"
 
+type C1ToC2InputData :: Type
 data C1ToC2InputData = C1ToC2InputData
-  { _c2iNextUnusedVar :: Var,
-    _c2iCompoundTermLengthCounter :: Maybe Var
+  { c2iNextUnusedVar :: Var,
+    c2iCompoundTermLengthCounter :: Maybe Var
   }
 
 incC2Var :: C1ToC2InputData -> C1ToC2InputData
 incC2Var d =
-  let v = _c2iNextUnusedVar d
-   in d {_c2iNextUnusedVar = v + 1}
+  let v = c2iNextUnusedVar d
+   in d {c2iNextUnusedVar = v + 1}
 
 setLengthCountVar :: Var -> C1ToC2InputData -> C1ToC2InputData
-setLengthCountVar v d = d {_c2iCompoundTermLengthCounter = Just v}
+setLengthCountVar v d = d {c2iCompoundTermLengthCounter = Just v}
 
 newLengthCountVar :: State C1ToC2InputData Var
 newLengthCountVar = do
@@ -392,7 +399,7 @@ newLengthCountVar = do
 
 newVar :: State C1ToC2InputData Var
 newVar = do
-  var <- gets _c2iNextUnusedVar
+  var <- gets c2iNextUnusedVar
   modify incC2Var
   pure var
 
@@ -453,13 +460,13 @@ compileC1ToC2 nextUnusedVar ast = runStateAndReturnResults (para go ast) initial
       (SrcLocked (AstC2.Ast NamedLabel), Var)
     runStateAndReturnResults state initialState =
       let (astC2, c1ToC2InputData) = runState state initialState
-       in (astC2, c1ToC2InputData._c2iNextUnusedVar)
+       in (astC2, c1ToC2InputData.c2iNextUnusedVar)
 
     initialState :: C1ToC2InputData
     initialState =
       C1ToC2InputData
-        { _c2iNextUnusedVar = nextUnusedVar,
-          _c2iCompoundTermLengthCounter = Nothing
+        { c2iNextUnusedVar = nextUnusedVar,
+          c2iCompoundTermLengthCounter = Nothing
         }
     isC1NonLoopVariant :: SrcLocked AstC1.Ast -> Bool
     isC1NonLoopVariant (_ C.:< AstC1.LoopF {}) = False
@@ -507,7 +514,7 @@ compileC1ToC2 nextUnusedVar ast = runStateAndReturnResults (para go ast) initial
         let assignmentStmts = indexAssignStmts span var loc index
         pure $ assignmentStmts `cofreeAppend` x
       AstC1.CopyF v -> pure $ mapSrcLock span [AstC2.Push $ C2Expr.Var v]
-      AstC1.LoopF var src start end inputXPair -> do
+      AstC1.LoopF (AstC1LoopF var src start end inputXPair) -> do
         --        #0 = start              ; #0 is 'loopCounterVar'
         --        #1 = #src.length - end  ; #1 is 'loopEndVar'
         --        jump BOT
@@ -516,7 +523,7 @@ compileC1ToC2 nextUnusedVar ast = runStateAndReturnResults (para go ast) initial
         --        #0 = #0 + 1
         --        #lc = #lc + 1           ; #lc is 'lengthCountVar'
         -- BOT:   jump TOP if #0 < #1
-        maybeLengthCountVar <- gets _c2iCompoundTermLengthCounter
+        maybeLengthCountVar <- gets c2iCompoundTermLengthCounter
         let lengthCountVar = case maybeLengthCountVar of
               Nothing -> error "unreachable"
               Just lengthCountVar -> lengthCountVar
@@ -603,7 +610,9 @@ compileC1ToC2 nextUnusedVar ast = runStateAndReturnResults (para go ast) initial
                 ]
         pure $ srcLockedPrologue `cofreeAppend` x `cofreeAppend` srcLockedEpilogue
 
-data NamedLabel = TopOfLoop !Int | BotOfLoop !Int deriving (Eq, Generic)
+type NamedLabel :: Type
+data NamedLabel = TopOfLoop !Int | BotOfLoop !Int
+  deriving stock (Eq, Generic)
 
 instance Hashable NamedLabel
 

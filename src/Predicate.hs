@@ -10,15 +10,18 @@ module Predicate
 where
 
 import Ast0 qualified
+import AstC0 (AstC0Between (..))
 import AstC0 qualified
+import Data.Kind (Type)
 import Data.Text (Text)
 import Utils (isDollarSignVar)
 
+type Predicate :: Type
 data Predicate
   = SymbolEqualTo Text
   | LengthEqualTo Int
   | LengthGreaterThanOrEqualTo Int
-  deriving (Eq, Show, Ord)
+  deriving stock (Eq, Show, Ord)
 
 toFunc :: Predicate -> (Ast0.Ast -> Bool)
 toFunc (SymbolEqualTo str1) (Ast0.Symbol str2) = str1 == str2
@@ -50,8 +53,9 @@ toFuncForOverlappingPatternAnalysis predicate symbol = case (predicate, symbol) 
   (LengthGreaterThanOrEqualTo n, Ast0.Compound xs) -> length xs >= n
   _ -> False
 
+type IndexedPredicate :: Type
 data IndexedPredicate = IndexedPredicate Predicate AstC0.Index
-  deriving (Eq, Show, Ord)
+  deriving stock (Eq, Show)
 
 applyPredicate :: IndexedPredicate -> Ast0.Ast -> Bool
 applyPredicate (IndexedPredicate p i) ast = all (toFunc p) (getAtC0Index i ast)
@@ -79,7 +83,7 @@ getAtC0Index (AstC0.LenMinus lm : i) (Ast0.Compound xs) =
    in if zp > 0
         then getAtC0Index i (xs !! zp)
         else []
-getAtC0Index (AstC0.Between zp lm : i) (Ast0.Compound xs) =
+getAtC0Index (AstC0.Between (AstC0Between zp lm) : i) (Ast0.Compound xs) =
   let zpEnd = Prelude.length xs - lm
    in if zp < Prelude.length xs && zpEnd > 0
         then concatMap (getAtC0Index i) (drop zp (take zpEnd xs))

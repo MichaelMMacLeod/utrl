@@ -14,7 +14,6 @@ module Utils
     popTrailingC1Index,
     c0Head,
     c1Tail,
-    Between (..),
     getPatternSpanAtC0Index,
     pushBetweenTail,
     compareSpan,
@@ -24,12 +23,14 @@ module Utils
 where
 
 import Ast1 qualified
+import AstC0 (AstC0Between (..))
 import AstC0 qualified
 import AstC1 qualified
 import Control.Comonad.Cofree (Cofree)
 import Control.Comonad.Trans.Cofree (CofreeF ((:<)))
 import Data.Functor.Base (ListF (..))
 import Data.Functor.Foldable (Base, Corecursive (..), Recursive (..))
+import Data.Kind (Type)
 import Data.List.Extra (snoc, (!?))
 import Data.Text (Text, isPrefixOf, pack)
 import Data.Text.Lazy qualified as T (toStrict)
@@ -39,12 +40,16 @@ import ErrorTypes (Span, location)
 import GHC.Base (compareInt)
 import ReadTypes (SrcLocked)
 
+type Cata :: Type -> Type -> Type
 type Cata t a = Base t a -> a
 
+type Para :: Type -> Type -> Type
 type Para t a = Base t (t, a) -> a
 
+type Histo :: Type -> Type -> Type
 type Histo t a = Base t (Cofree (Base t) a) -> a
 
+type Ana :: Type -> Type -> Type
 type Ana a t = a -> Base t a
 
 iterateMaybe :: forall b. (b -> Maybe b) -> b -> [b]
@@ -110,20 +115,14 @@ popTrailingC1Index c0 = (c0Head c0, c1Tail c0)
 -- C0-index, or Nothing if the input index ends with a different
 -- 'IndexElement. The first elemnet of the returned pair is the
 -- rest of the input.
-popBetweenTail :: AstC0.Index -> (AstC0.Index, Maybe Between)
+popBetweenTail :: AstC0.Index -> (AstC0.Index, Maybe AstC0Between)
 popBetweenTail = go . reverse
   where
-    go (AstC0.Between zp lm : others) = (reverse others, Just $ Between zp lm)
+    go (AstC0.Between (AstC0Between zp lm) : others) = (reverse others, Just $ AstC0Between zp lm)
     go others = (others, Nothing)
 
-data Between = Between
-  { zeroPlus :: Int,
-    lenMinus :: Int
-  }
-  deriving (Show, Eq)
-
-pushBetweenTail :: (AstC0.Index, Between) -> AstC0.Index
-pushBetweenTail (index, between) = snoc index (AstC0.Between between.zeroPlus between.lenMinus)
+pushBetweenTail :: (AstC0.Index, AstC0Between) -> AstC0.Index
+pushBetweenTail (index, between) = snoc index (AstC0.Between (AstC0Between between.zeroPlus between.lenMinus))
 
 getPatternSpanAtC0Index :: SrcLocked Ast1.Ast -> AstC0.Index -> Maybe (Span Int)
 getPatternSpanAtC0Index = cata go
@@ -143,7 +142,7 @@ getPatternSpanAtC0Index = cata go
                 AstC0.LenMinus n -> do
                   x <- xs !? (length xs - n)
                   x indexTail
-                AstC0.Between n _ -> do
+                AstC0.Between (AstC0Between n _) -> do
                   x <- xs !? n
                   x indexTail
             Ast1.EllipsesF x -> x index

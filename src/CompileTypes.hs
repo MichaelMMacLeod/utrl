@@ -17,6 +17,7 @@ import AstC1 qualified
 import AstC2 qualified
 import AstP0 qualified
 import Data.HashMap.Strict qualified as H
+import Data.Kind (Type)
 import Data.Text (Text)
 import ErrorTypes (ErrorMessage, Span)
 import Predicate (IndexedPredicate)
@@ -43,10 +44,13 @@ mkDefinitionStorage definition =
       nextUnusedVar = 0
     }
 
+type Storage :: Type
 newtype Storage = Storage [DefinitionStorage]
 
+type Stage :: Type -> Type
 data Stage s = Pending | Success s | Fail [ErrorMessage]
 
+type DefinitionStorage :: Type
 data DefinitionStorage = DefinitionStorage
   { definition :: SrcLocked Ast0.Ast,
     constructor0 :: Stage (SrcLocked Ast0.Ast),
@@ -72,6 +76,7 @@ mkRequest d getStage result = case getStage d of
   Success s -> Right (s, d)
   Pending -> result
 
+type CompileRequest :: Type -> Type
 type CompileRequest s = DefinitionStorage -> Either ([ErrorMessage], DefinitionStorage) (s, DefinitionStorage)
 
 fromSuccess :: Stage s -> s
@@ -80,4 +85,5 @@ fromSuccess stage = case stage of
   Pending -> error "fromScucess: Pending"
   Fail _ -> error "fromSuccess: Fail"
 
+type VariableBindings :: Type
 type VariableBindings = H.HashMap Text (AstC0.Index, Span Int)

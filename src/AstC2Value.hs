@@ -7,13 +7,15 @@ module AstC2Value
   )
 where
 
-import qualified Ast0
+import Ast0 qualified
+import Data.Kind (Type)
 
+type Value :: Type
 data Value
   = Nat Int
   | Bool Bool
   | Ast Ast0.Ast
-  deriving (Show, Eq)
+  deriving stock (Show, Eq)
 
 mkTypeError :: String -> Value -> a
 mkTypeError t x = error $ "expected " ++ t ++ ", got " ++ show x

@@ -21,8 +21,9 @@ where
 
 import Ast0 qualified
 import Ast1 qualified
+import AstC0 (AstC0Between)
 import AstC0 qualified
-import AstP0 (indexP0ByC0)
+import AstP0 (AstP0CompoundWtihEllipsesF (..), indexP0ByC0)
 import AstP0 qualified
 import CompileTypes (VariableBindings)
 import Control.Comonad (extract)
@@ -33,9 +34,11 @@ import Control.Monad (guard)
 import Data.Foldable.Extra (Foldable (foldl'))
 import Data.Functor.Foldable (Recursive (..))
 import Data.HashMap.Strict qualified as H
+import Data.Kind (Type)
 import Data.List (sortBy)
 import Data.Maybe (catMaybes, fromJust, listToMaybe, mapMaybe)
 import Data.Set qualified as S
+import Data.Text (Text)
 import Error
   ( badEllipsesCapturesErrorMessage,
     badEllipsesCountErrorMessage,
@@ -57,8 +60,7 @@ import Predicate
   )
 import ReadTypes (SrcLocked)
 import Utils
-  ( Between,
-    Cata,
+  ( Cata,
     Para,
     compareSpan,
     getPatternSpanAtC0Index,
@@ -68,7 +70,6 @@ import Utils
     pushBetweenTail,
   )
 import Prelude hiding (span)
-import Data.Text (Text)
 
 -- | Finds errors relating to the use of a '$variable' in the constructor that was
 -- not matched in the pattern, as in '(def (copy x) $x)'.
@@ -191,11 +192,13 @@ analyzeEllipsesCaptures pattern = extractErrors . cata go
                     }
                 ]
 
+type Assignment :: Type
 data Assignment = Assignment
   { variableName :: Text,
-    index :: (AstC0.Index, Between)
+    index :: (AstC0.Index, AstC0Between)
   }
 
+type HasVariable :: Type
 type HasVariable = Bool
 
 -- | Finds errors of ellipses applied to symbols. We detect this case
@@ -399,6 +402,7 @@ analyzeOverlappingPatterns =
             pattern2WithEllipsesRemoved
           }
 
+type OverlappingPatternAnalysisInfo :: Type
 data OverlappingPatternAnalysisInfo = OverlappingPatternAnalysisInfo
   { pattern1Span :: Span Int,
     pattern1Predicates :: [IndexedPredicate],
@@ -406,6 +410,7 @@ data OverlappingPatternAnalysisInfo = OverlappingPatternAnalysisInfo
     pattern2WithEllipsesRemoved :: Ast0.Ast
   }
 
+type OverlappingPatternSpans :: Type
 data OverlappingPatternSpans = OverlappingPatternSpans
   { pattern1Span :: Span Int,
     pattern2Span :: Span Int
@@ -434,7 +439,8 @@ removeEllipsesFromPattern = cata go
     go (_ :< ast) = case ast of
       AstP0.SymbolF s -> Ast0.Symbol s
       AstP0.CompoundWithoutEllipsesF xs -> Ast0.Compound xs
-      AstP0.CompoundWithEllipsesF b _e a -> Ast0.Compound $ b <> a
+      AstP0.CompoundWithEllipsesF (AstP0CompoundWtihEllipsesF b _e a) ->
+        Ast0.Compound $ b <> a
 
 -- Returns a list of conditions that must hold for a given rule's pattern to
 -- match a term.
@@ -462,7 +468,7 @@ ruleDefinitionPredicates vars pat = cata go (indexP0ByC0 pat)
         let xs' = concat xs
             p = IndexedPredicate (LengthEqualTo (length xs)) index
          in p : xs'
-      AstP0.CompoundWithEllipsesF b e a ->
+      AstP0.CompoundWithEllipsesF (AstP0CompoundWtihEllipsesF b e a) ->
         let b' = concat b
             a' = concat a
             p = IndexedPredicate (LengthGreaterThanOrEqualTo $ length b + length a) index

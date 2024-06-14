@@ -7,8 +7,10 @@ where
 
 import AstC2ExprVar (Var)
 import Data.Functor.Foldable (Base, Corecursive (..), Recursive (..))
+import Data.Kind (Type)
 import Data.Text (Text)
 
+type Expr :: Type
 data Expr
   = Bool Bool
   | Var Var
@@ -17,11 +19,13 @@ data Expr
   | Input
   | Length Expr
   | BinOp Op Expr Expr
-  deriving (Show, Eq, Ord)
+  deriving stock (Show, Eq, Ord)
 
+type Op :: Type
 data Op = Add | Sub | ArrayAccess | LessThan
-  deriving (Show, Eq, Ord)
+  deriving stock (Show, Eq, Ord)
 
+type ExprF :: Type -> Type
 data ExprF r
   = BoolF Bool
   | VarF Var
@@ -30,7 +34,7 @@ data ExprF r
   | InputF
   | LengthF r
   | BinOpF Op r r
-  deriving (Show, Eq, Ord, Functor)
+  deriving stock (Show, Eq, Ord, Functor)
 
 type instance Base Expr = ExprF
 

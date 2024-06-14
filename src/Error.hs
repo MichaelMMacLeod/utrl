@@ -27,6 +27,7 @@ where
 
 import Data.Functor.Foldable (ListF (..), Recursive (..))
 import Data.HashMap.Strict qualified as H
+import Data.Kind (Type)
 import Data.List (intersperse, sortBy)
 import Data.List.NonEmpty.Extra (toList)
 import Data.Maybe (fromJust, fromMaybe)
@@ -65,6 +66,7 @@ errorMessages name contents errors =
 mkFilePathName :: Maybe FilePath -> String
 mkFilePathName = fromMaybe "<input>"
 
+type CompileResult :: Type -> Type
 type CompileResult a = Either [ErrorMessageInfo Int] a
 
 errorCode :: ErrorType -> Int
@@ -82,8 +84,10 @@ errorCode = \case
   DefinitionDoesNotStartWithDef -> 11
   VariableNotMatchedInPattern -> 12
 
+type FileContents :: Type
 type FileContents = Text
 
+type ErrorBundle :: Type
 data ErrorBundle = ErrorBundle
   { posState :: PosState Text,
     errors :: [ErrorMessageInfo Int]
@@ -153,11 +157,12 @@ addLength s1 s2 =
       length = s2.location - s1.location + s2.length
     }
 
+type OffendingLine :: Type
 data OffendingLine = OffendingLine
   { line :: Text,
     sourcePos :: SourcePos
   }
-  deriving (Show)
+  deriving stock (Show)
 
 formatErrorMessage :: ErrorMessageInfo OffendingLine -> Text
 formatErrorMessage (ErrorMessageInfo {errorType, message, annotations, help}) =

@@ -4,6 +4,7 @@ import Ast0 qualified
 import Control.Comonad.Cofree (Cofree (..))
 import Data.Char (isSpace)
 import Data.Either.Extra (fromRight')
+import Data.Kind (Type)
 import Data.Text (Text, pack)
 import Data.Void (Void)
 import Error
@@ -31,13 +32,14 @@ read :: Maybe FilePath -> FileContents -> CompileResult [SrcLocked Ast0.Ast]
 read name contents =
   case runParser terms (mkFilePathName name) contents of
     Right ts -> Right ts
-    Left parseErrorBundle -> Left $ [parseErrorMessage parseErrorBundle]
+    Left parseErrorBundle -> Left [parseErrorMessage parseErrorBundle]
 
 -- Partial read, which errors at runtime on compile errors. Useful for reducing
 -- boilerplate for tests.
 read' :: Text -> [SrcLocked Ast0.Ast]
 read' = fromRight' . Read.read Nothing
 
+type Parser :: Type -> Type
 type Parser = Parsec Void Text
 
 terms :: Parser [SrcLocked Ast0.Ast]

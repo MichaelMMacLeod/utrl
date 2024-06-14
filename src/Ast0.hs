@@ -11,18 +11,22 @@ import Data.Functor.Foldable
     embed,
     project,
   )
-import GHC.Generics (Generic)
+import Data.Kind (Type)
 import Data.Text (Text)
+import GHC.Generics (Generic)
 
+type Ast :: Type
 data Ast
   = Symbol Text
   | Compound [Ast]
-  deriving (Show, Eq, Generic, NFData)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (NFData)
 
+type AstF :: Type -> Type
 data AstF r
   = SymbolF Text
   | CompoundF [r]
-  deriving (Show, Functor)
+  deriving stock (Show, Functor)
 
 type instance Base Ast = AstF
 

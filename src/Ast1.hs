@@ -1,3 +1,5 @@
+{-# LANGUAGE DerivingStrategies #-}
+
 module Ast1 (Ast (..), AstF (..)) where
 
 import Data.Functor.Foldable
@@ -7,19 +9,22 @@ import Data.Functor.Foldable
     embed,
     project,
   )
+import Data.Kind (Type)
 import Data.Text (Text)
 
+type Ast :: Type
 data Ast
   = Symbol Text
   | Compound [Ast]
   | Ellipses Ast
-  deriving (Show)
+  deriving stock (Show)
 
+type AstF :: Type -> Type
 data AstF r
   = SymbolF Text
   | CompoundF [r]
   | EllipsesF r
-  deriving (Show, Functor)
+  deriving stock (Show, Functor)
 
 type instance Base Ast = AstF
 

@@ -18,6 +18,7 @@ import Data.Functor.Base (ListF (..))
 import Data.Functor.Foldable (Recursive (..))
 import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)
+import Data.Kind (Type)
 import Data.List (intercalate)
 import Display qualified
 import Error (CompileResult)
@@ -88,11 +89,12 @@ mkCfg (Storage definitionStorages) = do
       gr = mkGraph lnodes ledges
   Right $ Cfg gr start
 
+type Cfg :: Type
 data Cfg = Cfg
   { graph :: !(Gr (AstC2.Ast Int) [IndexedPredicate]),
     start :: !Node
   }
-  deriving (Show, Eq)
+  deriving stock (Show)
 
 dumpCfgStmts :: Cfg -> String
 dumpCfgStmts = intercalate "\n\n" . map (Display.displayC2 . snd) . labNodes . graph

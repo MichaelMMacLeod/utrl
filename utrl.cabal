@@ -38,22 +38,32 @@ extra-doc-files:
 
 common options
   ghc-options:
-    -Wall
-    -Werror=incomplete-patterns
     -threaded
+    -Weverything
+    -Wno-missing-exported-signatures
+    -Wno-missing-import-lists
+    -Wno-missed-specialisations
+    -Wno-all-missed-specialisations
+    -Wno-unsafe
+    -Wno-safe
+    -Wno-missing-safe-haskell-mode
+    -Wno-missing-local-signatures
+    -Wno-monomorphism-restriction
+    -Wno-implicit-prelude
+
 
 common language
   default-language: GHC2021
 
 common extensions
   default-extensions:
-      DeriveFunctor
-    , InstanceSigs
+      InstanceSigs
     , LambdaCase
     , TypeFamilies
     , OverloadedStrings
     , DuplicateRecordFields
     , OverloadedRecordDot
+    , DerivingStrategies
 
 library
   import:
