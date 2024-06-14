@@ -30,14 +30,21 @@
           # See https://github.com/NixOS/nixpkgs/issues/259929.
           rm -rf "$HOME/.config/VSCodium/GPUCache"
         '';
-        drv = pkgs.haskellPackages.callCabal2nix "rw" ./. { };
         compose = pkgs.haskell.lib.compose;
-        rwpkg = compose.dontHaddock (compose.disableLibraryProfiling
-          (pkgs.haskellPackages.developPackage { root = ./.; }));
+        rw-pkg = compose.addTestToolDepend [ pkgs.diffutils ]
+          (compose.dontHaddock (compose.disableLibraryProfiling
+            (pkgs.haskellPackages.developPackage { root = ./.; })));
       in {
         packages = rec {
           default = rw;
-          rw = compose.addTestToolDepend (compose.dontCheck rwpkg) rwpkg;
+          # The tests require access to the executable produced in 'rw-pkg'.
+          # For some reason, 'developPackage' doesn't recognize this, even
+          # though we explicitly state so in the .cabal. As a fix, build the
+          # package twice, the first time without tests, using the executable
+          # produced in the first go-around to run tests in the second.
+          # Unfortunately, this means that it takes twice as long to compile.
+          # There's got to be a better way...
+          rw = compose.addTestToolDepend (compose.dontCheck rw-pkg) rw-pkg;
         };
         devShells.default = with pkgs;
           haskellPackages.shellFor {
@@ -47,7 +54,7 @@
 
             withHoogle = true;
 
-            packages = p: [ drv ];
+            packages = p: [ rw-pkg ];
 
             enableLibraryProfiling = true;
             enableExecutableProfiling = true;
@@ -59,7 +66,6 @@
               haskell-language-server
               hlint
               ormolu
-              diffutils # used when running golden tests
               nixfmt
               (vscode-with-extensions.override {
                 vscode = vscodium;

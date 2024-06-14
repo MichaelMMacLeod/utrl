@@ -1,8 +1,29 @@
 # Unnamed Term Rewriting Language (Haskell, 2024)
 
-## Building
+## Building, Testing, and Running
 
-nix --version >= 2.8
+This project uses [Nix](https://nixos.org/download/) to manage its build process and dependencies. Nix version 2.8 (released on 2022-04-19) or greater is required. Use `nix --version` to check if you're up to date.
+
+To build and test the interpreter use:
+```
+nix --extra-experimental-features 'nix-command flakes' build 
+```
+This installs the interpreter to `./result/bin/rw`. To run it, use:
+```
+./result/bin/rw --help
+```
+A development environment containing [VSCodium](https://vscodium.com/) with Haskell/Nix extensions pre-installed, along with the Haskell build tool [cabal](https://cabal.readthedocs.io/en/stable/), and Haskell compiler [ghc](https://www.haskell.org/ghc/) can be entered using:
+```
+nix --extra-experimental-features 'nix-command flakes' develop
+```
+These are some of the available commands inside the development environment:
+```
+codium                 # open VSCodium IDE
+cabal build            # build interpreter
+cabal test             # run tests
+cabal run rw -- --help # run interpreter
+```
+It's a good idea when developing to use `cabal build` instead of `nix build`; the former will selectively build only the parts of the code that have changed, while the latter will always perform a full-rebuild.
 
 ## Error Code Index
 
