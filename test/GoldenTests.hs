@@ -9,7 +9,7 @@ import Data.List.Extra (stripSuffix)
 import Data.Maybe (mapMaybe)
 import Data.Text qualified as T
 import System.Directory.Extra (listDirectory)
-import System.Process.Typed (ExitCode, proc, readProcessInterleaved, runProcess, shell)
+import System.Process.Typed (ExitCode, proc, readProcessInterleaved)
 import Test.Tasty (TestTree)
 import Test.Tasty.Golden (goldenVsStringDiff)
 import Test.Tasty.Runners (TestTree (TestGroup))
