@@ -2,6 +2,8 @@
 // Instead of inputting/outputting chars, this receives/produces Peano integers, since
 // this is the easiest way to implement addition/subtraction in this language.
 // See: https://en.wikipedia.org/wiki/Peano_axioms.
+//
+// This helps demonstrate that utrl is turing-complete.
 
 (def (bf (input = $in) $x ..)
      (program
@@ -10,39 +12,51 @@
        (mem = (() (0)))
        (cmd = (read (()) $x ..))))
 
+// Read '['
 (def (read ($c ..) [ $x ..)
   (read (() $c ..) $x ..))
 
+// Read ']'
 (def (read ($c0 ($c ..) $c1 ..) ] $x ..)
   (read (($c .. $c0) $c1 ..) $x ..))
 
+// Read '.'
 (def (read (($c0 ..) $c ..) . $x ..)
   (read (($c0 .. .) $c ..) $x ..))
 
+// Read ','
 (def (read (($c0 ..) $c ..) , $x ..)
   (read (($c0 .. ,) $c ..) $x ..))
 
+// Read '+'
 (def (read (($c0 ..) $c ..) + $x ..)
   (read (($c0 .. +) $c ..) $x ..))
 
+// Read '-'
 (def (read (($c0 ..) $c ..) - $x ..)
   (read (($c0 .. -) $c ..) $x ..))
 
+// Read '>'
 (def (read (($c0 ..) $c ..) > $x ..)
   (read (($c0 .. >) $c ..) $x ..))
 
+// Read '<'
 (def (read (($c0 ..) $c ..) < $x ..)
   (read (($c0 .. <) $c ..) $x ..))
 
+// Finish reading
 (def (read (($c ..)))
   (() ($c ..)))
 
+// When there are no more commands on the stack, return the result.
 (def (program
        (input = $in)
        (output = $out)
        (mem = $d))
      (result = $out))
 
+// When all the instructions in the current command have been processed,
+// pop it off the command stack.
 (def (program
        (input = $in)
        (output = $out)
@@ -55,6 +69,7 @@
        (mem = $mem)
        $stack ..))
 
+// Instruction '>': Move data pointer pointer to the right.
 (def (program
        (input = $in)
        (output = $out)
@@ -68,6 +83,8 @@
        (cmd = (($ib .. >) ($ia ..)))
        $stack ..))
 
+// Instruction '>': When the data pointer is already at the right end of the data,
+// add a zero to the right end and move the data pointer to it.
 (def (program
        (input = $in)
        (output = $out)
@@ -81,6 +98,7 @@
        (cmd = (($ib .. >) ($ia ..)))
        $stack ..))
 
+// Instruction '<': Move data pointer to the left.
 (def (program
        (input = $in)
        (output = $out)
@@ -94,6 +112,7 @@
        (cmd = (($ib .. <) ($ia ..)))
        $stack ..))
 
+// Instruction '+': Increment value at data pointer.
 (def (program
        (input = $in)
        (output = $out)
@@ -107,6 +126,7 @@
        (cmd = (($ib .. +) ($ia ..)))
        $stack ..))
 
+// Instruction '-': Decrement value at data pointer.
 (def (program
        (input = $in)
        (output = $out)
@@ -120,6 +140,7 @@
        (cmd = (($ib .. -) ($ia ..)))
        $stack ..))
 
+// Instruction '.': Append value at data pointer to end of output.
 (def (program
        (input = $in)
        (output = ($out ..))
@@ -133,6 +154,8 @@
        (cmd = (($ib .. .) ($ia ..)))
        $stack ..))
 
+// Instruction ',': Pop off head of input, replacing current value at data pointer
+// with it.
 (def (program
        (input = ($in0 $in ..))
        (output = $out)
@@ -146,6 +169,8 @@
        (cmd = (($ib .. ,) ($ia ..)))
        $stack ..))
 
+// Instruction ',': When there is no input, replace current value at data pointer
+// with zero instead.
 (def (program
        (input = ())
        (output = $out)
@@ -159,6 +184,7 @@
        (cmd = (($ib .. ,) ($ia ..)))
        $stack ..))
 
+// Instruction '[': When value at data pointer is zero, skip over nested instructions.
 (def (program
        (input = $in)
        (output = $out)
@@ -172,6 +198,7 @@
        (cmd = (($ib .. ($ii ..)) ($ia ..)))
        $stack ..))
 
+// Instruction '[': When value at data pointer is positive, execute nested instructions.
 (def (program
        (input = $in)
        (output = $out)
