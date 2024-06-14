@@ -9,3 +9,5 @@ app/Main
 cabal.project.local*
 *.prof
 result
+deb-single-utrl
+rpm-single-utrl
