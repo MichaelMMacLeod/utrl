@@ -68,12 +68,12 @@ goldenTest c = goldenVsStringDiff c.testName diffCmd c.expectedOutputFile mainOu
     runCmd :: IO (ExitCode, ByteString)
     runCmd = do
       args <- args
-      readProcessInterleaved (proc "rw" args)
+      readProcessInterleaved (proc "utrl" args)
 
     args :: IO [String]
     args = do
       argsFileArgs <- argsFileArgs
-      pure $ {-["run", "rw", "--"] <>-} defsArgs <> argsFileArgs <> inputArgs
+      pure $ defsArgs <> argsFileArgs <> inputArgs
 
     argsFileArgs :: IO [String]
     argsFileArgs =

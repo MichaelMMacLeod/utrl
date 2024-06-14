@@ -48,7 +48,7 @@ terms = do
   pure ts
 
 term :: Parser (SrcLocked Ast0.Ast)
-term = rwSymbol <|> compoundTerm
+term = utrlSymbol <|> compoundTerm
 
 compoundTerm :: Parser (SrcLocked Ast0.Ast)
 compoundTerm = do
@@ -69,14 +69,14 @@ rightParen = do
   _ <- lexeme $ symbol ")"
   pure ()
 
-rwSymbolChar :: Parser Char
-rwSymbolChar = satisfy $ \c -> not (isSpace c) && c /= '(' && c /= ')'
+utrlSymbolChar :: Parser Char
+utrlSymbolChar = satisfy $ \c -> not (isSpace c) && c /= '(' && c /= ')'
 
-rwSymbol :: Parser (SrcLocked Ast0.Ast)
-rwSymbol = lexeme $ do
+utrlSymbol :: Parser (SrcLocked Ast0.Ast)
+utrlSymbol = lexeme $ do
   offset <- getOffset
-  c0 <- rwSymbolChar
-  cN <- many rwSymbolChar
+  c0 <- utrlSymbolChar
+  cN <- many utrlSymbolChar
   endingOffset <- getOffset
   let span = Span offset (endingOffset - offset)
   pure $ span :< Ast0.SymbolF (pack $ c0 : cN)

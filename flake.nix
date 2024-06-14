@@ -31,20 +31,20 @@
           rm -rf "$HOME/.config/VSCodium/GPUCache"
         '';
         compose = pkgs.haskell.lib.compose;
-        rw-pkg = compose.addTestToolDepend [ pkgs.diffutils ]
+        utrl-pkg = compose.addTestToolDepend [ pkgs.diffutils ]
           (compose.dontHaddock (compose.disableLibraryProfiling
             (pkgs.haskellPackages.developPackage { root = ./.; })));
       in {
         packages = rec {
-          default = rw;
-          # The tests require access to the executable produced in 'rw-pkg'.
+          default = utrl;
+          # The tests require access to the executable produced in 'utrl-pkg'.
           # For some reason, 'developPackage' doesn't recognize this, even
           # though we explicitly state so in the .cabal. As a fix, build the
           # package twice, the first time without tests, using the executable
           # produced in the first go-around to run tests in the second.
           # Unfortunately, this means that it takes twice as long to compile.
           # There's got to be a better way...
-          rw = compose.addTestToolDepend (compose.dontCheck rw-pkg) rw-pkg;
+          utrl = compose.addTestToolDepend (compose.dontCheck utrl-pkg) utrl-pkg;
         };
         devShells.default = with pkgs;
           haskellPackages.shellFor {
@@ -54,7 +54,7 @@
 
             withHoogle = true;
 
-            packages = p: [ rw-pkg ];
+            packages = p: [ utrl-pkg ];
 
             enableLibraryProfiling = true;
             enableExecutableProfiling = true;
