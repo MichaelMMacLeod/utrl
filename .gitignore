@@ -8,3 +8,4 @@ app/Main
 *.tix
 cabal.project.local*
 *.prof
+result
