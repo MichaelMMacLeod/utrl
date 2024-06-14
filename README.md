@@ -1,4 +1,4 @@
-# Unnamed Term Rewriting Language (Haskell, 2024)
+# Untitled Term Rewriting Language (Haskell, 2024)
 
 ## Building, Testing, and Running
 
