@@ -15,6 +15,22 @@
     O(1) appending via the linked list.
 
 - Fix error messages that span multiple lines not looking correct
+- Relax rules around ellipsis match counts to allow repeating vars:
+
+  (def (copy-it $i ($x ..))
+    (($i $x) ..))
+  (copy-it A (x1 x2 x3))
+  -->
+  ((A x1) (A x2) (A x3))
+
+- Relax rules around number of ellipses in pattern (requires lots of internal changes):
+
+  (def (two $x .. | $y ..)
+    (x = ($x ..) | y = ($y ..)))
+  (two 1 2 3 | a b c)
+  -->
+  (x = (1 2 3) | y = (a b c))
+
 - Add optimization passes on pattern graph
 - Actually compile patterns to stmts as well (currently only constructors are compiled)
 - Output webassemby/native code instead of running compiled code in haskell interpreter

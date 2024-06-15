@@ -9,6 +9,7 @@ This repository contains a compiler/interpreter for `utrl`, a simple untyped [pu
   - [Natural Numbers](#natural-numbers)
   - [Mergesort](#mergesort)
   - [Brainfuck interpreter](#brainfuck-interpreter)
+  - [Binary Numbers](#binary-numbers)
 - [Installation Instructions](#installation-instructions)
 - [Error Code Index](#error-code-index)
 
@@ -66,9 +67,9 @@ Similar to macro definition syntax in other languages, `utrl` supports ellipses 
   // (list 1 2 3 a b c)
   ```
 
-I consider `utrl` more of an art project than a useful tool. It's asthetically pleasing, but a royal pain to use. `utrl` lacks almost every built-in feature one would expect out of a programming language including types, numbers, booleans, structs, and so on. That being said, it *is* possible with enough effort to write some [interesting programs](#examples). `utrl` is Turing-complete, and while I do not have a rigorous proof of this, I have written a [brainfuck](https://en.wikipedia.org/wiki/Brainfuck) interpreter in it, which can be found [here](./test/programs/brainfuck.defs).
+I consider `utrl` more of an art project than a useful tool. It's aesthetically pleasing, but a royal pain to use. `utrl` lacks almost every built-in feature one would expect out of a programming language including types, numbers, booleans, structs, and so on. That being said, it *is* possible with enough effort to write some [interesting programs](#examples). `utrl` is Turing-complete, and while I do not have a rigorous proof of this, I have written a [brainfuck](https://en.wikipedia.org/wiki/Brainfuck) interpreter in it, which can be found [here](./test/programs/brainfuck.defs).
 
-Possibly the only advantage `utrl` has over other languages is that it produces [helpful error messages](#error-code-index) at the (arguably) *correct* time. Errors with `utrl` definitions are detected when definitions are compiled as opposed to when they are used. This is different from Rust and Racket which both (as of 2024) detect some errors only when a macro is *used*, and not when it is *defined*. In what follows, a macro is defined in each language that captures two variables under different ellipses/stars, but then uses both variables under the same ellipsis/star. This is a problem when each variable binds a different number of terms. Arguably, the clearest behavior here is to error out when the macro is defined instead of waiting to signal an error when it is used incorrectly.
+Possibly the only advantage `utrl` has over other languages is that it produces [helpful error messages](#error-code-index) at the (arguably) *correct* time. Errors with `utrl` definitions are detected when definitions are compiled as opposed to when they are used. This is different from Rust and Racket which both (as of 2024) detect some errors only when a macro is *used*, and not when it is *defined*. In what follows, a macro is defined in each language that captures two variables under different ellipses/stars, but then uses both variables under the same ellipsis/star. This is a problem when each variable binds a different number of terms. Arguably, the clearest behavior here is to signal an error when the macro is defined instead of waiting to signal an error when it is used incorrectly. 
 
 - Rust
   ```rust
@@ -88,7 +89,7 @@ Possibly the only advantage `utrl` has over other languages is that it produces 
       bad_list!((1, 2, 3) ("a", "b", "c", "d", "e"));
   }
   ```
-  Rust emits the following error only when `bad_list` is used with two lists of differing lengths. If the source contains only a definition of `bad_list`, no error will be signalled.
+  Rust emits the following error only when `bad_list` is used with two lists of differing lengths. If the source contains only a definition of `bad_list`, no error will be signaled.
   ```
   error: meta-variable `x` repeats 3 times, but `y` repeats 5 times
    --> <source>:5:14
@@ -110,7 +111,7 @@ Possibly the only advantage `utrl` has over other languages is that it produces 
 
   (bad-list (1 2 3) ("a" "b" "c" "d" "e"))
   ```
-  Racket emits the following error only when `bad-list` is used with two lists of differing lengths. If the source contains only a definition of `bad-list`, no error will be signalled.
+  Racket emits the following error only when `bad-list` is used with two lists of differing lengths. If the source contains only a definition of `bad-list`, no error will be signaled.
   ```
   test.rkt:5:13: syntax: incompatible ellipsis match counts for template
     at: ...
@@ -140,6 +141,9 @@ Possibly the only advantage `utrl` has over other languages is that it produces 
      |                 ^^ both used with this ellipsis
   help: variables matched under different ellipses can't be used with the same ellipsis
   ```
+
+For more information about the error messages that `utrl` can produce, see the [error message section](#error-code-index).
+
 ## Examples
 
 ### Natural Numbers
@@ -369,6 +373,10 @@ true
 
 To help demonstrate [Turing completeness](https://en.wikipedia.org/wiki/Turing_completeness), I wrote a [Brainfuck](https://en.wikipedia.org/wiki/Brainfuck) interpreter in `utrl`. The definitions file can be found in the [test directory](./test/programs/brainfuck.defs). It can be used to sort a list [via quicksort written in Brainfuck](./test/programs/brainfuck.input).
 
+### Binary Numbers
+
+`utrl` is incredibly limited in its feature set, so if we want to use numbers we must implement them ourselves. It would be unfortunate if the only way we were able to do this was with [Peano natural numbers](#natural-numbers), given that representing and operating on large numbers would take a lot of space and time. Instead of representing the natural numbers in terms of a series of increments to zero, we can instead represent them as either (1) zero, (2) two times some natural number, or (3) one plus two times some natural number. These correspond to (1) the binary number `0`, (2) the act of taking a binary number `n` and putting a zero on the right hand side, as in `n0`, and (3) the act of taking a binary number `n` and putting a one on the right hand side, as in `n1`. This strategy requires only a factor of `log_2(n)` (as opposed to `n`) bits to represent the number `n`. An implementation of some simple operations on this representation can be found [here](./test/programs/binary-arithmetic.defs). 
+
 ## Installation Instructions
 
 This project uses [Nix](https://nixos.org/download/) to manage its build process and dependencies. Nix version 2.8 (released on 2022-04-19) or greater is required. Use `nix --version` to check if you're up to date.
@@ -582,6 +590,8 @@ This rule does not apply to constructors, which may have as many ellipses per li
   (list $x .. .. ..))
 ```
 
+This restriction is may be lifted in future versions of `utrl`.
+
 ### `E006`
 
 The same variable occurs more than once in a definition's pattern.
@@ -606,7 +616,7 @@ help: a variable may occur at most once in a definition's pattern
 
 ### `E007`
 
-Two definitions exist which match the same term(s). A given input term may be matched by at most one definition.
+Two definitions exist which match the same term(s). A given input term may be matched by at most one definition. This prevents ambiguity about which definition to apply to a given input term.
 
 #### Example (exactly the same pattern)
 

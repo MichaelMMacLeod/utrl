@@ -1,3 +1,7 @@
+// Converts a flat list of bits into our internal binary number
+// representation:
+//
+// (bin 1 0 1) --> 1 + 2 * (2 * (1 + 2 * 0))
 (def (bin)
   0)
 (def (bin $b .. 0)
@@ -5,6 +9,7 @@
 (def (bin $b .. 1)
   (1 + 2 * (bin $b ..)))
 
+// add : Bin -> Bin -> Bin
 (def (add 0 0)
   0)
 (def (add (2 * $n) 0)
@@ -25,6 +30,7 @@
 (def (add (2 * $n) (1 + 2 * $m))
   (1 + 2 * (add $n $m)))
 
+// mul : Bin -> Bin -> Bin
 (def (mul $n 0)
   0)
 (def (mul $n (2 * $m))
@@ -32,6 +38,7 @@
 (def (mul $n (1 + 2 * $m))
   (add $n (2 * (mul $n $m))))
 
+// equal : Bin -> Bin -> Bool
 (def (equal 0 0)
   true)
 (def (equal (1 + 2 * $n) 0)
