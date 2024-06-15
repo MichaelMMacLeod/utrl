@@ -1,1 +1,1 @@
-((list 1 2 3) == (sort (list 3 2 1)))
+((list 1 2 3 4 5) == (sort (list 3 5 2 4 1)))
