@@ -14,9 +14,9 @@ This repository contains a compiler/interpreter for `utrl`, a simple untyped [pu
 
 ## Motivation
 
-Several languages nowadays such as [Racket](https://racket-lang.org/) and [Rust](https://www.rust-lang.org/) support [syntax-case](https://docs.racket-lang.org/guide/syntax-case.html) or ['by example'](https://doc.rust-lang.org/reference/macros-by-example.html) style macros. `utrl` is an experiment in designing a language with this feature as its *only* feature; in `utrl`, the sole construct is `def`, a `syntax-case`-style term-rewriting rule definition. Unsurprisingly, the `utrl` interpreter resembles a conventional *macro expander*, but with the following caveats:
+Several languages nowadays such as [Racket](https://racket-lang.org/) and [Rust](https://www.rust-lang.org/) support ['by-example'](https://dl.acm.org/doi/abs/10.1145/41625.41632)-style macros.`utrl` is an experiment in designing a language with this feature as its *only* feature; in `utrl`, the sole construct is `def`, a [syntax-case](https://docs.racket-lang.org/guide/syntax-case.html)-style term-rewriting rule definition. Unsurprisingly, the `utrl` interpreter resembles a conventional *macro expander*, but with the following caveats:
 
-1. `utrl` definitions are more flexible; they do not need to start with a symbol:
+1. `utrl` definitions are more flexible in that they need not start with a symbol:
     ```scheme
     (def ($x I_return_x) $x)
 
@@ -66,9 +66,9 @@ Similar to macro definition syntax in other languages, `utrl` supports ellipses 
   // (list 1 2 3 a b c)
   ```
 
-I consider `utrl` more of an art project than a useful tool. It's asthetically pleasing, but a royal pain to use. `utrl` lacks almost every built-in feature that one would expect out of a programming language including types, numbers, booleans, structs, and so on. That being said, it *is* possible with enough effort to write some [interesting programs](#examples). `utrl` is Turing-complete, and while I do not have a rigorous proof of this, I have written a [brainfuck](https://en.wikipedia.org/wiki/Brainfuck) interpreter in it, which can be found [here](./test/programs/brainfuck.defs).
+I consider `utrl` more of an art project than a useful tool. It's asthetically pleasing, but a royal pain to use. `utrl` lacks almost every built-in feature one would expect out of a programming language including types, numbers, booleans, structs, and so on. That being said, it *is* possible with enough effort to write some [interesting programs](#examples). `utrl` is Turing-complete, and while I do not have a rigorous proof of this, I have written a [brainfuck](https://en.wikipedia.org/wiki/Brainfuck) interpreter in it, which can be found [here](./test/programs/brainfuck.defs).
 
-Possibly the only advantage `utrl` has over other languages is that it produces [helpful error messages](#error-code-index) at the right time. Errors with `utrl` definitions are detected when definitions are compiled as opposed to when they are used. This is different from Rust and Racket which both (as of 2024) detect some errors only when a macro is *used*, and not when it is *defined*:
+Possibly the only advantage `utrl` has over other languages is that it produces [helpful error messages](#error-code-index) at the (arguably) *correct* time. Errors with `utrl` definitions are detected when definitions are compiled as opposed to when they are used. This is different from Rust and Racket which both (as of 2024) detect some errors only when a macro is *used*, and not when it is *defined*:
 
 - Rust
   ```rust
@@ -508,7 +508,7 @@ help: variables matched under different ellipses can't be used with the same ell
 
 ### `E004`
 
-An ellipsis (`..`) follows a symbol. Ellipses may only follow variables or lists which contain one or more variables. 
+An ellipsis follows a symbol. Ellipses may only follow variables or lists which contain one or more variables. 
 
 #### Example
 
@@ -606,7 +606,7 @@ help: a variable may occur at most once in a definition's pattern
 
 ### `E007`
 
-Two definitions can match the same term. A given input term may be matched by at most one definition.
+Two definitions exist which match the same term(s). A given input term may be matched by at most one definition.
 
 #### Example (exactly the same pattern)
 
