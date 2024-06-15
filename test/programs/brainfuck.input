@@ -1,4 +1,4 @@
-// Sorts the list [3, 2, 1] using quicksort. I copied
+// Sorts the list [3, 2, 1] into [1, 2, 3] using quicksort. I copied
 // the brainfuck-quicksort program from here:
 // https://www.codingame.com/playgrounds/50516/brainfuck-part-9---sort-arrays-with-bubble-and-quicksort/quicksort
 

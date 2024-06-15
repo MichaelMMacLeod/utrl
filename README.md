@@ -8,6 +8,7 @@ This repository contains a compiler/interpreter for `utrl`, a simple untyped [pu
 - [Examples](#examples)
   - [Natural Numbers](#natural-numbers)
   - [Mergesort](#mergesort)
+  - [Brainfuck interpreter](#brainfuck-interpreter)
 - [Installation Instructions](#installation-instructions)
 - [Error Code Index](#error-code-index)
 
@@ -67,6 +68,78 @@ Similar to macro definition syntax in other languages, `utrl` supports ellipses 
 
 I consider `utrl` more of an art project than a useful tool. It's asthetically pleasing, but a royal pain to use. `utrl` lacks almost every built-in feature that one would expect out of a programming language including types, numbers, booleans, structs, and so on. That being said, it *is* possible with enough effort to write some [interesting programs](#examples). `utrl` is Turing-complete, and while I do not have a rigorous proof of this, I have written a [brainfuck](https://en.wikipedia.org/wiki/Brainfuck) interpreter in it, which can be found [here](./test/programs/brainfuck.defs).
 
+Possibly the only advantage `utrl` has over other languages is that it produces [helpful error messages](#error-code-index) at the right time. Errors with `utrl` definitions are detected when definitions are compiled as opposed to when they are used. This is different from Rust and Racket which both (as of 2024) detect some errors only when a macro is *used*, and not when it is *defined*:
+
+- Rust
+  ```rust
+  macro_rules! bad_list {
+      ( ($( $x:expr ),*) ($( $y:expr ),*) ) => {
+          {
+              let mut temp_vec = Vec::<(i32, &'static str)>::new();
+              $(
+                  temp_vec.push(($x, $y));
+              )*
+              temp_vec
+          }
+      };
+  }
+
+  pub fn main() {
+      bad_list!((1, 2, 3) ("a", "b", "c", "d", "e"));
+  }
+  ```
+  Rust emits the following error only when `bad_list` is used with two lists of differing lengths. If the source contains only a definition of `bad_list`, no error will be signalled.
+  ```
+  error: meta-variable `x` repeats 3 times, but `y` repeats 5 times
+   --> <source>:5:14
+    |
+  5 |               $(
+    |  ______________^
+  6 | |                 temp_vec.push(($x, $y));
+  7 | |             )*
+    | |_____________^
+  ```
+- Racket
+  ```scheme
+  #lang racket
+
+  (define-syntax (bad-list stx)
+    (syntax-case stx ()
+      [(_ (x ...) (y ...))
+       #'(list '(x . y) ...)]))
+
+  (bad-list (1 2 3) ("a" "b" "c" "d" "e"))
+  ```
+  Racket emits the following error only when `bad-list` is used with two lists of differing lengths. If the source contains only a definition of `bad-list`, no error will be signalled.
+  ```
+  test.rkt:5:13: syntax: incompatible ellipsis match counts for template
+    at: ...
+    in: ((quote (x . y)) ...)
+    location...:
+    test.rkt:5:13
+  ```
+- `utrl`
+  ```scheme
+  (def (bad-list ($x ..) ($y ..))
+    (list ($x $y) ..))
+  ```
+  `utrl` emits the following error when `bad-list` is defined. The program does not compile successfully, so it cannot be run.
+  ```
+  error[E003]: variables matched under different ellipses used with same ellipsis
+  ./bad-list.defs:1:20
+     |
+   1 | (def (bad-list ($x ..) ($y ..))
+     |                    ^^ $x matched under this ellipsis
+  ./bad-list.defs:1:28
+     |
+   1 | (def (bad-list ($x ..) ($y ..))
+     |                            ^^ $y matched under this ellipsis
+  ./bad-list.defs:2:17
+     |
+   2 |   (list ($x $y) ..))
+     |                 ^^ both used with this ellipsis
+  help: variables matched under different ellipses can't be used with the same ellipsis
+  ```
 ## Examples
 
 ### Natural Numbers
@@ -291,6 +364,10 @@ fly by!
 70. true
 true
 ```
+
+### Brainfuck interpreter
+
+To help demonstrate [Turing completeness](https://en.wikipedia.org/wiki/Turing_completeness), I wrote a [Brainfuck](https://en.wikipedia.org/wiki/Brainfuck) interpreter in `utrl`. The definitions file can be found in the [test directory](./test/programs/brainfuck.defs). It can be used to sort a list [via quicksort written in Brainfuck](./test/programs/brainfuck.input).
 
 ## Installation Instructions
 
