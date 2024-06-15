@@ -16,7 +16,7 @@ This repository contains a compiler/interpreter for `utrl`, a simple untyped [pu
 
 Several languages nowadays such as [Racket](https://racket-lang.org/) and [Rust](https://www.rust-lang.org/) support ['by-example'](https://dl.acm.org/doi/abs/10.1145/41625.41632)-style macros.`utrl` is an experiment in designing a language with this feature as its *only* feature; in `utrl`, the sole construct is `def`, a [syntax-case](https://docs.racket-lang.org/guide/syntax-case.html)-style term-rewriting rule definition. Unsurprisingly, the `utrl` interpreter resembles a conventional *macro expander*, but with the following caveats:
 
-1. `utrl` definitions are more flexible in that they need not start with a symbol:
+1. `utrl` definitions need not start with a symbol:
     ```scheme
     (def ($x I_return_x) $x)
 
@@ -68,7 +68,7 @@ Similar to macro definition syntax in other languages, `utrl` supports ellipses 
 
 I consider `utrl` more of an art project than a useful tool. It's asthetically pleasing, but a royal pain to use. `utrl` lacks almost every built-in feature one would expect out of a programming language including types, numbers, booleans, structs, and so on. That being said, it *is* possible with enough effort to write some [interesting programs](#examples). `utrl` is Turing-complete, and while I do not have a rigorous proof of this, I have written a [brainfuck](https://en.wikipedia.org/wiki/Brainfuck) interpreter in it, which can be found [here](./test/programs/brainfuck.defs).
 
-Possibly the only advantage `utrl` has over other languages is that it produces [helpful error messages](#error-code-index) at the (arguably) *correct* time. Errors with `utrl` definitions are detected when definitions are compiled as opposed to when they are used. This is different from Rust and Racket which both (as of 2024) detect some errors only when a macro is *used*, and not when it is *defined*:
+Possibly the only advantage `utrl` has over other languages is that it produces [helpful error messages](#error-code-index) at the (arguably) *correct* time. Errors with `utrl` definitions are detected when definitions are compiled as opposed to when they are used. This is different from Rust and Racket which both (as of 2024) detect some errors only when a macro is *used*, and not when it is *defined*. In what follows, a macro is defined in each language that captures two variables under different ellipses/stars, but then uses both variables under the same ellipsis/star. This is a problem when each variable binds a different number of terms. Arguably, the clearest behavior here is to error out when the macro is defined instead of waiting to signal an error when it is used incorrectly.
 
 - Rust
   ```rust
