@@ -1,6 +1,270 @@
 # Untitled Term Rewriting Language (Haskell, 2024)
 
-## Building, Testing, and Running
+This repository contains a compiler/interpreter for `utrl`, a simple [purely-functional](https://en.wikipedia.org/wiki/Purely_functional_programming) [term-rewriting](https://en.wikipedia.org/wiki/Rewriting) programming language.
+
+## Table of Contents
+
+- [Motivation](#motivation)
+- [Examples](#examples)
+  - [Natural Numbers](#natural-numbers)
+  - [Mergesort](#mergesort)
+- [Installation Instructions](#installation-instructions)
+- [Error Code Index](#error-code-index)
+
+## Motivation
+
+Several languages nowadays such as [Racket](https://racket-lang.org/) and [Rust](https://www.rust-lang.org/) support [syntax-case](https://docs.racket-lang.org/guide/syntax-case.html) or ['by example'](https://doc.rust-lang.org/reference/macros-by-example.html) style macros. `utrl` is an experiment in designing a language with this feature as its *only* feature; in `utrl`, the sole construct is `def`, a `syntax-case`-style term-rewriting rule definition. Unsurprisingly, the `utrl` interpreter resembles a conventional *macro expander*, but with the following caveats:
+
+1. `utrl` definitions are more flexible; they do not need to start with a symbol:
+    ```scheme
+    (def ($x I_return_x) $x)
+    // Evaluation of '(Hello_world! I_return_x)'
+    // 0. (Hello_world! I_return_x)
+    // 1. Hello_world!
+    // Hello_world!
+     ``` 
+2. If no definition immediately matches, inner terms will be expanded first. This allows `utrl` definitions to automatically evaluate their arguments when needed:
+
+    ```scheme
+    (def (if true  then $t else $e) $t)
+    (def (if false then $t else $e) $e)
+    (def (A == A) true)
+    // Evaluation of '(if (A == A) then ok else fail)'
+    // 0. (if (A == A) then ok else fail)
+    // 1. (if true then ok else fail)
+    // 2. ok
+    // ok
+    ```
+
+I consider `utrl` more of an art project than a useful tool. It's asthetically pleasing, but a royal pain to use. `utrl` lacks almost every built-in features that one would expect out of a normal programming language such as types, numbers, booleans, structs, and so on. All it's got is `def`. That being said, it is possible with enough effort to write some [interesting programs](#examples). `utrl` is Turing-complete, and while I do not have a rigorous proof of this, I have written a [brainfuck](https://en.wikipedia.org/wiki/Brainfuck) interpreter in it, which can be found [here](./test/programs/brainfuck.defs).
+
+
+## Examples
+
+### Natural Numbers
+
+We can use `utrl` to define simple operations on [Peano natural numbers](https://en.wikipedia.org/wiki/Peano_axioms):
+
+```scheme
+// File 'add.defs'
+
+/* Addition of peano natural numbers */
+(def ($n + 0)      $n)
+(def ($n + (S $m)) (S ($n + $m)))
+
+/* Equality of peano natural numbers */
+(def (0      == 0)      true)
+(def ((S $n) == 0)      false)
+(def (0      == (S $m)) false)
+(def ((S $n) == (S $m)) ($n == $m))
+
+/* Peano natural numbers 1-5 */
+(def 1 (S 0))
+(def 2 (S 1))
+(def 3 (S 2))
+(def 4 (S 3))
+(def 5 (S 4))
+```
+```scheme
+// File 'add.input'
+
+(5 == (2 + 3)) /* this should evaluate to 'true' */
+```
+```scheme
+bash$ utrl --defs ./add.defs --input ./add.input
+true
+bash$ # Good, that is what we wanted. '--trace' will show the steps:
+bash$ utrl --defs ./add.defs --input ./add.input --trace
+0. (5 == (2 + 3))
+1. ((S 4) == (2 + 3))
+2. ((S (S 3)) == (2 + 3))
+3. ((S (S 3)) == ((S 1) + 3))
+4. ((S (S 3)) == ((S 1) + (S 2)))
+5. ((S (S 3)) == (S ((S 1) + 2)))
+6. ((S 3) == ((S 1) + 2))
+7. ((S (S 2)) == ((S 1) + 2))
+8. ((S (S 2)) == ((S 1) + (S 1)))
+9. ((S (S 2)) == (S ((S 1) + 1)))
+10. ((S 2) == ((S 1) + 1))
+11. ((S (S 1)) == ((S 1) + 1))
+12. ((S (S 1)) == ((S 1) + (S 0)))
+13. ((S (S 1)) == (S ((S 1) + 0)))
+14. ((S 1) == ((S 1) + 0))
+15. ((S 1) == (S 1))
+16. (1 == 1)
+17. ((S 0) == 1)
+18. ((S 0) == (S 0))
+19. (0 == 0)
+20. true
+true
+```
+
+### Mergesort
+
+With a bit of effort, it's possible to write a [mergesort](https://en.wikipedia.org/wiki/Merge_sort) algorithm using `utrl`.
+
+```scheme
+// File 'mergesort.defs'
+
+// Sorts a list of natural numbers via merge sort
+//
+// sort : List Nat -> List Nat
+(def (sort $xs)
+  (sort-rec (length $xs) nil $xs))
+
+// Helper function for 'sort'. Partitions its third
+// argument (a list) into two pieces, accumulating the
+// first piece in the second argument. Returns the
+// result of 'merge'ing the final two pieces together.
+// The integer argument counts twice the number of
+// list elements to split off.
+//
+// sort-rec : Nat -> List Nat -> List Nat -> List Nat
+(def (sort-rec 0 nil nil)
+  nil)
+(def (sort-rec 0 ($a :: nil) nil)
+  ($a :: nil))
+(def (sort-rec 0 nil ($x :: nil))
+  ($x :: nil))
+(def (sort-rec 0 ($a :: nil) ($x :: nil))
+  (merge ($a :: nil)
+         ($x :: nil)))
+(def (sort-rec 0 ($a :: nil) ($x :: ($y :: nil)))
+  (merge ($a :: nil)
+         (sort ($x :: ($y :: nil)))))
+(def (sort-rec 0 ($a :: ($b :: $as)) ($x :: ($y :: $ys)))
+  (merge (sort ($a :: ($b :: $as)))
+         (sort ($x :: ($y :: $ys)))))
+(def (sort-rec (S 0) $as $xs)
+  (sort-rec 0 $as $xs))
+(def (sort-rec (S (S $n)) $as ($x :: $xs))
+  (sort-rec $n ($x :: $as) $xs))
+
+// merge : List Nat -> List Nat -> List Nat
+//
+// Combines two lists, both in ascending order, into
+// a single list in ascending order.
+(def (merge nil ($y :: $ys))
+  ($y :: $ys))
+(def (merge ($x :: $xs) nil)
+  ($x :: $xs))
+(def (merge ($x :: $xs) ($y :: $ys))
+  (if ($x < $y)
+    then ($x :: (merge $xs ($y :: $ys)))
+    else ($y :: (merge ($x :: $xs) $ys))))
+
+// Returns the length of a list
+//
+// length : List a -> Nat
+(def (length nil)
+  0)
+(def (length ($x :: $xs))
+  (S (length $xs)))
+
+// 'If' statement syntax
+(def (if true then $then else $else) $then)
+(def (if false then $then else $else) $else)
+
+// A couple translations of arabic numerals into Peano numbers.
+// See: https://en.wikipedia.org/wiki/Peano_axioms
+(def 1 (S 0))
+(def 2 (S 1))
+(def 3 (S 2))
+(def 4 (S 3))
+(def 5 (S 4))
+(def 6 (S 5))
+(def 7 (S 6))
+(def 8 (S 7))
+(def 9 (S 8))
+
+// Equality of natural numbers
+//
+// (==) : Nat -> Nat -> Bool
+(def (0 == 0)
+  true)
+(def ((S $n) == 0)
+  false)
+(def (0 == (S $m))
+  false)
+(def ((S $n) == (S $m))
+  ($n == $m))
+
+// Equality of lists
+//
+// (==) : List a -> List a -> Bool
+(def (nil == nil)
+  true)
+(def (($x :: $xs) == nil)
+  false)
+(def (nil == ($y :: $ys))
+  false)
+(def (($x :: $xs) == ($y :: $ys))
+  (($x == $y) && ($xs == $ys)))
+
+// Logical operator 'AND'
+//
+// (&&) : Bool -> Bool -> Bool
+(def (true && $x) $x)
+
+// 'less-than' operator on natural numbers
+//
+// (<) : Nat -> Nat -> Bool
+(def (0 < 0)
+  false)
+(def ((S $n) < 0)
+  false)
+(def (0 < (S $m))
+  true)
+(def ((S $n) < (S $m))
+  ($n < $m))
+
+// List construction syntax: creates cons cells
+// from a flat list.
+(def (list)
+  nil)
+(def (list $x $xs ..)
+  ($x :: (list $xs ..)))
+```
+```scheme
+// File 'mergesort.input'
+
+((list 1 2 3) == (sort (list 3 2 1)))
+```
+```scheme
+bash$ time utrl --defs ./mergesort.defs --input ./mergesort.input
+true
+
+real    0m0.014s
+user    0m0.008s
+sys     0m0.004s
+bash$ # Using '--trace' here produces a lot of output!
+bash$ utrl --defs ./mergesort.defs --input ./mergesort.input --trace
+0. ((list 1 2 3) == (sort (list 3 2 1)))
+1. ((1 :: (list 2 3)) == (sort (list 3 2 1)))
+2. ((1 :: (list 2 3)) == (sort-rec (length (list 3 2 1)) nil (list 3 2 1)))
+3. (((S 0) :: (list 2 3)) == (sort-rec (length (list 3 2 1)) nil (list 3 2 1)))
+4. (((S 0) :: (2 :: (list 3))) == (sort-rec (length (list 3 2 1)) nil (list 3 2 1)))
+5. (((S 0) :: (2 :: (list 3))) == (sort-rec (length (list 3 2 1)) nil (3 :: (list 2 1))))
+
+Intermediate steps ellided for brevity. '--trace' will actually
+print every single step. Try it for yourself and see all the text
+fly by!
+
+60. (((S 2) :: nil) == ((S (S 1)) :: nil))
+61. (((S 2) == (S (S 1))) && (nil == nil))
+62. ((2 == (S 1)) && (nil == nil))
+63. ((2 == (S 1)) && true)
+64. (((S 1) == (S 1)) && true)
+65. ((1 == 1) && true)
+66. (((S 0) == 1) && true)
+67. (((S 0) == (S 0)) && true)
+68. ((0 == 0) && true)
+69. (true && true)
+70. true
+true
+```
+
+## Installation Instructions
 
 This project uses [Nix](https://nixos.org/download/) to manage its build process and dependencies. Nix version 2.8 (released on 2022-04-19) or greater is required. Use `nix --version` to check if you're up to date.
 
