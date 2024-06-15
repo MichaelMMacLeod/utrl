@@ -1,6 +1,6 @@
 # Untitled Term Rewriting Language (Haskell, 2024)
 
-This repository contains a compiler/interpreter for `utrl`, a simple [purely-functional](https://en.wikipedia.org/wiki/Purely_functional_programming) [term-rewriting](https://en.wikipedia.org/wiki/Rewriting) programming language.
+This repository contains a compiler/interpreter for `utrl`, a simple untyped [purely-functional](https://en.wikipedia.org/wiki/Purely_functional_programming) [term-rewriting](https://en.wikipedia.org/wiki/Rewriting) programming language.
 
 ## Table of Contents
 
@@ -18,26 +18,54 @@ Several languages nowadays such as [Racket](https://racket-lang.org/) and [Rust]
 1. `utrl` definitions are more flexible; they do not need to start with a symbol:
     ```scheme
     (def ($x I_return_x) $x)
-    // Evaluation of '(Hello_world! I_return_x)'
+
+    // Evaluation of '(Hello_world! I_return_x)':
+    //
     // 0. (Hello_world! I_return_x)
     // 1. Hello_world!
     // Hello_world!
      ``` 
-2. If no definition immediately matches, inner terms will be expanded first. This allows `utrl` definitions to automatically evaluate their arguments when needed:
+2. If no definition immediately matches, inner terms will be expanded first. This allows `utrl` definitions to automatically evaluate their subterms when needed:
 
     ```scheme
     (def (if true  then $t else $e) $t)
     (def (if false then $t else $e) $e)
     (def (A == A) true)
-    // Evaluation of '(if (A == A) then ok else fail)'
+
+    // Evaluation of '(if (A == A) then ok else fail)':
+    //
     // 0. (if (A == A) then ok else fail)
     // 1. (if true then ok else fail)
     // 2. ok
     // ok
     ```
+Similar to macro definition syntax in other languages, `utrl` supports ellipses denoted via two dots (`..`):
 
-I consider `utrl` more of an art project than a useful tool. It's asthetically pleasing, but a royal pain to use. `utrl` lacks almost every built-in features that one would expect out of a normal programming language such as types, numbers, booleans, structs, and so on. All it's got is `def`. That being said, it is possible with enough effort to write some [interesting programs](#examples). `utrl` is Turing-complete, and while I do not have a rigorous proof of this, I have written a [brainfuck](https://en.wikipedia.org/wiki/Brainfuck) interpreter in it, which can be found [here](./test/programs/brainfuck.defs).
+- Ellipses can extract multiple parts of a term:
+  ```scheme
+  (def (unzip (list (pair $x $y) ..))
+    (pair (list $x ..)
+          (list $y ..)))
 
+  // Evaluation of '(unzip (list (pair 1 a) (pair 2 b) (pair 3 c)))':
+  //
+  // 0. (unzip (list (pair 1 a) (pair 2 b) (pair 3 c)))
+  // 1. (pair (list 1 2 3) (list a b c))
+  // (pair (list 1 2 3) (list a b c))
+  ```
+- Ellipses can flatten terms:
+  ```scheme
+  (def (flatten (list (list $xs ..) ..))
+    (list $xs .. ..))
+
+  // Evaluation of '(flatten (list (list 1 2 3) (list) (list a b c)))':
+  //
+  // 0. (flatten (list (list 1 2 3) (list) (list a b c)))
+  // 1. (list 1 2 3 a b c)
+  // (list 1 2 3 a b c)
+  ```
+
+I consider `utrl` more of an art project than a useful tool. It's asthetically pleasing, but a royal pain to use. `utrl` lacks almost every built-in feature that one would expect out of a programming language including types, numbers, booleans, structs, and so on. That being said, it *is* possible with enough effort to write some [interesting programs](#examples). `utrl` is Turing-complete, and while I do not have a rigorous proof of this, I have written a [brainfuck](https://en.wikipedia.org/wiki/Brainfuck) interpreter in it, which can be found [here](./test/programs/brainfuck.defs).
 
 ## Examples
 
@@ -48,11 +76,11 @@ We can use `utrl` to define simple operations on [Peano natural numbers](https:/
 ```scheme
 // File 'add.defs'
 
-/* Addition of peano natural numbers */
+/* Addition */
 (def ($n + 0)      $n)
 (def ($n + (S $m)) (S ($n + $m)))
 
-/* Equality of peano natural numbers */
+/* Equality */
 (def (0      == 0)      true)
 (def ((S $n) == 0)      false)
 (def (0      == (S $m)) false)
