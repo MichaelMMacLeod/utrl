@@ -1,0 +1,2 @@
+(def (flatten (list (list $xs ..) ..))
+  (list $xs .. ..))

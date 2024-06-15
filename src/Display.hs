@@ -6,10 +6,13 @@ module Display
     displayP0,
     display0,
     display0Builder,
+    displayC1,
   )
 where
 
 import Ast0 qualified
+import AstC1 (AstC1LoopF (..))
+import AstC1 qualified
 import AstC2 qualified
 import AstC2Assign qualified
 import AstC2Expr (Expr)
@@ -18,9 +21,9 @@ import AstC2Jump qualified
 import AstP0 (AstP0CompoundWtihEllipsesF (AstP0CompoundWtihEllipsesF))
 import AstP0 qualified
 import Data.Functor.Foldable (ListF (..), cata)
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import Data.Text.Encoding (StrictBuilder, strictBuilderToText, textToStrictBuilder)
-import Utils (Cata)
+import Utils (Cata, tshow)
 
 displayP0 :: AstP0.Ast -> Text
 displayP0 = display0 . cata go
@@ -31,6 +34,25 @@ displayP0 = display0 . cata go
       AstP0.CompoundWithoutEllipsesF xs -> Ast0.Compound xs
       AstP0.CompoundWithEllipsesF (AstP0CompoundWtihEllipsesF b e a) ->
         Ast0.Compound $ b ++ [e, Ast0.Symbol ".."] ++ a
+
+displayC1 :: AstC1.Ast -> String
+displayC1 = unpack . display0 . cata go
+  where
+    go :: Cata AstC1.Ast Ast0.Ast
+    go = \case
+      AstC1.SymbolF s -> Ast0.Symbol s
+      AstC1.CompoundF xs -> Ast0.Compound xs
+      AstC1.AssignmentF (var, index, location) ast ->
+        Ast0.Compound
+          [ Ast0.Symbol $ "{$" <> tshow var <> " = " <> tshow index <> " at " <> tshow location <> "}",
+            ast
+          ]
+      AstC1.CopyF var -> Ast0.Symbol $ "{copy $" <> tshow var <> "}"
+      AstC1.LoopF (AstC1LoopF var src start end body) ->
+        Ast0.Compound
+          [ Ast0.Symbol $ "loop{$" <> tshow var <> " in $" <> tshow src <> "[" <> tshow start <> ".." <> tshow end <> "]}",
+            body
+          ]
 
 displayC2 :: (Show a) => AstC2.Ast a -> String
 displayC2 = addLineNumbers . cata go

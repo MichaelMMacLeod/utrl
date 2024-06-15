@@ -32,8 +32,8 @@
         '';
         compose = pkgs.haskell.lib.compose;
         utrl-pkg = compose.addTestToolDepend [ pkgs.diffutils ]
-          (compose.dontHaddock (compose.disableLibraryProfiling
-            (pkgs.haskellPackages.developPackage { root = ./.; })));
+          (compose.dontHaddock
+            (pkgs.haskellPackages.developPackage { root = ./.; }));
       in {
         packages = rec {
           default = utrl;
@@ -44,7 +44,8 @@
           # produced in the first go-around to run tests in the second.
           # Unfortunately, this means that it takes twice as long to compile.
           # There's got to be a better way...
-          utrl = compose.addTestToolDepend (compose.dontCheck utrl-pkg) utrl-pkg;
+          utrl =
+            compose.addTestToolDepend (compose.dontCheck utrl-pkg) utrl-pkg;
         };
         devShells.default = with pkgs;
           haskellPackages.shellFor {

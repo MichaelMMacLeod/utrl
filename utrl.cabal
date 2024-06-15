@@ -127,6 +127,9 @@ executable utrl
     , language
     , extensions
 
+  ghc-options:
+    -rtsopts
+
   main-is: Main.hs
 
   build-depends:

@@ -312,7 +312,7 @@ traverseC0ToC1 (l :< a) nextUnusedVar = case a of
                     C.:< AstC1.LoopF
                       ( AstC1LoopF
                           { varF = var,
-                            srcF = nextUnusedVar' + 1,
+                            srcF = nextUnusedVar',
                             startF = zeroPlus,
                             endF = lenMinus,
                             bodyF = ast
@@ -323,19 +323,19 @@ traverseC0ToC1 (l :< a) nextUnusedVar = case a of
                       if null c1
                         then
                           if null c0'
-                            then l C.:< AstC1.AssignmentF (nextUnusedVar' + 1, c1, TopLevel) loopAst
+                            then l C.:< AstC1.AssignmentF (nextUnusedVar', c1, TopLevel) loopAst
                             else loopAst
                         else
                           let location = if null c0' then TopLevel else NotTopLevel
-                           in l C.:< AstC1.AssignmentF (nextUnusedVar' + 1, c1, location) loopAst,
-                    nextUnusedVar = nextUnusedVar' + 2,
+                           in l C.:< AstC1.AssignmentF (nextUnusedVar', c1, location) loopAst,
+                    nextUnusedVar = nextUnusedVar' + 1,
                     remainingAssignment =
                       if null c0'
                         then Nothing
                         else Just $
                           case popBetweenTail c0' of
                             (c0', Just between) ->
-                              (nextUnusedVar + 1, c0', between)
+                              (nextUnusedVar', c0', between)
                             _ -> error "unreachable"
                   }
   AstC0.CompoundF xs -> cata mergeXS xs nextUnusedVar
