@@ -14,6 +14,7 @@
     Compound terms could be stored as a mutable doubly-linked-list (with pointers to the start and end nodes) of double-ended queues, to enable O(1) push/pop from both ends as well as
     O(1) appending via the linked list.
 
+- Fix error messages that span multiple lines not looking correct
 - Add optimization passes on pattern graph
 - Actually compile patterns to stmts as well (currently only constructors are compiled)
 - Output webassemby/native code instead of running compiled code in haskell interpreter

@@ -1,0 +1,116 @@
+// Sorts a list of natural numbers via merge sort
+//
+// sort : List Nat -> List Nat
+(def (sort $xs)
+  (sort-rec (length $xs) nil $xs))
+
+// Helper function for 'sort'. Partitions its third
+// argument (a list) into two pieces, accumulating the
+// first piece in the second argument. Returns the
+// result of 'merge'ing the final two pieces together.
+//
+// sort-rec : Nat -> List Nat -> List Nat
+(def (sort-rec 0 nil nil)
+  nil)
+(def (sort-rec 0 ($a :: nil) nil)
+  ($a :: nil))
+(def (sort-rec 0 nil ($x :: nil))
+  ($x :: nil))
+(def (sort-rec 0 ($a :: nil) ($x :: nil))
+  (merge ($a :: nil)
+         ($x :: nil)))
+(def (sort-rec 0 ($a :: nil) ($x :: ($y :: nil)))
+  (merge ($a :: nil)
+         (sort ($x :: ($y :: nil)))))
+(def (sort-rec 0 ($a :: ($b :: $as)) ($x :: ($y :: $ys)))
+  (merge (sort ($a :: ($b :: $as)))
+         (sort ($x :: ($y :: $ys)))))
+(def (sort-rec (S 0) $as $xs)
+  (sort-rec 0 $as $xs))
+(def (sort-rec (S (S $n)) $as ($x :: $xs))
+  (sort-rec $n ($x :: $as) $xs))
+
+// merge : List Nat -> List Nat -> List Nat
+//
+// Combines two lists, both in ascending order, into
+// a single list in ascending order.
+(def (merge nil ($y :: $ys))
+  ($y :: $ys))
+(def (merge ($x :: $xs) nil)
+  ($x :: $xs))
+(def (merge ($x :: $xs) ($y :: $ys))
+  (if ($x < $y)
+    then ($x :: (merge $xs ($y :: $ys)))
+    else ($y :: (merge ($x :: $xs) $ys))))
+
+// Returns the length of a list
+//
+// length : List a -> Nat
+(def (length nil)
+  0)
+(def (length ($x :: $xs))
+  (S (length $xs)))
+
+// 'If' statement syntax
+(def (if true then $then else $else) $then)
+(def (if false then $then else $else) $else)
+
+// A couple translations of arabic numerals into Peano numbers.
+// See: https://en.wikipedia.org/wiki/Peano_axioms
+(def 1 (S 0))
+(def 2 (S 1))
+(def 3 (S 2))
+(def 4 (S 3))
+(def 5 (S 4))
+(def 6 (S 5))
+(def 7 (S 6))
+(def 8 (S 7))
+(def 9 (S 8))
+
+// Equality of natural numbers
+//
+// (==) : Nat -> Nat -> Bool
+(def (0 == 0)
+  true)
+(def ((S $n) == 0)
+  false)
+(def (0 == (S $m))
+  false)
+(def ((S $n) == (S $m))
+  ($n == $m))
+
+// Equality of lists
+//
+// (==) : List a -> List a -> Bool
+(def (nil == nil)
+  true)
+(def (($x :: $xs) == nil)
+  false)
+(def (nil == ($y :: $ys))
+  false)
+(def (($x :: $xs) == ($y :: $ys))
+  (($x == $y) && ($xs == $ys)))
+
+// Logical operator 'AND'
+//
+// (&&) : Bool -> Bool -> Bool
+(def (true && $x) $x)
+
+// 'less-than' operator on natural numbers
+//
+// (<) : Nat -> Nat -> Bool
+(def (0 < 0)
+  false)
+(def ((S $n) < 0)
+  false)
+(def (0 < (S $m))
+  true)
+(def ((S $n) < (S $m))
+  ($n < $m))
+
+// List construction syntax: creates cons cells
+// from a flat list.
+(def (list)
+  nil)
+(def (list $x $xs ..)
+  ($x :: (list $xs ..)))
