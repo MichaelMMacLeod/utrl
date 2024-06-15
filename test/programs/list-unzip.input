@@ -1,0 +1,1 @@
+(unzip (list (pair 1 a) (pair 2 b) (pair 3 c)))

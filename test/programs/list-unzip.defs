@@ -1,0 +1,3 @@
+(def (unzip (list (pair $x $y) ..))
+  (pair (list $x ..)
+        (list $y ..)))
