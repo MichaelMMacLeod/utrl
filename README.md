@@ -15,7 +15,7 @@ This repository contains a compiler/interpreter for `utrl`, a simple untyped [pu
 
 ## Motivation
 
-Several languages nowadays such as [Racket](https://racket-lang.org/) and [Rust](https://www.rust-lang.org/) support ['by-example'](https://dl.acm.org/doi/abs/10.1145/41625.41632)-style macros.`utrl` is an experiment in designing a language with this feature as its *only* feature; in `utrl`, the sole construct is `def`, a [syntax-case](https://docs.racket-lang.org/guide/syntax-case.html)-style term-rewriting rule definition. Unsurprisingly, the `utrl` interpreter resembles a conventional *macro expander*, but with the following caveats:
+Several languages nowadays such as [Racket](https://racket-lang.org/) and [Rust](https://www.rust-lang.org/) support ['by-example'](https://dl.acm.org/doi/abs/10.1145/41625.41632)-style macros. `utrl` is an experiment in designing a language with this feature as its *only* feature; in `utrl`, the sole construct is `def`, a [syntax-case](https://docs.racket-lang.org/guide/syntax-case.html)-style term-rewriting rule definition. Unsurprisingly, the `utrl` interpreter resembles a conventional *macro expander*, but with the following caveats:
 
 1. `utrl` definitions need not start with a symbol:
     ```scheme
