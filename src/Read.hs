@@ -1,14 +1,15 @@
-module Read (Read.read, read') where
+module Read (Read.read, cmdLineArgEmitStagesParser) where
 
 import Ast0 qualified
+import CompileTypes (mkStorage)
+import ConfigTypes (EmitStages (..), onlyStage1, onlyStageC0, onlyStageC1, onlyStageC2, onlyStageP0)
 import Control.Comonad.Cofree (Cofree (..))
 import Data.Char (isSpace)
-import Data.Either.Extra (fromRight')
 import Data.Kind (Type)
 import Data.Text (Text, pack)
 import Data.Void (Void)
 import Error
-  ( CompileResult,
+  ( CompileResult (..),
     FileContents,
     mkFilePathName,
     parseErrorMessage,
@@ -31,16 +32,50 @@ import Prelude hiding (span)
 read :: Maybe FilePath -> FileContents -> CompileResult [SrcLocked Ast0.Ast]
 read name contents =
   case runParser terms (mkFilePathName name) contents of
-    Right ts -> Right ts
-    Left parseErrorBundle -> Left [parseErrorMessage parseErrorBundle]
-
--- Partial read, which errors at runtime on compile errors. Useful for reducing
--- boilerplate for tests.
-read' :: Text -> [SrcLocked Ast0.Ast]
-read' = fromRight' . Read.read Nothing
+    Right ts ->
+      CompileResult
+        { storage = mkStorage ts,
+          result = Right ts
+        }
+    Left parseErrorBundle ->
+      CompileResult
+        { storage = mkStorage [], -- TODO, maintain correctly parsed asts (if any)
+          result = Left [parseErrorMessage parseErrorBundle]
+        }
 
 type Parser :: Type -> Type
 type Parser = Parsec Void Text
+
+cmdLineArgEmitStagesParser :: Parser EmitStages
+cmdLineArgEmitStagesParser = do
+  spaceConsumer
+  em <- many emitStagesParser
+  eof
+  pure $ mconcat em
+
+emitStagesParser :: Parser EmitStages
+emitStagesParser =
+  stage1Parser
+    <|> stageC0Parser
+    <|> stageC1Parser
+    <|> stageC2Parser
+    <|> stageP0Parser
+    <|> stageP0Parser
+
+stage1Parser :: Parser EmitStages
+stage1Parser = lexemeComma "1" >> pure onlyStage1
+
+stageC0Parser :: Parser EmitStages
+stageC0Parser = lexemeComma "C0" >> pure onlyStageC0
+
+stageC1Parser :: Parser EmitStages
+stageC1Parser = lexemeComma "C1" >> pure onlyStageC1
+
+stageC2Parser :: Parser EmitStages
+stageC2Parser = lexemeComma "C2" >> pure onlyStageC2
+
+stageP0Parser :: Parser EmitStages
+stageP0Parser = lexemeComma "P0" >> pure onlyStageP0
 
 terms :: Parser [SrcLocked Ast0.Ast]
 terms = do
@@ -85,6 +120,12 @@ utrlSymbol = lexeme $ do
 
 symbol :: Text -> Parser Text
 symbol = L.symbol spaceConsumer
+
+lexemeComma :: Parser a -> Parser a
+lexemeComma p = do
+  l <- lexeme p
+  _ <- many $ lexeme $ symbol ","
+  pure l
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme spaceConsumer

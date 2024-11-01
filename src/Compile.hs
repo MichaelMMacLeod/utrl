@@ -60,7 +60,6 @@ import Data.HashMap.Strict qualified as H
 import Data.Hashable (Hashable)
 import Data.Kind (Type)
 import Data.Maybe (fromJust)
-import Error (CompileResult)
 import ErrorTypes (ErrorMessage, Span)
 import GHC.Generics (Generic)
 import Predicate (IndexedPredicate)
@@ -226,7 +225,7 @@ p0VariableBindings = cata go . indexP0ByC0
       AstP0.CompoundWithEllipsesF (AstP0CompoundWtihEllipsesF b e a) ->
         H.unions $ e : (b <> a)
 
-errorsToEither :: [ErrorMessage] -> CompileResult ()
+errorsToEither :: [ErrorMessage] -> Either [ErrorMessage] ()
 errorsToEither = \case
   [] -> Right ()
   errors -> Left errors

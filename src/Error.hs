@@ -3,7 +3,7 @@
 module Error
   ( ErrorType (..),
     ErrorBundle (..),
-    CompileResult,
+    CompileResult (..),
     FileContents,
     OffendingLine (..),
     parseErrorMessage,
@@ -22,9 +22,11 @@ module Error
     overlappingPatternsErrorMessage,
     ellipsisAppliedToSymbolErrorMessage,
     variableNotMatchedInPatternErrorMessage,
+    emitStageMessage,
   )
 where
 
+import CompileTypes (Storage)
 import Data.Functor.Foldable (ListF (..), Recursive (..))
 import Data.HashMap.Strict qualified as H
 import Data.Kind (Type)
@@ -67,7 +69,10 @@ mkFilePathName :: Maybe FilePath -> String
 mkFilePathName = fromMaybe "<input>"
 
 type CompileResult :: Type -> Type
-type CompileResult a = Either [ErrorMessageInfo Int] a
+data CompileResult a = CompileResult
+  { storage :: Storage,
+    result :: Either [ErrorMessageInfo Int] a
+  }
 
 errorCode :: ErrorType -> Int
 errorCode = \case
@@ -83,6 +88,7 @@ errorCode = \case
   DefinitionHasWrongNumberOfTerms -> 10
   DefinitionDoesNotStartWithDef -> 11
   VariableNotMatchedInPattern -> 12
+  EmitStageInfo -> 13
 
 type FileContents :: Type
 type FileContents = Text
@@ -458,6 +464,18 @@ variableNotMatchedInPatternErrorMessage variableSpan patternSpan =
             }
         ],
       help = Just "variables cannot be used without first being matched"
+    }
+
+emitStageMessage :: Span Int -> Text -> Text -> ErrorMessage
+emitStageMessage span emitStage astText =
+  ErrorMessageInfo
+    { errorType = EmitStageInfo,
+      message = "[--emit] generated code for stage " <> emitStage,
+      annotations =
+        [ Annotation
+            { span, annotation = astText }
+        ],
+      help = Nothing
     }
 
 -- Copied from megaparsec 9.6.1 as our version here isn't high enough yet for

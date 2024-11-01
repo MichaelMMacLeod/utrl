@@ -26,6 +26,7 @@ data ErrorType
   | DefinitionHasWrongNumberOfTerms
   | DefinitionDoesNotStartWithDef
   | VariableNotMatchedInPattern
+  | EmitStageInfo
   deriving stock (Eq, Show)
 
 type ErrorMessage :: Type

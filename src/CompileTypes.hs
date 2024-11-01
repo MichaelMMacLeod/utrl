@@ -28,9 +28,9 @@ mkStorage :: [SrcLocked Ast0.Ast] -> Storage
 mkStorage = Storage . map mkDefinitionStorage
 
 mkDefinitionStorage :: SrcLocked Ast0.Ast -> DefinitionStorage
-mkDefinitionStorage definition =
+mkDefinitionStorage ast =
   DefinitionStorage
-    { definition,
+    { definition = ast,
       constructor0 = Pending,
       constructor1 = Pending,
       constructorC0 = Pending,

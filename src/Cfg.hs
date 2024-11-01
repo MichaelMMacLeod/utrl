@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
-module Cfg (mkCfg, Cfg (..), dumpCfgStmts, compile) where
+module Cfg (mkCfg, Cfg (..), compile) where
 
 import Analyze (analyzeOverlappingPatterns)
 import Ast0 qualified
@@ -16,19 +16,20 @@ import CompileTypes (CompileRequest, DefinitionStorage, Storage (..), mkStorage)
 import Data.Either.Extra (mapLeft)
 import Data.Functor.Base (ListF (..))
 import Data.Functor.Foldable (Recursive (..))
-import Data.Graph.Inductive (Graph (labNodes, mkGraph), Node)
+import Data.Graph.Inductive (Graph (mkGraph), Node)
 import Data.Graph.Inductive.PatriciaTree (Gr)
 import Data.Kind (Type)
-import Data.List (intercalate)
-import Display qualified
-import Error (CompileResult)
+import Error (CompileResult (CompileResult))
 import ErrorTypes (ErrorMessage)
 import Predicate (IndexedPredicate)
 import ReadTypes (SrcLocked)
-import Utils (Cata, uncofree)
+import Utils (Cata, stripSourceLocationInfo)
 
 compile :: [SrcLocked Ast0.Ast] -> CompileResult Cfg
-compile defAsts = mkCfg $ mkStorage defAsts
+compile defAsts =
+  case mkCfg $ mkStorage defAsts of
+    Left errors -> CompileResult (Storage []) (Left errors)
+    Right (storage, cfg) -> CompileResult storage (Right cfg)
 
 -- It's tempting to use 'mapM' to evaluate each compileRequest against every definition,
 -- but due to the way that 'mapM' works with 'Either', this would short-circuit at the
@@ -65,7 +66,7 @@ gatherAllErrorsOrResults compileRequest definitionStorages =
             Right successDsPairs ->
               Right $ successDsPair : successDsPairs
 
-mkCfg :: Storage -> Either [ErrorMessage] Cfg
+mkCfg :: Storage -> Either [ErrorMessage] (Storage, Cfg)
 mkCfg (Storage definitionStorages) = do
   (constructorC2s, definitionStorages) <-
     unzip <$> gatherAllErrorsOrResults requestConstructorC2 definitionStorages
@@ -73,21 +74,21 @@ mkCfg (Storage definitionStorages) = do
     unzip <$> gatherAllErrorsOrResults requestPredicates definitionStorages
   (p0s, definitionStorages) <-
     unzip <$> gatherAllErrorsOrResults requestPatternP0 definitionStorages
-  (variableBindings, _definitionStorages) <-
+  (variableBindings, definitionStorages) <-
     unzip <$> gatherAllErrorsOrResults requestVariableBindings definitionStorages
   errorsToEither . analyzeOverlappingPatterns $ zip variableBindings p0s
   let start :: Int
       start = 0
 
       lnodes :: [(Int, AstC2.Ast Int)]
-      lnodes = (start, []) : zip [(start + 1) ..] (map uncofree constructorC2s)
+      lnodes = (start, []) : zip [(start + 1) ..] (map stripSourceLocationInfo constructorC2s)
 
       ledges :: [(Int, Int, [IndexedPredicate])]
       ledges = zipWith (\i p -> (start, i, p)) [(start + 1) ..] predicates
 
       gr :: Gr (AstC2.Ast Int) [IndexedPredicate]
       gr = mkGraph lnodes ledges
-  Right $ Cfg gr start
+  Right (Storage definitionStorages, Cfg gr start)
 
 type Cfg :: Type
 data Cfg = Cfg
@@ -96,5 +97,5 @@ data Cfg = Cfg
   }
   deriving stock (Show)
 
-dumpCfgStmts :: Cfg -> String
-dumpCfgStmts = intercalate "\n\n" . map (Display.displayC2 . snd) . labNodes . graph
+-- dumpCfgStmts :: Cfg -> String
+-- dumpCfgStmts = intercalate "\n\n" . map (Display.displayC2 . snd) . labNodes . graph

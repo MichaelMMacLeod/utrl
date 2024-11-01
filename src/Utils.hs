@@ -19,6 +19,10 @@ module Utils
     compareSpan,
     flipOrder,
     intToText,
+    stripSourceLocationInfo,
+    spanOf,
+    shortSpan,
+    shortSpanOf,
   )
 where
 
@@ -27,6 +31,7 @@ import AstC0 (AstC0Between (..))
 import AstC0 qualified
 import AstC1 qualified
 import Control.Comonad.Cofree (Cofree)
+import Control.Comonad.Cofree qualified as CC
 import Control.Comonad.Trans.Cofree (CofreeF ((:<)))
 import Data.Functor.Base (ListF (..))
 import Data.Functor.Foldable (Base, Corecursive (..), Recursive (..))
@@ -37,6 +42,7 @@ import Data.Text.Lazy qualified as T (toStrict)
 import Data.Text.Lazy.Builder qualified as B
 import Data.Text.Lazy.Builder.Int qualified as B
 import ErrorTypes (Span, location)
+import ErrorTypes qualified as ET
 import GHC.Base (compareInt)
 import ReadTypes (SrcLocked)
 
@@ -75,10 +81,21 @@ tshow :: (Show a) => a -> Text
 tshow = pack . show
 
 -- | Removes 'Cofree' labels from a recursive type.
--- 'Cofree' is used in this project to label AST nodes with their indices (see 'index0').
--- This function can remove those index labels, returning the original AST.
 uncofree :: (Corecursive f) => Cofree (Base f) a -> f
 uncofree = cata $ \(_ :< a) -> embed a
+
+-- | Removes source location information from each node of an AST.
+stripSourceLocationInfo :: (Corecursive f) => Cofree (Base f) (Span l) -> f
+stripSourceLocationInfo = uncofree
+
+spanOf :: Cofree f (Span l) -> Span l
+spanOf (s CC.:< _) = s
+
+shortSpan :: Span l -> Span l
+shortSpan s = s {ET.length = 1}
+
+shortSpanOf :: Cofree f (Span l) -> Span l
+shortSpanOf = shortSpan . spanOf
 
 isDollarSignVar :: Text -> Bool
 isDollarSignVar = isPrefixOf "$"
