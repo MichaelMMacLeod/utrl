@@ -128,7 +128,7 @@ runConfig config = do
   defAsts <- readAsts config.definitions defText
   let compileResult = compile defAsts
   let x3 :: Either [ErrorMessage] () = errorsToEither $ emittedStagesMessages emitStages compileResult.storage
-  let x4 :: Either Text () = mapLeft (errorMessages Nothing defText) x3
+  let x4 :: Either Text () = mapLeft (errorMessages (Just config.definitions) defText) x3
   let x5 :: Either ByteString () = mapLeft encodeUtf8 x4
   except x5
   cfg <- encodeErrors config.definitions defText compileResult
